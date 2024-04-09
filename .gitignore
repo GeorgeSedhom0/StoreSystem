@@ -1,0 +1,5 @@
+/.mypy_cache
+package-lock.json
+Server/env
+.env
+__pycache__
