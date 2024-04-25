@@ -36,7 +36,7 @@ CREATE TABLE products (
   price FLOAT,
   stock INT,
   category VARCHAR,
-  last_update TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  last_update TIMESTAMP NOT NULL
 )
 """)
 
