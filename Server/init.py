@@ -48,7 +48,7 @@ CREATE TABLE syncs (
 )
 """)
 
-cur.execute("INSERT INTO syncs (time) VALUES (CURRENT_TIMESTAMP)")
+cur.execute("INSERT INTO syncs (time) VALUES (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Cairo')")
 
 # Create the bills table
 cur.execute("""

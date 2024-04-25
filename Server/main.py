@@ -568,7 +568,7 @@ def accept_sync(data: dict):
                         price = EXCLUDED.price,
                         stock = EXCLUDED.stock,
                         category = EXCLUDED.category,
-                        last_update = EXCLUDED.last_update
+                        last_update = EXCLUDED.last_update AT TIME ZONE 'Africa/Cairo'
                 """, row)
 
             logging.info("Inserting products_flow data...")
