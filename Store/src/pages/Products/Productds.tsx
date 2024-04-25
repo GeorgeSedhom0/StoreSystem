@@ -129,6 +129,7 @@ const Products = () => {
             data={data}
             itemContent={(_, product) => (
               <ProductCard
+                secretAgentActivated={false}
                 product={product}
                 getProds={getProds}
                 setEditedProducts={setEditedProducts}

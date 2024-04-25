@@ -1,6 +1,6 @@
 import { IconButton, TableCell, TextField } from "@mui/material";
 import { Product } from "../../../utils/types";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import axios from "axios";
 import DeleteIcon from "@mui/icons-material/Delete";
 
@@ -9,6 +9,7 @@ interface ProductCardProps {
   getProds: () => void;
   setEditedProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   editedProducts: Product[];
+  secretAgentActivated: boolean;
 }
 
 const ProductCard = ({
@@ -16,6 +17,7 @@ const ProductCard = ({
   getProds,
   setEditedProducts,
   editedProducts,
+  secretAgentActivated,
 }: ProductCardProps) => {
   const productInCart = useMemo(
     () => editedProducts.find((p) => p.id === product.id),
@@ -43,6 +45,7 @@ const ProductCard = ({
     <>
       <TableCell>
         <TextField
+          disabled={!secretAgentActivated}
           value={productToMap.name}
           variant="standard"
           onChange={(e) =>
@@ -64,6 +67,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
+          disabled={!secretAgentActivated}
           value={productToMap.bar_code}
           variant="standard"
           onChange={(e) =>
@@ -85,6 +89,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
+          disabled={!secretAgentActivated}
           value={productToMap.price}
           variant="standard"
           onChange={(e) =>
@@ -109,6 +114,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
+          disabled={!secretAgentActivated}
           value={productToMap.wholesale_price}
           variant="standard"
           onChange={(e) =>
@@ -134,6 +140,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
+          disabled={!secretAgentActivated}
           value={productToMap.stock}
           variant="standard"
           onChange={(e) =>
@@ -158,6 +165,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
+          disabled={!secretAgentActivated}
           value={productToMap.category}
           variant="standard"
           onChange={(e) =>
@@ -175,12 +183,6 @@ const ProductCard = ({
             })
           }
         />
-      </TableCell>
-
-      <TableCell>
-        <IconButton onClick={deleteProduct}>
-          <DeleteIcon />
-        </IconButton>
       </TableCell>
     </>
   );

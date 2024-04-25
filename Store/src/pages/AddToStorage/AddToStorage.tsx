@@ -105,7 +105,7 @@ const Storage = () => {
               }}
             />
             <TextField
-              label="الفئة"
+              label="المجموعة"
               value={product.category}
               onChange={(e) =>
                 setProduct({ ...product, category: e.target.value })

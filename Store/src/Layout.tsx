@@ -62,7 +62,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 navigate("/products");
               }}
             >
-              تعديل المنتجات
+              المنتجات
             </Button>
             <Button
               onClick={() => {
