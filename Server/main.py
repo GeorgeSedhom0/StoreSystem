@@ -562,8 +562,9 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products (id, name, bar_code, wholesale_price, price, stock, category, last_update)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    -- on conflict just skip
-                    ON CONFLICT (id) DO NOTHING
+                    ON CONFLICT (id) DO UPDATE
+                    wholesale_price = EXCLUDED.wholesale_price,
+                    price = EXCLUDED.price
                 """, row)
 
             logging.info("Inserting products_flow data...")
