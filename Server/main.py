@@ -562,13 +562,6 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products (id, name, bar_code, wholesale_price, price, stock, category, last_update)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        bar_code = EXCLUDED.bar_code,
-                        wholesale_price = EXCLUDED.wholesale_price,
-                        price = EXCLUDED.price,
-                        category = EXCLUDED.category,
-                        last_update = EXCLUDED.last_update AT TIME ZONE 'Africa/Cairo'
                 """, row)
 
             logging.info("Inserting products_flow data...")
@@ -578,12 +571,6 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products_flow (id, store_id, bill_id, product_id, wholesale_price, price, amount)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO UPDATE SET
-                        bill_id = EXCLUDED.bill_id,
-                        product_id = EXCLUDED.product_id,
-                        wholesale_price = EXCLUDED.wholesale_price,
-                        price = EXCLUDED.price,
-                        amount = EXCLUDED.amount
                 """, row)
 
             logging.info("Products_flow data inserted successfully.")
@@ -596,11 +583,6 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO bills (id, store_id, ref_id, time, discount, total)
                     VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO UPDATE SET
-                        ref_id = EXCLUDED.ref_id,
-                        time = EXCLUDED.time,
-                        discount = EXCLUDED.discount,
-                        total = EXCLUDED.total
                 """, row)
 
             logging.info("Bills data inserted successfully.")
@@ -613,14 +595,15 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO cash_flow (id, store_id, time, amount, type, bill_id, description, total)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO UPDATE SET
-                        time = EXCLUDED.time,
-                        amount = EXCLUDED.amount,
-                        type = EXCLUDED.type,
-                        bill_id = EXCLUDED.bill_id,
-                        description = EXCLUDED.description,
-                        total = EXCLUDED.total
                 """, row)
+            for row in data["cash_flow"]:
+                if row[4] == "الغاء فاتورة":
+                    cur.execute(
+                        """
+                        DELETE FROM bills
+                        WHERE ref_id = %s
+                    """, (row[5], ))
+                    
 
             logging.info("Cash_flow data inserted successfully.")
 
