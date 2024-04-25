@@ -632,10 +632,12 @@ def accept_sync(data: dict):
 
 
 @app.post("/send-sync")
-def sync(step: int = 0, time_now: str = datetime.now().isoformat()):
+def sync(step: int = 0, time_now: str = ""):
     """
     Synchronize the local database with the remote database
     """
+    if not time_now:
+        time_now = datetime.now().isoformat()
     start_time = datetime.now()
     try:
         with Database(HOST, DATABASE, USER, PASS,
