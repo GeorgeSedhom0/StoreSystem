@@ -35,7 +35,7 @@ CREATE TABLE products (
   price FLOAT,
   stock INT,
   category VARCHAR,
-  last_update TIMESTAMP
+  last_update TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 )
 """)
 
@@ -46,6 +46,8 @@ CREATE TABLE syncs (
   time TIMESTAMP
 )
 """)
+
+cur.execute("INSERT INTO syncs (time) VALUES (CURRENT_TIMESTAMP)")
 
 # Create the bills table
 cur.execute("""

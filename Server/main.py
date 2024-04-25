@@ -104,7 +104,7 @@ def get_bar_code():
         return str(int(cur.fetchone()["b"]) + 1)
 
 
-@app.get("store-id")
+@app.get("/store-id")
 def get_store_id():
     """
     Get the store ID
@@ -441,7 +441,7 @@ def accept_sync(data: dict):
                 cur.execute(
                     """
                     INSERT INTO products (id, name, bar_code, wholesale_price, price, stock, category, last_update)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
                         name = EXCLUDED.name,
                         bar_code = EXCLUDED.bar_code,
@@ -449,7 +449,7 @@ def accept_sync(data: dict):
                         price = EXCLUDED.price,
                         stock = EXCLUDED.stock,
                         category = EXCLUDED.category,
-                        last_update = NOW()
+                        last_update = EXCLUDED.last_update
                 """, row)
 
             logging.info("Inserting products_flow data...")
@@ -615,7 +615,7 @@ def sync(step: int = 0, time_now: str = datetime.now().isoformat()):
                 """
                 SELECT
                     id, name, bar_code, wholesale_price,
-                    price, stock, category
+                    price, stock, category, TO_CHAR(last_update, 'YYYY-MM-DD HH24:MI:SS') AS last_update
                 FROM products
                 WHERE last_update > %s
             """, (latest_sync_time, ))
