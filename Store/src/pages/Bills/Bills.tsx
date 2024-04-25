@@ -36,8 +36,8 @@ const Bills = () => {
         "http://localhost:8000/bills",
         {
           params: {
-            start_date: startDate.toISOString(),
-            end_date: endDate.toISOString(),
+            start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
+            end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
           },
         }
       );
@@ -51,6 +51,8 @@ const Bills = () => {
   useEffect(() => {
     getBills();
   }, [startDate, endDate]);
+
+  const total = bills.reduce((acc, bill) => acc + bill.total, 0);
 
   return (
     <ViewContainer>
@@ -94,6 +96,9 @@ const Bills = () => {
                     }}
                   />
                 </LocalizationProvider>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="body2">المجموع: {total}</Typography>
               </Grid>
             </Grid>
           </Card>

@@ -17,10 +17,11 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { Product, SCProduct } from "../../utils/types";
+import { Bill, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "./Components/ProductInCart";
+import ShiftDialog from "./Components/ShiftDialog";
 
 const Sell = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -33,6 +34,9 @@ const Sell = () => {
   });
   const [discount, setDiscount] = useState<number>(0);
   const [billPayment, setBillPayment] = useState<"sale" | "BNPL">("sale");
+  const [shift, setShipt] = useState<string | null>("");
+  const [shiftDialog, setShiftDialog] = useState<boolean>(false);
+  const [lastBill, setLastBill] = useState<Bill | null>(null);
 
   useEffect(() => {
     const getProds = async () => {
@@ -45,6 +49,23 @@ const Sell = () => {
     };
     getProds();
   }, []);
+
+  useEffect(() => {
+    const getShift = async () => {
+      try {
+        const { data } = await axios.get("http://localhost:8000/current-shift");
+        setShipt(data.start_date_time);
+      } catch (error) {
+        console.log(error);
+      }
+    };
+    getShift();
+  }, []);
+
+  useEffect(() => {
+    if (!shift) setShiftDialog(true);
+    else setShiftDialog(false);
+  }, [shift]);
 
   useEffect(() => {
     if (!query) {
@@ -171,11 +192,42 @@ const Sell = () => {
     };
   }, [shoppingCart]);
 
+  // mock
+  async function printBill() {
+    const printerIP = "192.168.1.100"; // Example printer IP address
+    const billData = lastBill; // Generate bill data
+
+    try {
+      const response = await fetch(`http://${printerIP}/print`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(billData),
+      });
+
+      if (response.ok) {
+        console.log("Bill printed successfully");
+      } else {
+        console.error("Failed to print bill");
+      }
+    } catch (error) {
+      console.error("Error printing bill:", error);
+    }
+  }
+
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
+      if (discount >= shoppingCart.reduce((acc, item) => acc + item.price, 0)) {
+        setMsg({
+          type: "error",
+          text: "الخصم اكبر من الاجمالي",
+        });
+        return;
+      }
       try {
         const bill = {
-          time: new Date().toISOString(),
+          time: new Date().toLocaleString(),
           discount: discount,
           total:
             shoppingCart.reduce(
@@ -184,11 +236,12 @@ const Sell = () => {
             ) - discount,
           products_flow: shoppingCart,
         };
-        await axios.post("http://localhost:8000/bill", bill, {
+        const { data } = await axios.post("http://localhost:8000/bill", bill, {
           params: {
-            move_type: "sale",
+            move_type: billPayment,
           },
         });
+        setLastBill(data.bill);
         setShoppingCart([]);
         setMsg({
           type: "success",
@@ -202,16 +255,31 @@ const Sell = () => {
         });
       }
     },
-    []
+    [billPayment]
   );
 
   return (
     <Grid container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
+      <ShiftDialog
+        dialogOpen={shiftDialog}
+        setDialogOpen={setShiftDialog}
+        shift={shift}
+        setShift={setShipt}
+      />
 
       <Grid item xs={12}>
         <Card elevation={3} sx={{ p: 3 }}>
           <Grid container spacing={3} alignItems="center">
+            <Grid item container xs={12} gap={3}>
+              <Button variant="contained" onClick={() => setShiftDialog(true)}>
+                فترات العمل
+              </Button>
+              <Button variant="contained" onClick={printBill}>
+                طباعة الفاتورة
+              </Button>
+            </Grid>
+
             <Grid item xs={12}>
               <Typography variant="h6">
                 اختار منتج ليتم اضافته الى الفاتورة

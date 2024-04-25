@@ -24,6 +24,7 @@ cur.execute("DROP TABLE IF EXISTS cash_flow CASCADE")
 cur.execute("DROP TABLE IF EXISTS products_flow CASCADE")
 cur.execute("DROP TABLE IF EXISTS shifts CASCADE")
 
+cur.execute("SET TIME ZONE 'Africa/Cairo'")
 
 # Create the products table
 cur.execute("""
@@ -197,7 +198,7 @@ BEGIN
         NEW.store_id,
         NEW.time,
         NEW.total,
-        CASE WHEN NEW.total > 0 THEN 'sell' ELSE 'buy' END,
+        CASE WHEN NEW.total > 0 THEN 'بيع' ELSE 'شراء' END,
         NEW.store_id || '_' || NEW.id,
         CASE WHEN NEW.total > 0 THEN 'فاتورة بيع' ELSE 'فاتورة شراء' END,
         NEW.total + latest_total
@@ -236,9 +237,9 @@ BEGIN
     total
   ) VALUES (
     OLD.store_id,
-    CURRENT_TIMESTAMP,  -- Use the current time
+    CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Cairo',  -- Use the current time
     -OLD.total,
-    'delete',
+    'الغاء فاتورة',
     OLD.store_id || '_' || OLD.id,
     CASE WHEN OLD.total > 0 THEN 'استرجاع فاتورة بيع' ELSE 'استرجاع فاتورة شراء' END,
     latest_total - OLD.total

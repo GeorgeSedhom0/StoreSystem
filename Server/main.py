@@ -304,7 +304,7 @@ def add_bill(bill: Bill, move_type: Literal["sale", "buy", "BNPL"]):
             # Create a list of tuples
             values = [
                 (STORE_ID, ref_id, product_flow.id, -product_flow.quantity
-                 if move_type == "sale" else product_flow.quantity,
+                 if move_type in ["sale", "BNPL"] else product_flow.quantity,
                  product_flow.wholesale_price, product_flow.price)
                 for product_flow in bill.products_flow
             ]
@@ -334,7 +334,36 @@ def add_bill(bill: Bill, move_type: Literal["sale", "buy", "BNPL"]):
                     raise HTTPException(status_code=400,
                                         detail="Update products failed")
 
-        return {"message": "Bill added successfully"}
+            # get last bill for returnig
+
+            cur.execute(
+                """
+                SELECT
+                    bills.ref_id AS id,
+                    bills.time,
+                    bills.discount,
+                    bills.total,
+                    json_agg(
+                        json_build_object(
+                            'name', products.name,
+                            'amount', products_flow.amount,
+                            'wholesale_price', products_flow.wholesale_price,
+                            'price', products_flow.price
+                        )
+                    ) AS products
+                FROM bills
+                JOIN products_flow ON bills.ref_id = products_flow.bill_id
+                JOIN products ON products_flow.product_id = products.id
+                WHERE bills.ref_id = %s
+                GROUP BY bills.ref_id, bills.time, bills.discount, bills.total
+                ORDER BY bills.time DESC
+                LIMIT 1
+                    """,
+                (ref_id, ))
+
+            bill = cur.fetchone()
+
+        return {"message": "Bill added successfully", "bill": bill}
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -365,6 +394,75 @@ def delete_bill(bill_id: str):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.get("/cash-flow")
+def get_cash_flow(start_date: Optional[str] = None,
+                  end_date: Optional[str] = None):
+    """
+    Get all cash flow records from the database
+
+    Returns:
+        List[Dict]: A list of dictionaries containing the cash flow records
+
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """SELECT
+                    TO_CHAR(time, 'YYYY-MM-DD HH24:MI:SS') AS time,
+                    amount,
+                    type,
+                    description,
+                    total
+                FROM cash_flow
+                WHERE time >= %s
+                AND time <= %s
+                ORDER BY time DESC
+                LIMIT 100
+                    """,
+                (start_date if start_date else "1970-01-01",
+                    end_date if end_date else datetime.now().isoformat()))
+            cash_flow = cur.fetchall()
+            return cash_flow
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/cash-flow")
+def add_cash_flow(amount: float, move_type: Literal["دخول", "خروج"], description: str):
+    """
+    Add a cash flow record to the database
+
+    Args:
+        amount (float): The amount of the cash flow
+        move_type (Literal["in", "out"]): The type of the cash flow
+        description (str): The description of the cash flow
+
+    Returns:
+        Dict: A message indicating the result of the operation
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(amount), 0) AS total
+                FROM cash_flow
+                """)
+            total = cur.fetchone()["total"]
+            if move_type == "out" and total < amount:
+                raise HTTPException(status_code=400,
+                                    detail="Insufficient funds")
+            cur.execute(
+                """
+                INSERT INTO cash_flow (store_id, time, amount, type, description, total)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """, (STORE_ID, datetime.now().isoformat(), amount, move_type, description, total + amount if move_type == "دخول" else total - amount))
+            return {"message": "Cash flow record added successfully"}
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    
+
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
@@ -379,10 +477,10 @@ def start_shift():
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                INSERT INTO shifts (store_id, start_date_time, current)
+                INSERT INTO shifts (start_date_time, current)
                 VALUES (%s, %s)
-                RETURNING id
-                """, (STORE_ID, datetime.now(), True))
+                RETURNING start_date_time
+                """, (datetime.now(), True))
             return cur.fetchone()
     except Exception as e:
         logging.error(f"Error: {e}")
@@ -401,9 +499,8 @@ def end_shift():
                 UPDATE shifts
                 SET end_date_time = %s, current = False
                 WHERE store_id = %s AND current = True
-                RETURNING id
                 """, (datetime.now(), STORE_ID))
-            return cur.fetchone()
+            return {"message": "Shift ended successfully"}
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -418,9 +515,30 @@ def current_shift():
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                SELECT * FROM shifts
-                WHERE store_id = %s AND current = True
-                """, (STORE_ID, ))
+                SELECT start_date_time FROM shifts
+                WHERE current = True
+                """)
+            return cur.fetchone()
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/shift-total")
+def shift_total():
+    """
+    Get the total sales for the current shift
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(amount), 0) AS total FROM cash_flow
+                WHERE time >= (
+                    SELECT start_date_time FROM shifts
+                    WHERE current = True
+                )
+                """)
             return cur.fetchone()
     except Exception as e:
         logging.error(f"Error: {e}")

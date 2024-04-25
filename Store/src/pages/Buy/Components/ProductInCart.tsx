@@ -32,7 +32,7 @@ const ProductInCart = ({
 
       <TableCell>
         <TextField
-          label="سعر الجملة"
+          label="سعر الشراء"
           type="number"
           value={product.wholesale_price}
           variant="standard"

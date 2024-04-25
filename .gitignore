@@ -3,3 +3,4 @@ package-lock.json
 Server/env
 .env
 __pycache__
+olddata.xls

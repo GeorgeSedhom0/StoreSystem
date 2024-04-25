@@ -64,6 +64,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             >
               تعديل المنتجات
             </Button>
+            <Button
+              onClick={() => {
+                navigate("/cash");
+              }}
+            >
+              الحركات المالية
+            </Button>
             <LoadingButton loading={loading} onClick={sync}>
               مزامنة
             </LoadingButton>

@@ -12,6 +12,7 @@ import Storage from "./pages/AddToStorage/AddToStorage";
 import Buy from "./pages/Buy/Buy";
 import Products from "./pages/Products/Productds";
 import Bills from "./pages/Bills/Bills";
+import Cash from "./pages/Cash/Cash";
 
 const theme = createTheme({
   direction: "rtl",
@@ -35,6 +36,7 @@ const App = () => {
               <Route path="/buy" element={<Buy />} />
               <Route path="/products" element={<Products />} />
               <Route path="/bills" element={<Bills />} />
+              <Route path="/cash" element={<Cash />} />
             </Routes>
           </Layout>
         </Router>

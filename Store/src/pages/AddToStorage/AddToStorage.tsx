@@ -29,6 +29,14 @@ const Storage = () => {
         product
       );
       console.log(data);
+      setProduct({
+        name: "",
+        category: "",
+        price: 0,
+        stock: 0,
+        wholesale_price: 0,
+        bar_code: "",
+      });
       setMsg({ type: "success", text: "تمت الاضافة بنجاح" });
     } catch (error) {
       console.log(error);
@@ -66,14 +74,20 @@ const Storage = () => {
               label="السعر"
               value={product.price}
               onChange={(e) =>
-                setProduct({ ...product, price: +e.target.value })
+                setProduct({
+                  ...product,
+                  price: parseFloat(e.target.value) || 0,
+                })
               }
             />
             <TextField
-              label="السعر الجملة"
+              label="سعر الشراء"
               value={product.wholesale_price}
               onChange={(e) =>
-                setProduct({ ...product, wholesale_price: +e.target.value })
+                setProduct({
+                  ...product,
+                  wholesale_price: parseFloat(e.target.value) || 0,
+                })
               }
             />
             <TextField

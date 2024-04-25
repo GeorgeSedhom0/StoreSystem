@@ -130,7 +130,7 @@ const Buy = () => {
     async (shoppingCart: SCProduct[], discount: number) => {
       try {
         const bill = {
-          time: new Date().toISOString(),
+          time: new Date().toLocaleString(),
           discount,
           total:
             shoppingCart.reduce(
@@ -190,7 +190,7 @@ const Buy = () => {
               </Typography>
               <Typography variant="body1" align="center">
                 {shoppingCart.reduce(
-                  (acc, item) => acc + item.price * item.quantity,
+                  (acc, item) => acc + item.wholesale_price * item.quantity,
                   0
                 )}{" "}
                 جنيه
@@ -234,7 +234,7 @@ const Buy = () => {
                   <TableRow>
                     <TableCell>المنتج</TableCell>
                     <TableCell>الكمية</TableCell>
-                    <TableCell>سعر الجملة</TableCell>
+                    <TableCell>سعر الشراء</TableCell>
                     <TableCell>السعر</TableCell>
                     <TableCell>الاجمالي</TableCell>
                     <TableCell>حذف</TableCell>

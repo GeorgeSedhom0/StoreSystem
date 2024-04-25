@@ -20,7 +20,7 @@ export const fixedHeaderContent = () => {
       <TableCell>اسم المنتج</TableCell>
       <TableCell>البار كود</TableCell>
       <TableCell>السعر</TableCell>
-      <TableCell>سعر الجملة</TableCell>
+      <TableCell>سعر الشراء</TableCell>
       <TableCell>الكمية</TableCell>
       <TableCell>الصنف</TableCell>
       <TableCell></TableCell>

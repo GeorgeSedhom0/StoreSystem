@@ -58,7 +58,8 @@ const Bill = ({
             <DeleteIcon />
           </IconButton>
           <Typography variant="h6" align="center">
-            فاتورة {bill.total > 0 ? `بيع` : `شراء`}
+            فاتورة{" "}
+            {bill.total == 0 ? "بيع اجل" : bill.total > 0 ? `بيع` : `شراء`}
           </Typography>
         </Grid>
         <Grid item xs={12}>
@@ -84,16 +85,24 @@ const Bill = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {bill.products.map((product) => (
-                  <TableRow key={product.name}>
-                    <TableCell>{product.name}</TableCell>
-                    <TableCell>{product.price}</TableCell>
-                    <TableCell>{Math.abs(product.amount)}</TableCell>
-                    <TableCell>
-                      {product.price * Math.abs(product.amount)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {bill.products.map((product) => {
+                  const productPrice =
+                    bill.total == 0
+                      ? 0
+                      : bill.total > 0
+                      ? product.price
+                      : product.wholesale_price;
+                  return (
+                    <TableRow key={product.name}>
+                      <TableCell>{product.name}</TableCell>
+                      <TableCell>{productPrice}</TableCell>
+                      <TableCell>{Math.abs(product.amount)}</TableCell>
+                      <TableCell>
+                        {productPrice * Math.abs(product.amount)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
