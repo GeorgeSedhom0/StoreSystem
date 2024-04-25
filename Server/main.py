@@ -180,7 +180,8 @@ def update_product(products: list[Product]):
                 UPDATE products
                 SET name = %s, bar_code = %s,
                 wholesale_price = %s, price = %s,
-                category = %s, stock = %s
+                category = %s, stock = %s,
+                last_update = NOW()
                 WHERE id = %s
                 """,
                 ((product.name, product.bar_code, product.wholesale_price,
