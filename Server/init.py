@@ -16,6 +16,15 @@ conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
 # Get a cursor
 cur = conn.cursor()
 
+# Drop all tables before creating
+cur.execute("DROP TABLE IF EXISTS products CASCADE")
+cur.execute("DROP TABLE IF EXISTS syncs CASCADE")
+cur.execute("DROP TABLE IF EXISTS bills CASCADE")
+cur.execute("DROP TABLE IF EXISTS cash_flow CASCADE")
+cur.execute("DROP TABLE IF EXISTS products_flow CASCADE")
+cur.execute("DROP TABLE IF EXISTS shifts CASCADE")
+
+
 # Create the products table
 cur.execute("""
 CREATE TABLE products (
@@ -77,6 +86,17 @@ CREATE TABLE products_flow (
   price FLOAT,
   amount INT,
   PRIMARY KEY (id, store_id)
+)
+""")
+
+# Create the shifts table
+cur.execute("""
+CREATE TABLE shifts (
+  id BIGSERIAL,
+  store_id BIGINT,
+  start_date_time TIMESTAMP,
+  end_date_time TIMESTAMP,
+  current BOOLEAN
 )
 """)
 

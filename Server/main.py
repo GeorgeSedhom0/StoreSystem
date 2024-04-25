@@ -27,7 +27,7 @@ OTHER_STORE = getenv("OTHER_STORE")
 app = FastAPI()
 
 origins = [
-    "http://localhost:5173",  # Replace with the origin of your frontend application
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
@@ -102,6 +102,14 @@ def get_bar_code():
             "SELECT COALESCE(MAX(bar_code), '100000000000') AS b FROM products"
         )
         return str(int(cur.fetchone()["b"]) + 1)
+
+
+@app.get("store-id")
+def get_store_id():
+    """
+    Get the store ID
+    """
+    return STORE_ID
 
 
 @app.get("/products")
@@ -359,6 +367,63 @@ def delete_bill(bill_id: str):
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
+
+
+@app.get("/start-shift")
+def start_shift():
+    """
+    Start a new shift
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                INSERT INTO shifts (store_id, start_date_time, current)
+                VALUES (%s, %s)
+                RETURNING id
+                """, (STORE_ID, datetime.now(), True))
+            return cur.fetchone()
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    
+
+@app.get("/end-shift")
+def end_shift():
+    """
+    End the current shift
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                UPDATE shifts
+                SET end_date_time = %s, current = False
+                WHERE store_id = %s AND current = True
+                RETURNING id
+                """, (datetime.now(), STORE_ID))
+            return cur.fetchone()
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    
+
+@app.get("/current-shift")
+def current_shift():
+    """
+    Get the current shift
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT * FROM shifts
+                WHERE store_id = %s AND current = True
+                """, (STORE_ID, ))
+            return cur.fetchone()
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/accept-sync")
