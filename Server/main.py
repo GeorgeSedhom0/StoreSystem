@@ -574,6 +574,7 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products_flow (id, store_id, bill_id, product_id, wholesale_price, price, amount)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLIC (id, store_id) DO NOTHING
                 """, row)
 
             logging.info("Products_flow data inserted successfully.")
@@ -586,6 +587,7 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO bills (id, store_id, ref_id, time, discount, total)
                     VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLIC (id, store_id) DO NOTHING
                 """, row)
 
             logging.info("Bills data inserted successfully.")
@@ -598,6 +600,7 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO cash_flow (id, store_id, time, amount, type, bill_id, description, total)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLIC (id, store_id) DO NOTHING
                 """, row)
             for row in data["cash_flow"]:
                 if row[4] == "الغاء فاتورة":
