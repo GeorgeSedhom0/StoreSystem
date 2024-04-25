@@ -151,10 +151,10 @@ def add_product(product: Product):
             cur.execute(
                 """
                 INSERT INTO products (name, bar_code, wholesale_price, price, stock, category, last_update)
-                VALUES (%s, %s, %s, %s, 0, %s, NOW())
+                VALUES (%s, %s, %s, %s, 0, %s, %s)
                 RETURNING *
                 """, (product.name, product.bar_code, product.wholesale_price,
-                      product.price, product.category))
+                      product.price, product.category, datetime.now().isoformat()))
             return cur.fetchone()
     except Exception as e:
         print(f"Error: {e}")
@@ -181,11 +181,11 @@ def update_product(products: list[Product]):
                 SET name = %s, bar_code = %s,
                 wholesale_price = %s, price = %s,
                 category = %s, stock = %s,
-                last_update = NOW()
+                last_update = %s
                 WHERE id = %s
                 """,
                 ((product.name, product.bar_code, product.wholesale_price,
-                  product.price, product.category, product.stock, product.id)
+                  product.price, product.category, product.stock, datetime.now().isoformat(), product.id)
                  for product in products))
             return {"message": "Products updated successfully"}
     except Exception as e:
