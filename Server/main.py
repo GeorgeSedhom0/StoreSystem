@@ -562,6 +562,8 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products (id, name, bar_code, wholesale_price, price, stock, category, last_update)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    -- on conflict just skip
+                    ON CONFLICT (id) DO NOTHING
                 """, row)
 
             logging.info("Inserting products_flow data...")
@@ -603,7 +605,7 @@ def accept_sync(data: dict):
                         DELETE FROM bills
                         WHERE ref_id = %s
                     """, (row[5], ))
-                    
+
 
             logging.info("Cash_flow data inserted successfully.")
 
