@@ -150,8 +150,8 @@ def add_product(product: Product):
             print(product)
             cur.execute(
                 """
-                INSERT INTO products (name, bar_code, wholesale_price, price, stock, category)
-                VALUES (%s, %s, %s, %s, 0, %s)
+                INSERT INTO products (name, bar_code, wholesale_price, price, stock, category, last_update)
+                VALUES (%s, %s, %s, %s, 0, %s, NOW())
                 RETURNING *
                 """, (product.name, product.bar_code, product.wholesale_price,
                       product.price, product.category))
@@ -440,15 +440,16 @@ def accept_sync(data: dict):
             for row in data["products"]:
                 cur.execute(
                     """
-                    INSERT INTO products (id, name, bar_code, wholesale_price, price, stock, category)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO products (id, name, bar_code, wholesale_price, price, stock, category, last_update)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (id) DO UPDATE SET
                         name = EXCLUDED.name,
                         bar_code = EXCLUDED.bar_code,
                         wholesale_price = EXCLUDED.wholesale_price,
                         price = EXCLUDED.price,
                         stock = EXCLUDED.stock,
-                        category = EXCLUDED.category
+                        category = EXCLUDED.category,
+                        last_update = NOW()
                 """, row)
 
             logging.info("Inserting products_flow data...")

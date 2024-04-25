@@ -1,15 +1,19 @@
-import { TableCell, TextField } from "@mui/material";
+import { IconButton, TableCell, TextField } from "@mui/material";
 import { Product } from "../../../utils/types";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import axios from "axios";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 interface ProductCardProps {
   product: Product;
+  getProds: () => void;
   setEditedProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   editedProducts: Product[];
 }
 
 const ProductCard = ({
   product,
+  getProds,
   setEditedProducts,
   editedProducts,
 }: ProductCardProps) => {
@@ -22,6 +26,18 @@ const ProductCard = ({
     () => (productInCart ? productInCart : product),
     [productInCart, product]
   );
+
+  const deleteProduct = useCallback(async () => {
+    try {
+      const { data } = await axios.delete(
+        `http://localhost:8000/product/${product.id}`
+      );
+      console.log(data);
+      getProds();
+    } catch (error) {
+      console.log(error);
+    }
+  }, [product.id]);
 
   return (
     <>
@@ -159,6 +175,12 @@ const ProductCard = ({
             })
           }
         />
+      </TableCell>
+
+      <TableCell>
+        <IconButton onClick={deleteProduct}>
+          <DeleteIcon />
+        </IconButton>
       </TableCell>
     </>
   );

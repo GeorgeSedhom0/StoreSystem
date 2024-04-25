@@ -40,19 +40,20 @@ const Products = () => {
     );
   }, [products, editedProducts, query, changedOnly]);
 
+  const getProds = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get<Product[]>(
+        "http://localhost:8000/products"
+      );
+      setProducts(data);
+    } catch (error) {
+      console.log(error);
+    }
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
-    const getProds = async () => {
-      setLoading(true);
-      try {
-        const { data } = await axios.get<Product[]>(
-          "http://localhost:8000/products"
-        );
-        setProducts(data);
-      } catch (error) {
-        console.log(error);
-      }
-      setLoading(false);
-    };
     getProds();
   }, []);
 
@@ -129,6 +130,7 @@ const Products = () => {
             itemContent={(_, product) => (
               <ProductCard
                 product={product}
+                getProds={getProds}
                 setEditedProducts={setEditedProducts}
                 editedProducts={editedProducts}
                 key={product.id || product.bar_code}
