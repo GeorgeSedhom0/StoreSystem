@@ -293,8 +293,9 @@ def add_bill(bill: Bill, move_type: Literal["sale", "buy", "BNPL"]):
                 UPDATE bills
                 SET ref_id = store_id || '_' || id
                 WHERE id = %s
+                AND store_id = %s
                 RETURNING ref_id
-                """, (bill_id, ))
+                """, (bill_id, STORE_ID))
             result = cur.fetchone()
             if not result:
                 raise HTTPException(status_code=400,
