@@ -566,7 +566,6 @@ def accept_sync(data: dict):
                         bar_code = EXCLUDED.bar_code,
                         wholesale_price = EXCLUDED.wholesale_price,
                         price = EXCLUDED.price,
-                        stock = EXCLUDED.stock,
                         category = EXCLUDED.category,
                         last_update = EXCLUDED.last_update AT TIME ZONE 'Africa/Cairo'
                 """, row)
