@@ -73,7 +73,7 @@ const ShiftDialog = ({
       maxWidth="md"
       style={{ height: "90vh" }}
     >
-      <DialogTitle align="center">فتورات العمل</DialogTitle>
+      <DialogTitle align="center">الشيفتات</DialogTitle>
       <DialogContent>
         <Box
           display="flex"
@@ -84,12 +84,12 @@ const ShiftDialog = ({
           <DialogContentText>
             {shift
               ? `
-            فترة عمل مفتوحة منذ: ${new Date(shift).toLocaleTimeString("ar-EG", {
+            شيفت مفتوحة منذ: ${new Date(shift).toLocaleTimeString("ar-EG", {
               hour: "2-digit",
               minute: "2-digit",
             })}
             `
-              : "لا يوجد فترة عمل مفتوحة"}
+              : "لا يوجد شيفت مفتوحة"}
           </DialogContentText>
         </Box>
       </DialogContent>
@@ -101,7 +101,7 @@ const ShiftDialog = ({
           style={{ height: "100%" }}
         >
           <DialogContentText>
-            {shift ? `إجمالي فترة العمل: ${shiftTotal} جنيه` : "لا يوجد فواتير"}
+            {shift ? `إجمالي الشيفت: ${shiftTotal} جنيه` : "لا يوجد فواتير"}
           </DialogContentText>
         </Box>
       </DialogContent>
@@ -110,10 +110,10 @@ const ShiftDialog = ({
           <CloseIcon />
         </IconButton>
         <Button onClick={openShift} disabled={!!shift}>
-          فتح فترة عمل
+          فتح شيفت
         </Button>
         <Button onClick={closeShift} disabled={!shift}>
-          إغلاق فترة عمل
+          إغلاق شيفت
         </Button>
       </DialogActions>
     </Dialog>

@@ -273,7 +273,7 @@ const Sell = () => {
           <Grid container spacing={3} alignItems="center">
             <Grid item container xs={12} gap={3}>
               <Button variant="contained" onClick={() => setShiftDialog(true)}>
-                فترات العمل
+                الشيفتات
               </Button>
               <Button variant="contained" onClick={printBill}>
                 طباعة الفاتورة
