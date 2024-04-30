@@ -34,7 +34,7 @@ const Sell = () => {
   });
   const [discount, setDiscount] = useState<number>(0);
   const [billPayment, setBillPayment] = useState<"sale" | "BNPL">("sale");
-  const [shift, setShipt] = useState<string | null>("");
+  const [shift, setShift] = useState<string | null>("");
   const [shiftDialog, setShiftDialog] = useState<boolean>(false);
   const [lastBill, setLastBill] = useState<Bill | null>(null);
 
@@ -42,24 +42,16 @@ const Sell = () => {
     const getProds = async () => {
       try {
         const { data } = await axios.get("http://localhost:8000/products");
+        const { data: currentShift } = await axios.get(
+          "http://localhost:8000/current-shift"
+        );
         setProducts(data);
+        setShift(currentShift.start_date_time);
       } catch (error) {
         console.log(error);
       }
     };
     getProds();
-  }, []);
-
-  useEffect(() => {
-    const getShift = async () => {
-      try {
-        const { data } = await axios.get("http://localhost:8000/current-shift");
-        setShipt(data.start_date_time);
-      } catch (error) {
-        console.log(error);
-      }
-    };
-    getShift();
   }, []);
 
   useEffect(() => {
@@ -82,6 +74,45 @@ const Sell = () => {
         .slice(0, 10)
     );
   }, [products, query]);
+
+  useEffect(() => {
+    // for ease of use, if the user holds ctrl and typing numbers
+    // the last product in the shopping cart quantity will be changed
+    // the can also remove the last digit by ctrl pressing backspace
+
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.ctrlKey && (!isNaN(parseInt(e.key)) || e.key === "Backspace")) {
+        e.preventDefault();
+        if (shoppingCart.length > 0) {
+          setShoppingCart((prev) =>
+            prev.map((item, index) => {
+              if (index === prev.length - 1) {
+                if (e.key === "Backspace") {
+                  return {
+                    ...item,
+                    quantity:
+                      parseInt(item.quantity.toString().slice(0, -1)) || 0,
+                  };
+                } else
+                  return {
+                    ...item,
+                    quantity:
+                      parseInt(item.quantity.toString() + e.key) ||
+                      item.quantity,
+                  };
+              } else return item;
+            })
+          );
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyPress);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyPress);
+    };
+  }, [shoppingCart]);
 
   const addToCart = useCallback((product: Product | null) => {
     if (!product) return;
@@ -152,45 +183,6 @@ const Sell = () => {
       window.removeEventListener("keypress", handleKeyPress);
     };
   }, [products, addToCart]);
-
-  useEffect(() => {
-    // for ease of use, if the user holds ctrl and typing numbers
-    // the last product in the shopping cart quantity will be changed
-    // the can also remove the last digit by ctrl pressing backspace
-
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.ctrlKey && (!isNaN(parseInt(e.key)) || e.key === "Backspace")) {
-        e.preventDefault();
-        if (shoppingCart.length > 0) {
-          setShoppingCart((prev) =>
-            prev.map((item, index) => {
-              if (index === prev.length - 1) {
-                if (e.key === "Backspace") {
-                  return {
-                    ...item,
-                    quantity:
-                      parseInt(item.quantity.toString().slice(0, -1)) || 0,
-                  };
-                } else
-                  return {
-                    ...item,
-                    quantity:
-                      parseInt(item.quantity.toString() + e.key) ||
-                      item.quantity,
-                  };
-              } else return item;
-            })
-          );
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyPress);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyPress);
-    };
-  }, [shoppingCart]);
 
   // mock
   async function printBill() {
@@ -265,7 +257,7 @@ const Sell = () => {
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
         shift={shift}
-        setShift={setShipt}
+        setShift={setShift}
       />
 
       <Grid item xs={12}>
