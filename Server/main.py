@@ -503,9 +503,9 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products (
                         id, name, bar_code, wholesale_price,
-                        price, category, last_update
+                        price, category, last_update, stock
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
                     ON CONFLICT (id) DO NOTHING
                 """, row)
 
