@@ -655,7 +655,7 @@ def sync(step: int = 0, time_now: str = ""):
                     description
                 FROM cash_flow
                 WHERE bill_id IS NULL
-                WHERE time > %s
+                AND time > %s
                 AND store_id = %s
             """, (latest_sync_time, STORE_ID))
 
