@@ -605,7 +605,15 @@ def sync(step: int = 0, time_now: str = ""):
 
             cur.execute(
                 """
-                SELECT * FROM products_flow
+                SELECT
+                    products_flow.id,
+                    products_flow.store_id,
+                    products_flow.bill_id,
+                    products_flow.product_id,
+                    products_flow.wholesale_price,
+                    products_flow.price,
+                    products_flow.amount
+                FROM products_flow
                 JOIN bills ON ref_id = bill_id
                 WHERE time > %s
                 AND products_flow.store_id = %s
