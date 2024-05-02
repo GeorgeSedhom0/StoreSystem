@@ -509,6 +509,21 @@ def accept_sync(data: dict):
                     ON CONFLICT (id) DO NOTHING
                 """, row)
 
+            logging.info("Inserting bills data...")
+
+            for row in data["bills"]:
+                cur.execute(
+                    """
+                    INSERT INTO bills (
+                        id, store_id, ref_id, time, discount, total, type
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id, store_id) DO NOTHING
+                """, row)
+
+            logging.info("Bills data inserted successfully.")
+
+            # Insert the bills data
             logging.info("Inserting products_flow data...")
 
             for row in data["products_flow"]:
@@ -523,21 +538,6 @@ def accept_sync(data: dict):
                 """, row)
 
             logging.info("Products_flow data inserted successfully.")
-
-            # Insert the bills data
-            logging.info("Inserting bills data...")
-
-            for row in data["bills"]:
-                cur.execute(
-                    """
-                    INSERT INTO bills (
-                        id, store_id, ref_id, time, discount, total, type
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO NOTHING
-                """, row)
-
-            logging.info("Bills data inserted successfully.")
 
             # Insert the cash_flow data
             logging.info("Inserting cash_flow data...")
@@ -637,6 +637,7 @@ def sync(step: int = 0, time_now: str = ""):
                 FROM bills
                 WHERE time > %s
                 AND store_id = %s
+                ORDER BY time
             """, (latest_sync_time, STORE_ID))
 
             bills = cur.fetchall()
@@ -657,6 +658,7 @@ def sync(step: int = 0, time_now: str = ""):
                 WHERE bill_id IS NULL
                 AND time > %s
                 AND store_id = %s
+                ORDER BY time
             """, (latest_sync_time, STORE_ID))
 
             cash_flow = cur.fetchall()
