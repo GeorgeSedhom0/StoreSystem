@@ -21,6 +21,7 @@ export interface Bill {
   time: string;
   discount: number;
   total: number;
+  type: string;
   products: {
     id: number;
     name: string;

@@ -7,12 +7,7 @@ import {
   Button,
   Card,
   TextField,
-  Table,
-  TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   FormControl,
   Select,
   MenuItem,
@@ -20,12 +15,17 @@ import {
 } from "@mui/material";
 import { CashFlow } from "../../utils/types";
 import LoadingScreen from "../Shared/LoadingScreen";
+import { TableVirtuoso } from "react-virtuoso";
+import {
+  fixedHeaderContent,
+  VirtuosoTableComponents,
+} from "./Components/VirtualTableHelpers";
 
 const Cash = () => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [cashFlow, setCashFlow] = useState<CashFlow[]>([]);
   const [amount, setAmount] = useState(0);
-  const [moveType, setMoveType] = useState("");
+  const [moveType, setMoveType] = useState<"in" | "out">("in");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -84,13 +84,13 @@ const Cash = () => {
                 <Select
                   label="نوع الحركة"
                   value={moveType}
-                  onChange={(e) => setMoveType(e.target.value)}
+                  onChange={(e) => setMoveType(e.target.value as "in" | "out")}
                   sx={{
                     minWidth: 120,
                   }}
                 >
-                  <MenuItem value="دخول">دخول</MenuItem>
-                  <MenuItem value="خروج">خروج</MenuItem>
+                  <MenuItem value="in">دخول</MenuItem>
+                  <MenuItem value="out">خروج</MenuItem>
                 </Select>
               </FormControl>
               <TextField
@@ -105,39 +105,35 @@ const Cash = () => {
           </Card>
         </Grid>
         <Grid item xs={12}>
-          <Card elevation={3} sx={{ p: 3 }}>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>الوقت</TableCell>
-                    <TableCell>المبلغ</TableCell>
-                    <TableCell>النوع</TableCell>
-                    <TableCell>الوصف</TableCell>
-                    <TableCell>المجموع</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {cashFlow.map((row) => (
-                    <TableRow key={row.time}>
-                      <TableCell>
-                        {new Date(row.time).toLocaleString("ar-EG", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell>{row.amount}</TableCell>
-                      <TableCell>{row.type}</TableCell>
-                      <TableCell>{row.description}</TableCell>
-                      <TableCell>{row.total}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+          <Card
+            elevation={3}
+            sx={{
+              position: "relative",
+              height: 600,
+            }}
+          >
+            <TableVirtuoso
+              fixedHeaderContent={fixedHeaderContent}
+              components={VirtuosoTableComponents}
+              data={cashFlow}
+              itemContent={(_, row) => (
+                <>
+                  <TableCell>
+                    {new Date(row.time).toLocaleString("ar-EG", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })}
+                  </TableCell>
+                  <TableCell>{row.amount}</TableCell>
+                  <TableCell>{row.type === "in" ? "دخول" : "خروج"}</TableCell>
+                  <TableCell>{row.description}</TableCell>
+                  <TableCell>{row.total}</TableCell>
+                </>
+              )}
+            />
           </Card>
         </Grid>
       </Grid>

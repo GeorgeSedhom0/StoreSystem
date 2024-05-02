@@ -6,6 +6,7 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
+  Typography,
 } from "@mui/material";
 import { Box } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
@@ -25,7 +26,15 @@ const ShiftDialog = ({
   shift,
   setShift,
 }: ShiftDialogProps) => {
-  const [shiftTotal, setShiftTotal] = useState(0);
+  const [shiftTotal, setShiftTotal] = useState<{
+    sell_total: number;
+    buy_total: number;
+    return_total: number;
+  }>({
+    sell_total: 0,
+    buy_total: 0,
+    return_total: 0,
+  });
 
   const handleClose = () => {
     if (!shift) return;
@@ -36,7 +45,7 @@ const ShiftDialog = ({
     const fetchShiftTotal = async () => {
       try {
         const { data } = await axios.get("http://localhost:8000/shift-total");
-        setShiftTotal(data.total);
+        setShiftTotal(data);
       } catch (err) {
         console.log(err);
       }
@@ -101,7 +110,22 @@ const ShiftDialog = ({
           style={{ height: "100%" }}
         >
           <DialogContentText>
-            {shift ? `إجمالي الشيفت: ${shiftTotal} جنيه` : "لا يوجد فواتير"}
+            {shift ? (
+              <Typography variant="body1" align="center">
+                اجمالى البيع خلال الشيفت: {shiftTotal.sell_total}
+                <br />
+                اجمالى الشراء خلال الشيفت: {shiftTotal.buy_total * -1}
+                <br />
+                اجمالى المرتجعات خلال الشيفت: {shiftTotal.return_total * -1}
+                <br />
+                الاجمالى النهائى:{" "}
+                {shiftTotal.sell_total +
+                  shiftTotal.buy_total +
+                  shiftTotal.return_total}
+              </Typography>
+            ) : (
+              "لا يوجد فواتير"
+            )}
           </DialogContentText>
         </Box>
       </DialogContent>

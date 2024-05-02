@@ -114,30 +114,30 @@ const Products = () => {
           </Card>
         </Grid>
 
-        <Grid
-          item
-          xs={12}
-          sx={{
-            height: 600,
-            position: "relative",
-          }}
-        >
-          <LoadingScreen loading={loading} />
-          <TableVirtuoso
-            fixedHeaderContent={fixedHeaderContent}
-            components={VirtuosoTableComponents}
-            data={data}
-            itemContent={(_, product) => (
-              <ProductCard
-                secretAgentActivated={false}
-                product={product}
-                getProds={getProds}
-                setEditedProducts={setEditedProducts}
-                editedProducts={editedProducts}
-                key={product.id || product.bar_code}
-              />
-            )}
-          />
+        <Grid item xs={12}>
+          <Card
+            elevation={3}
+            sx={{
+              position: "relative",
+              height: 600,
+            }}
+          >
+            <LoadingScreen loading={loading} />
+            <TableVirtuoso
+              fixedHeaderContent={fixedHeaderContent}
+              components={VirtuosoTableComponents}
+              data={data}
+              itemContent={(_, product) => (
+                <ProductCard
+                  secretAgentActivated={false}
+                  product={product}
+                  setEditedProducts={setEditedProducts}
+                  editedProducts={editedProducts}
+                  key={product.id || product.bar_code}
+                />
+              )}
+            />
+          </Card>
         </Grid>
       </Grid>
     </ViewContainer>

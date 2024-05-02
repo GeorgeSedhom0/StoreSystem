@@ -16,12 +16,15 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bill, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "./Components/ProductInCart";
 import ShiftDialog from "./Components/ShiftDialog";
+import BillView from "../../utils/BillView";
+import LoadingScreen from "../Shared/LoadingScreen";
+import { printBill } from "../../utils/functions";
 
 const Sell = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -33,13 +36,20 @@ const Sell = () => {
     text: "",
   });
   const [discount, setDiscount] = useState<number>(0);
-  const [billPayment, setBillPayment] = useState<"sale" | "BNPL">("sale");
+  const [billPayment, setBillPayment] = useState<"sell" | "BNPL" | "return">(
+    "sell"
+  );
   const [shift, setShift] = useState<string | null>("");
   const [shiftDialog, setShiftDialog] = useState<boolean>(false);
   const [lastBill, setLastBill] = useState<Bill | null>(null);
+  const [lastBillOpen, setLastBillOpen] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const billRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const getProds = async () => {
+      setLoading(true);
       try {
         const { data } = await axios.get("http://localhost:8000/products");
         const { data: currentShift } = await axios.get(
@@ -49,7 +59,10 @@ const Sell = () => {
         setShift(currentShift.start_date_time);
       } catch (error) {
         console.log(error);
+        // reload the page since these 2 requests are crucial
+        window.location.reload();
       }
+      setLoading(false);
     };
     getProds();
   }, []);
@@ -155,7 +168,6 @@ const Sell = () => {
           const product = products.find((prod) => prod.bar_code === code);
           if (product) {
             addToCart(product);
-            console.log(product);
           } else {
             setMsg({
               type: "error",
@@ -183,30 +195,6 @@ const Sell = () => {
       window.removeEventListener("keypress", handleKeyPress);
     };
   }, [products, addToCart]);
-
-  // mock
-  async function printBill() {
-    const printerIP = "192.168.1.100"; // Example printer IP address
-    const billData = lastBill; // Generate bill data
-
-    try {
-      const response = await fetch(`http://${printerIP}/print`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(billData),
-      });
-
-      if (response.ok) {
-        console.log("Bill printed successfully");
-      } else {
-        console.error("Failed to print bill");
-      }
-    } catch (error) {
-      console.error("Error printing bill:", error);
-    }
-  }
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
@@ -252,7 +240,17 @@ const Sell = () => {
 
   return (
     <Grid container spacing={3}>
+      <BillView
+        bill={lastBill}
+        open={lastBillOpen}
+        setOpen={setLastBillOpen}
+        ref={billRef}
+      />
+
+      <LoadingScreen loading={loading} />
+
       <AlertMessage message={msg} setMessage={setMsg} />
+
       <ShiftDialog
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
@@ -267,7 +265,16 @@ const Sell = () => {
               <Button variant="contained" onClick={() => setShiftDialog(true)}>
                 الشيفتات
               </Button>
-              <Button variant="contained" onClick={printBill}>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  setLastBillOpen(true);
+                  setTimeout(() => {
+                    printBill(billRef, setMsg, setLastBillOpen);
+                  }, 1000);
+                }}
+                disabled={!lastBill}
+              >
                 طباعة الفاتورة
               </Button>
             </Grid>
@@ -285,12 +292,13 @@ const Sell = () => {
                   label="نوع الفاتورة"
                   value={billPayment}
                   onChange={(e) =>
-                    setBillPayment(e.target.value as "sale" | "BNPL")
+                    setBillPayment(e.target.value as "sell" | "BNPL" | "return")
                   }
                   size="small"
                 >
-                  <MenuItem value="sale">نقدي</MenuItem>
+                  <MenuItem value="sell">نقدي</MenuItem>
                   <MenuItem value="BNPL">اجل</MenuItem>
+                  <MenuItem value="return">مرتجع</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

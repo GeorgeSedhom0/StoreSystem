@@ -7,7 +7,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import { TableComponents } from "react-virtuoso";
-import { Product } from "../../../utils/types";
+import { CashFlow } from "../../../utils/types";
 
 export const fixedHeaderContent = () => {
   return (
@@ -16,17 +16,16 @@ export const fixedHeaderContent = () => {
         bgcolor: "grey.900",
       }}
     >
-      <TableCell>اسم المنتج</TableCell>
-      <TableCell>البار كود</TableCell>
-      <TableCell>السعر</TableCell>
-      <TableCell>سعر الشراء</TableCell>
-      <TableCell>الكمية</TableCell>
-      <TableCell>المجموعة</TableCell>
+      <TableCell>الوقت</TableCell>
+      <TableCell>المبلغ</TableCell>
+      <TableCell>نوع الحركة</TableCell>
+      <TableCell>الوصف</TableCell>
+      <TableCell>المجموع</TableCell>
     </TableRow>
   );
 };
 
-export const VirtuosoTableComponents: TableComponents<Product> = {
+export const VirtuosoTableComponents: TableComponents<CashFlow> = {
   Scroller: React.forwardRef<HTMLDivElement>((props, ref) => (
     <TableContainer {...props} ref={ref} />
   )),

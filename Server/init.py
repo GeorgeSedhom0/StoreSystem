@@ -1,5 +1,5 @@
-import psycopg2
-from dotenv import load_dotenv
+import psycopg2  # type: ignore
+from dotenv import load_dotenv  # type: ignore
 from os import getenv
 
 load_dotenv()
@@ -48,7 +48,8 @@ CREATE TABLE syncs (
 )
 """)
 
-cur.execute("INSERT INTO syncs (time) VALUES (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Cairo')")
+cur.execute("""INSERT INTO syncs (time) VALUES
+  (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Cairo')""")
 
 # Create the bills table
 cur.execute("""
@@ -59,6 +60,7 @@ CREATE TABLE bills (
   time TIMESTAMP,
   discount FLOAT,
   total FLOAT,
+  type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL'
   PRIMARY KEY (id, store_id)
 )
 """)
@@ -103,23 +105,11 @@ CREATE TABLE shifts (
 )
 """)
 
-# create the trigger to update the last_update column in products
-cur.execute("""
-CREATE OR REPLACE FUNCTION update_last_update()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.last_update := CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+# --------------------------------------------------------------------
+# ----------------------------triggers--------------------------------
+# --------------------------------------------------------------------
 
-CREATE TRIGGER trigger_update_last_update
-BEFORE UPDATE ON products
-FOR EACH ROW
-EXECUTE FUNCTION update_last_update();
-""")
-
-# Create the triggers between products and products_flow
+# Create the trigger to update stock after inserting a product flow
 cur.execute("""
 -- Trigger to update stock after insert
 CREATE OR REPLACE FUNCTION update_stock_after_insert()
@@ -136,40 +126,6 @@ CREATE TRIGGER trigger_update_stock_insert
 AFTER INSERT ON products_flow
 FOR EACH ROW
 EXECUTE FUNCTION update_stock_after_insert();
-
--- Trigger to update stock after delete
-CREATE OR REPLACE FUNCTION update_stock_after_delete()
-RETURNS TRIGGER AS $$
-BEGIN
-    UPDATE products
-    SET stock = stock - OLD.amount
-    WHERE id = OLD.product_id;
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_update_stock_delete
-AFTER DELETE ON products_flow
-FOR EACH ROW
-EXECUTE FUNCTION update_stock_after_delete();
-""")
-
-# Create the triggers between bills and products_flow
-cur.execute("""
--- Trigger to delete products_flow after deleting a corresponding bill
-CREATE OR REPLACE FUNCTION delete_products_flow_after_delete()
-RETURNS TRIGGER AS $$
-BEGIN
-    DELETE FROM products_flow
-    WHERE bill_id = OLD.ref_id;
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_delete_products_flow_after_delete
-AFTER DELETE ON bills
-FOR EACH ROW
-EXECUTE FUNCTION delete_products_flow_after_delete();
 """)
 
 # Create the trigger to insert into cash_flow after inserting a bill
@@ -177,31 +133,24 @@ cur.execute("""
 -- Trigger to insert into cash_flow after inserting a bill
 CREATE OR REPLACE FUNCTION insert_cash_flow_after_insert()
 RETURNS TRIGGER AS $$
-DECLARE
-    latest_total FLOAT;
 BEGIN
-    SELECT total INTO latest_total FROM cash_flow ORDER BY time DESC LIMIT 1;
-
-    IF latest_total IS NULL THEN
-        latest_total := 0;
-    END IF;
-
     INSERT INTO cash_flow (
         store_id,
         time,
         amount,
         type,
         bill_id,
-        description,
-        total
+        description
     ) VALUES (
         NEW.store_id,
         NEW.time,
         NEW.total,
-        CASE WHEN NEW.total > 0 THEN 'بيع' ELSE 'شراء' END,
+        CASE WHEN NEW.type = 'sell' THEN 'in' ELSE 'out' END,
         NEW.store_id || '_' || NEW.id,
-        CASE WHEN NEW.total > 0 THEN 'فاتورة بيع' ELSE 'فاتورة شراء' END,
-        NEW.total + latest_total
+        CASE WHEN NEW.type = 'sell' THEN 'فاتورة بيع'
+              WHEN NEW.type = 'buy' THEN 'فاتورة شراء'
+              WHEN NEW.type = 'return' THEN 'فاتورة مرتجع'
+              ELSE 'فاتورة بيع اجل' END
     );
     RETURN NEW;
 END;
@@ -213,46 +162,81 @@ FOR EACH ROW
 EXECUTE FUNCTION insert_cash_flow_after_insert();
 """)
 
-# Create the trigger to insert into cash_flow after deleting a bill
+# Create the trigger to update ref_id after inserting a bill
 cur.execute("""
--- Trigger to insert into cash_flow after deleting a bill
-CREATE OR REPLACE FUNCTION insert_cash_flow_after_delete()
+-- Trigger to update ref_id after insert
+CREATE OR REPLACE FUNCTION update_ref_id_after_insert()
 RETURNS TRIGGER AS $$
-DECLARE
-  latest_total FLOAT;
 BEGIN
-  SELECT total INTO latest_total FROM cash_flow ORDER BY time DESC, id DESC LIMIT 1;
-
-  IF latest_total IS NULL THEN
-    latest_total := 0;
-  END IF;
-
-  INSERT INTO cash_flow (
-    store_id,
-    time,
-    amount,
-    type,
-    bill_id,
-    description,
-    total
-  ) VALUES (
-    OLD.store_id,
-    CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Cairo',  -- Use the current time
-    -OLD.total,
-    'الغاء فاتورة',
-    OLD.store_id || '_' || OLD.id,
-    CASE WHEN OLD.total > 0 THEN 'استرجاع فاتورة بيع' ELSE 'استرجاع فاتورة شراء' END,
-    latest_total - OLD.total
-  );
-  RETURN OLD;
+    UPDATE bills
+    SET ref_id = NEW.store_id || '_' || NEW.id
+    WHERE id = NEW.id
+    AND store_id = NEW.store_id;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_insert_cash_flow_after_delete
-AFTER DELETE ON bills
+CREATE TRIGGER trigger_update_ref_id_after_insert
+AFTER INSERT ON bills
 FOR EACH ROW
-EXECUTE FUNCTION insert_cash_flow_after_delete();
+EXECUTE FUNCTION update_ref_id_after_insert();
 """)
+
+# Create the trigger to update product price when inserting a buy bill
+cur.execute("""
+-- Trigger to update product price when inserting a buy bill
+CREATE OR REPLACE FUNCTION update_product_price_after_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (SELECT type FROM bills WHERE ref_id = NEW.bill_id) = 'buy' THEN
+    UPDATE products
+    SET
+      wholesale_price = NEW.wholesale_price,
+      price = NEW.price
+    WHERE id = NEW.product_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_product_price_after_insert
+AFTER INSERT ON products_flow
+FOR EACH ROW
+EXECUTE FUNCTION update_product_price_after_insert();
+""")
+
+# Create the trigger to update total after inserting a cash_flow
+cur.execute("""
+-- Trigger to update total after insert
+CREATE OR REPLACE FUNCTION update_total_after_insert()
+RETURNS TRIGGER AS $$
+DECLARE
+    latest_total FLOAT;
+BEGIN
+    SELECT total INTO latest_total FROM cash_flow
+    WHERE id != NEW.id OR store_id != NEW.store_id
+    ORDER BY time DESC LIMIT 1;
+
+    IF latest_total IS NULL THEN
+        latest_total := 0;
+    END IF;
+
+    UPDATE cash_flow
+    SET total = NEW.amount + latest_total
+    WHERE id = NEW.id
+    AND store_id = NEW.store_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_total_after_insert
+AFTER INSERT ON cash_flow
+FOR EACH ROW
+EXECUTE FUNCTION update_total_after_insert();
+""")
+
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
 
 # Commit the changes and close the connection
 conn.commit()

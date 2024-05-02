@@ -1,6 +1,6 @@
 import { Card, Grid, Typography } from "@mui/material";
 import { ViewContainer } from "../Shared/Utils";
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -9,18 +9,13 @@ import "dayjs/locale/ar-sa";
 import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { Bill as BillType } from "../../utils/types";
-import { GridComponents, VirtuosoGrid } from "react-virtuoso";
+import { TableVirtuoso } from "react-virtuoso";
 import Bill from "./Components/Bill";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-
-const gridComponents: GridComponents = {
-  Item: React.forwardRef<HTMLDivElement>((props, ref) => (
-    <Grid item xs={6} {...props} ref={ref} />
-  )),
-  List: React.forwardRef<HTMLDivElement>((props, ref) => (
-    <Grid container spacing={3} {...props} ref={ref} sx={{ p: 3 }} />
-  )),
-};
+import {
+  fixedHeaderContent,
+  VirtuosoTableComponents,
+} from "./Components/VirtualTableHelpers";
 
 const Bills = () => {
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
@@ -108,17 +103,15 @@ const Bills = () => {
             elevation={3}
             sx={{
               position: "relative",
-              py: 2,
+              height: 600,
             }}
           >
             <LoadingScreen loading={loading} />
-            <VirtuosoGrid
-              style={{ height: 600 }}
+            <TableVirtuoso
+              fixedHeaderContent={fixedHeaderContent}
+              components={VirtuosoTableComponents}
               data={bills}
-              itemContent={(_, bill) => (
-                <Bill bill={bill} setMsg={setMsg} getBills={getBills} />
-              )}
-              components={gridComponents}
+              itemContent={(_, bill) => <Bill bill={bill} setMsg={setMsg} />}
             />
           </Card>
         </Grid>

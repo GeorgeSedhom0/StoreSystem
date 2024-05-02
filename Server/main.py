@@ -1,15 +1,15 @@
 from typing import Optional
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException  # type: ignore
+from fastapi.responses import JSONResponse  # type: ignore
 from typing import Literal
-from pydantic import BaseModel
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from fastapi.middleware.cors import CORSMiddleware
-import requests
+from pydantic import BaseModel  # type: ignore
+import psycopg2  # type: ignore
+from psycopg2.extras import RealDictCursor  # type: ignore
+from fastapi.middleware.cors import CORSMiddleware  # type: ignore
+import requests  # type: ignore
 from datetime import datetime
 import logging
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore
 from os import getenv
 
 load_dotenv()
@@ -37,6 +37,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 
 class Product(BaseModel):
@@ -143,51 +147,23 @@ def add_product(product: Product):
         product (Product): The product to add
 
     Returns:
-        Dict: The product added to the database        
+        Dict: The product added to the database
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             print(product)
             cur.execute(
                 """
-                INSERT INTO products (name, bar_code, wholesale_price, price, stock, category, last_update)
+                INSERT INTO products (
+                    name, bar_code, wholesale_price,
+                    price, stock, category, last_update
+                )
                 VALUES (%s, %s, %s, %s, 0, %s, %s)
                 RETURNING *
-                """, (product.name, product.bar_code, product.wholesale_price,
-                      product.price, product.category, datetime.now().isoformat()))
-            return cur.fetchone()
-    except Exception as e:
-        print(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.put("/products")
-def update_product(products: list[Product]):
-    """
-    Update a product in the database
-
-    Args:
-        product_id (int): The ID of the product to update
-        product (Product): The updated product
-
-    Returns:
-        Dict: The updated product
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.executemany(
-                """
-                UPDATE products
-                SET name = %s, bar_code = %s,
-                wholesale_price = %s, price = %s,
-                category = %s, stock = %s,
-                last_update = %s
-                WHERE id = %s
                 """,
-                ((product.name, product.bar_code, product.wholesale_price,
-                  product.price, product.category, product.stock, datetime.now().isoformat(), product.id)
-                 for product in products))
-            return {"message": "Products updated successfully"}
+                (product.name, product.bar_code, product.wholesale_price,
+                 product.price, product.category, datetime.now().isoformat()))
+            return cur.fetchone()
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -236,6 +212,7 @@ def get_bills(start_date: Optional[str] = None,
                     bills.time,
                     bills.discount,
                     bills.total,
+                    bills.type,
                     json_agg(
                         json_build_object(
                             'name', products.name,
@@ -249,7 +226,8 @@ def get_bills(start_date: Optional[str] = None,
                 JOIN products ON products_flow.product_id = products.id
                 WHERE bills.time >= %s
                 AND bills.time <= %s
-                GROUP BY bills.ref_id, bills.time, bills.discount, bills.total
+                GROUP BY bills.ref_id, bills.time, bills.discount,
+                    bills.total, bills.type
                 ORDER BY bills.time DESC
                 LIMIT 100
                     """,
@@ -263,80 +241,55 @@ def get_bills(start_date: Optional[str] = None,
 
 
 @app.post("/bill")
-def add_bill(bill: Bill, move_type: Literal["sale", "buy", "BNPL"]):
+def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"]):
     """
     Add a bill to the database
 
     Args:
         bill (Bill): The bill to add
-        move_type (Literal["sale", "buy"]): The move_type of bill
+        move_type (Literal["sell", "buy"]): The move_type of bill
 
     Returns:
         Dict: A message indicating the result of the operation
     """
-    bill_total = bill.total if move_type == "sale" else -bill.total if move_type == "buy" else 0
+    bill_total = (bill.total if move_type == "sell" else
+                  -bill.total if move_type in ["buy", "return"] else 0)
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                INSERT INTO bills (store_id, time, discount, total)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO bills (store_id, time, discount, total, type)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
-                """, (STORE_ID, bill.time, bill.discount, bill_total))
+                """,
+                (STORE_ID, bill.time, bill.discount, bill_total, move_type))
             result = cur.fetchone()
             if not result:
                 raise HTTPException(status_code=400,
                                     detail="Insert into bills failed")
             bill_id = result["id"]
-            cur.execute(
-                """
-                UPDATE bills
-                SET ref_id = store_id || '_' || id
-                WHERE id = %s
-                AND store_id = %s
-                RETURNING ref_id
-                """, (bill_id, STORE_ID))
-            result = cur.fetchone()
-            if not result:
-                raise HTTPException(status_code=400,
-                                    detail="Update bills failed")
-            ref_id = result["ref_id"]
 
             # Create a list of tuples
-            values = [
-                (STORE_ID, ref_id, product_flow.id, -product_flow.quantity
-                 if move_type in ["sale", "BNPL"] else product_flow.quantity,
-                 product_flow.wholesale_price, product_flow.price)
-                for product_flow in bill.products_flow
-            ]
+            values = [(STORE_ID, f"{STORE_ID}_{bill_id}", product_flow.id,
+                       -product_flow.quantity if move_type in ["sell", "BNPL"]
+                       else product_flow.quantity,
+                       product_flow.wholesale_price, product_flow.price)
+                      for product_flow in bill.products_flow]
 
-            # Use executemany() to execute the INSERT statement once for all rows
             cur.executemany(
                 """
-                INSERT INTO products_flow (store_id, bill_id, product_id, amount, wholesale_price, price)
+                INSERT INTO products_flow (
+                    store_id, bill_id, product_id,
+                    amount, wholesale_price, price
+                )
                 VALUES (%s, %s, %s, %s, %s, %s)
-                
+
                 """, values)
             if cur.rowcount != len(values):
                 raise HTTPException(status_code=400,
                                     detail="Insert into products_flow failed")
 
-            # Update the products price and wholesale price if the bill is a buy bill
-            if move_type == "buy":
-                cur.executemany(
-                    """
-                    UPDATE products
-                    SET price = %s, wholesale_price = %s
-                    WHERE id = %s
-                    """, [(product_flow.price, product_flow.wholesale_price,
-                           product_flow.id)
-                          for product_flow in bill.products_flow])
-                if cur.rowcount != len(values):
-                    raise HTTPException(status_code=400,
-                                        detail="Update products failed")
-
             # get last bill for returnig
-
             cur.execute(
                 """
                 SELECT
@@ -355,41 +308,13 @@ def add_bill(bill: Bill, move_type: Literal["sale", "buy", "BNPL"]):
                 FROM bills
                 JOIN products_flow ON bills.ref_id = products_flow.bill_id
                 JOIN products ON products_flow.product_id = products.id
-                WHERE bills.ref_id = %s
+                WHERE bills.id = %s
+                AND bills.store_id = %s
                 GROUP BY bills.ref_id, bills.time, bills.discount, bills.total
-                ORDER BY bills.time DESC
-                LIMIT 1
-                    """,
-                (ref_id, ))
+                    """, (bill_id, STORE_ID))
 
             bill = cur.fetchone()
-
         return {"message": "Bill added successfully", "bill": bill}
-    except Exception as e:
-        print(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.delete("/bill/{bill_id}")
-def delete_bill(bill_id: str):
-    """
-    Delete a bill from the database
-
-    Args:
-        bill_id (int): The ID of the bill to delete
-
-    Returns:
-        Dict: A message indicating the result of the operation
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                DELETE FROM bills
-                WHERE ref_id = %s
-                RETURNING *
-                """, (bill_id, ))
-            return cur.fetchone()
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -417,11 +342,11 @@ def get_cash_flow(start_date: Optional[str] = None,
                 FROM cash_flow
                 WHERE time >= %s
                 AND time <= %s
-                ORDER BY time DESC
+                ORDER BY cash_flow.time DESC
                 LIMIT 100
                     """,
                 (start_date if start_date else "1970-01-01",
-                    end_date if end_date else datetime.now().isoformat()))
+                 end_date if end_date else datetime.now().isoformat()))
             cash_flow = cur.fetchall()
             return cash_flow
     except Exception as e:
@@ -430,7 +355,8 @@ def get_cash_flow(start_date: Optional[str] = None,
 
 
 @app.post("/cash-flow")
-def add_cash_flow(amount: float, move_type: Literal["دخول", "خروج"], description: str):
+def add_cash_flow(amount: float, move_type: Literal["in", "out"],
+                  description: str):
     """
     Add a cash flow record to the database
 
@@ -446,27 +372,21 @@ def add_cash_flow(amount: float, move_type: Literal["دخول", "خروج"], des
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                SELECT COALESCE(SUM(amount), 0) AS total
-                FROM cash_flow
-                """)
-            total = cur.fetchone()["total"]
-            if move_type == "out" and total < amount:
-                raise HTTPException(status_code=400,
-                                    detail="Insufficient funds")
-            cur.execute(
-                """
-                INSERT INTO cash_flow (store_id, time, amount, type, description, total)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """, (STORE_ID, datetime.now().isoformat(), amount, move_type, description, total + amount if move_type == "دخول" else total - amount))
+                INSERT INTO cash_flow (
+                    store_id, time, amount, type, description
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                """, (
+                    STORE_ID,
+                    datetime.now().isoformat(),
+                    amount,
+                    move_type,
+                    description,
+                ))
             return {"message": "Cash flow record added successfully"}
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
-    
-
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s [%(levelname)s] - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
 
 
 @app.get("/start-shift")
@@ -476,6 +396,13 @@ def start_shift():
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute("""
+                SELECT start_date_time FROM shifts
+                WHERE current = True
+                """)
+            if cur.fetchone():
+                raise HTTPException(status_code=400,
+                                    detail="There is already a current shift")
             cur.execute(
                 """
                 INSERT INTO shifts (start_date_time, current)
@@ -486,7 +413,7 @@ def start_shift():
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
-    
+
 
 @app.get("/end-shift")
 def end_shift():
@@ -505,7 +432,7 @@ def end_shift():
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
-    
+
 
 @app.get("/current-shift")
 def current_shift():
@@ -514,12 +441,14 @@ def current_shift():
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT start_date_time FROM shifts
                 WHERE current = True
                 """)
-            return cur.fetchone()
+            current_shift = cur.fetchone()
+            if not current_shift:
+                return {"message": "No current shift"}
+            return current_shift
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -532,15 +461,27 @@ def shift_total():
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT COALESCE(SUM(amount), 0) AS total FROM cash_flow
+            cur.execute("""
+                SELECT type, COALESCE(SUM(total), 0) AS total
+                FROM bills
                 WHERE time >= (
                     SELECT start_date_time FROM shifts
                     WHERE current = True
                 )
+                GROUP BY type
                 """)
-            return cur.fetchone()
+            data = cur.fetchall()
+
+        totals = {"sell_total": 0, "buy_total": 0, "return_total": 0}
+        for row in data:
+            if row["type"] == "sell":
+                totals["sell_total"] += row["total"]
+            elif row["type"] == "buy":
+                totals["buy_total"] += row["total"]
+            elif row["type"] == "return":
+                totals["return_total"] += row["total"]
+
+        return totals
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -560,11 +501,12 @@ def accept_sync(data: dict):
             for row in data["products"]:
                 cur.execute(
                     """
-                    INSERT INTO products (id, name, bar_code, wholesale_price, price, stock, category, last_update)
+                    INSERT INTO products (
+                        id, name, bar_code, wholesale_price,
+                        price, stock, category, last_update
+                    )
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id) DO UPDATE SET
-                    wholesale_price = EXCLUDED.wholesale_price,
-                    price = EXCLUDED.price
+                    ON CONFLICT (id) DO NOTHING
                 """, row)
 
             logging.info("Inserting products_flow data...")
@@ -572,7 +514,10 @@ def accept_sync(data: dict):
             for row in data["products_flow"]:
                 cur.execute(
                     """
-                    INSERT INTO products_flow (id, store_id, bill_id, product_id, wholesale_price, price, amount)
+                    INSERT INTO products_flow (
+                        id, store_id, bill_id, product_id,
+                        wholesale_price, price, amount
+                    )
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id, store_id) DO NOTHING
                 """, row)
@@ -585,8 +530,10 @@ def accept_sync(data: dict):
             for row in data["bills"]:
                 cur.execute(
                     """
-                    INSERT INTO bills (id, store_id, ref_id, time, discount, total)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO bills (
+                        id, store_id, ref_id, time, discount, total, type
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id, store_id) DO NOTHING
                 """, row)
 
@@ -598,18 +545,12 @@ def accept_sync(data: dict):
             for row in data["cash_flow"]:
                 cur.execute(
                     """
-                    INSERT INTO cash_flow (id, store_id, time, amount, type, bill_id, description, total)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO cash_flow (
+                        id, bill_id, store_id, time, amount, type, description
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id, store_id) DO NOTHING
                 """, row)
-            for row in data["cash_flow"]:
-                if row[4] == "الغاء فاتورة":
-                    cur.execute(
-                        """
-                        DELETE FROM bills
-                        WHERE ref_id = %s
-                    """, (row[5], ))
-
 
             logging.info("Cash_flow data inserted successfully.")
 
@@ -631,7 +572,7 @@ def accept_sync(data: dict):
         return {"message": "Sync completed successfully"}
 
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error("Error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -657,82 +598,77 @@ def sync(step: int = 0, time_now: str = ""):
             else:
                 latest_sync_time = "1970-01-01T00:00:00"
 
-            logging.info(f"Latest sync time: {latest_sync_time}")
+            logging.info("Latest sync time: %s", latest_sync_time)
 
             # Fetch the changes since the last sync
             logging.info("Fetching the changes since the last sync...")
 
             cur.execute(
                 """
-                SELECT
-                    products_flow.id,
-                    products_flow.store_id,
-                    products_flow.bill_id,
-                    products_flow.product_id,
-                    products_flow.wholesale_price,
-                    products_flow.price,
-                    products_flow.amount
-                FROM products_flow
-                    JOIN bills ON ref_id = bill_id
+                SELECT * FROM products_flow
+                JOIN bills ON ref_id = bill_id
                 WHERE time > %s
-                    AND products_flow.store_id = %s
+                AND products_flow.store_id = %s
             """, (latest_sync_time, STORE_ID))
 
             products_flow = cur.fetchall()
 
-            logging.info(
-                f"Fetched {len(products_flow)} products_flow records.")
+            logging.info("Fetched %d products_flow records.",
+                         len(products_flow))
 
             cur.execute(
                 """
                 SELECT
-                    bills.id,
-                    bills.store_id,
-                    bills.ref_id,
-                    TO_CHAR(bills.time, 'YYYY-MM-DD HH24:MI:SS') AS time,
-                    bills.discount,
-                    bills.total
+                    id,
+                    store_id,
+                    ref_id,
+                    TO_CHAR(time, 'YYYY-MM-DD HH24:MI:SS.MS') AS time,
+                    discount,
+                    total,
+                    type
                 FROM bills
                 WHERE time > %s
-                    AND store_id = %s
+                AND store_id = %s
             """, (latest_sync_time, STORE_ID))
 
             bills = cur.fetchall()
 
-            logging.info(f"Fetched {len(bills)} bills records.")
+            logging.info("Fetched %d bills records.", len(bills))
 
             cur.execute(
                 """
                 SELECT
-                    cash_flow.id,
-                    cash_flow.store_id,
-                    TO_CHAR(cash_flow.time, 'YYYY-MM-DD HH24:MI:SS') AS time,
-                    cash_flow.amount,
-                    cash_flow.type,
-                    cash_flow.bill_id,
-                    cash_flow.description,
-                    cash_flow.total
+                    id,
+                    bill_id,
+                    store_id,
+                    TO_CHAR(time, 'YYYY-MM-DD HH24:MI:SS.MS') AS time,
+                    amount,
+                    type,
+                    description
                 FROM cash_flow
                 WHERE time > %s
-                    AND store_id = %s
+                AND store_id = %s
             """, (latest_sync_time, STORE_ID))
 
             cash_flow = cur.fetchall()
 
-            logging.info(f"Fetched {len(cash_flow)} cash_flow records.")
+            logging.info("Fetched %d cash_flow records.", len(cash_flow))
 
             cur.execute(
                 """
                 SELECT
                     id, name, bar_code, wholesale_price,
-                    price, stock, category, TO_CHAR(last_update, 'YYYY-MM-DD HH24:MI:SS') AS last_update
+                    price, category,
+                    TO_CHAR(
+                        last_update, 'YYYY-MM-DD HH24:MI:SS.MS'
+                    ) AS last_update
                 FROM products
                 WHERE last_update > %s
             """, (latest_sync_time, ))
 
             products = cur.fetchall()
 
-            logging.info(f"Fetched {len(products)} products records.")
+            logging.info("Fetched %d products records.", len(products))
 
             # Send the data to the other store
             logging.info("Sending the data to the other store...")
@@ -752,9 +688,9 @@ def sync(step: int = 0, time_now: str = ""):
 
             logging.info("Data sent to the other store successfully.")
 
-        logging.info(f"Sync completed in {datetime.now() - start_time}.")
+        logging.info("Sync completed in %s.", datetime.now() - start_time)
         return {"message": "Sync completed successfully"}
 
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error("Error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from e
