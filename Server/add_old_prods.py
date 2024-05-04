@@ -33,10 +33,13 @@ for row in range(sheet.nrows):
         continue
 
     # Get the data from the row
-    name = sheet.cell(row, 0).value
     bar_code = sheet.cell(row, 1).value
-    price = sheet.cell(row, 2).value
-    stock = sheet.cell(row, 3).value
+    name = sheet.cell(row, 2).value
+    price = float(sheet.cell(row, 9).value) if sheet.cell(row, 9).value else 0
+    inprice = float(sheet.cell(row, 6).value) if sheet.cell(row, 6).value else 0
+    stock = int(sheet.cell(row, 4).value) if sheet.cell(row, 4).value else 0
+    # print(bar_code, name, price, inprice, stock)
+    # continue
 
     # Insert the data into the database
     cur.execute(
@@ -46,7 +49,9 @@ for row in range(sheet.nrows):
         price, stock, category, last_update
     )
     VALUES (%s, %s, %s, %s, %s, %s, %s)
-    """, (name, bar_code, 0, price, stock, 0, datetime.now().isoformat()))
+    -- skip if a constraint violation occurs
+    ON CONFLICT (bar_code) DO NOTHING
+    """, (name, bar_code, inprice, price, stock, 0, datetime.now().isoformat()))
 
 # Commit the changes
 conn.commit()

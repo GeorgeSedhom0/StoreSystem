@@ -44,6 +44,7 @@ const Sell = () => {
   const [lastBill, setLastBill] = useState<Bill | null>(null);
   const [lastBillOpen, setLastBillOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [printer, setPrinter] = useState<any | null>(null);
 
   const billRef = useRef<HTMLDivElement>(null);
 
@@ -238,6 +239,31 @@ const Sell = () => {
     [billPayment]
   );
 
+  const printWithPrinter = useCallback(async () => {
+    setLastBillOpen(true);
+    if (printer) {
+      setTimeout(() => {
+        printBill(billRef, setMsg, setLastBillOpen, printer);
+      }, 500);
+    } else {
+      // request access to usb device, no filter listing all devices
+      // @ts-ignore
+      const usbDevice = await navigator.usb.requestDevice({
+        filters: [
+          {
+            vendorId: 2727,
+          },
+        ],
+      });
+      // open the device
+      await usbDevice.open();
+      await usbDevice.selectConfiguration(1);
+      await usbDevice.claimInterface(0);
+      setPrinter(usbDevice);
+      printBill(billRef, setMsg, setLastBillOpen, usbDevice);
+    }
+  }, [printer]);
+
   return (
     <Grid container spacing={3}>
       <BillView
@@ -267,12 +293,7 @@ const Sell = () => {
               </Button>
               <Button
                 variant="contained"
-                onClick={() => {
-                  setLastBillOpen(true);
-                  setTimeout(() => {
-                    printBill(billRef, setMsg, setLastBillOpen);
-                  }, 1000);
-                }}
+                onClick={printWithPrinter}
                 disabled={!lastBill}
               >
                 طباعة الفاتورة

@@ -23,6 +23,7 @@ const Bills = () => {
   const [loading, setLoading] = useState(false);
   const [bills, setBills] = useState<BillType[]>([]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+  const [printer, setPrinter] = useState<any | null>(null);
 
   const getBills = useCallback(async () => {
     setLoading(true);
@@ -111,7 +112,14 @@ const Bills = () => {
               fixedHeaderContent={fixedHeaderContent}
               components={VirtuosoTableComponents}
               data={bills}
-              itemContent={(_, bill) => <Bill bill={bill} setMsg={setMsg} />}
+              itemContent={(_, bill) => (
+                <Bill
+                  bill={bill}
+                  setMsg={setMsg}
+                  printer={printer}
+                  setPrinter={setPrinter}
+                />
+              )}
             />
           </Card>
         </Grid>

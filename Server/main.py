@@ -297,6 +297,7 @@ def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"]):
                     bills.time,
                     bills.discount,
                     bills.total,
+                    bills.type,
                     json_agg(
                         json_build_object(
                             'name', products.name,
@@ -310,7 +311,7 @@ def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"]):
                 JOIN products ON products_flow.product_id = products.id
                 WHERE bills.id = %s
                 AND bills.store_id = %s
-                GROUP BY bills.ref_id, bills.time, bills.discount, bills.total
+                GROUP BY bills.ref_id, bills.time, bills.discount, bills.total, bills.type
                     """, (bill_id, STORE_ID))
 
             bill = cur.fetchone()

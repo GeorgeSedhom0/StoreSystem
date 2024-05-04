@@ -1,6 +1,6 @@
 import { Button, ButtonGroup, TableCell } from "@mui/material";
 import { Bill as BillType } from "../../../utils/types";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import BillView from "../../../utils/BillView";
 import { printBill } from "../../../utils/functions";
 import { AlertMsg } from "../../Shared/AlertMessage";
@@ -8,12 +8,41 @@ import { AlertMsg } from "../../Shared/AlertMessage";
 const Bill = ({
   bill,
   setMsg,
+  printer,
+  setPrinter,
 }: {
   bill: BillType;
   setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>;
+  printer: any;
+  setPrinter: React.Dispatch<React.SetStateAction<any>>;
 }) => {
   const [billOpen, setBillOpen] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
+
+  const printWithPrinter = useCallback(async () => {
+    setBillOpen(true);
+    if (printer) {
+      setTimeout(() => {
+        printBill(billRef, setMsg, setBillOpen, printer);
+      }, 500);
+    } else {
+      // request access to usb device, no filter listing all devices
+      // @ts-ignore
+      const usbDevice = await navigator.usb.requestDevice({
+        filters: [
+          {
+            vendorId: 2727,
+          },
+        ],
+      });
+      // open the device
+      await usbDevice.open();
+      await usbDevice.selectConfiguration(1);
+      await usbDevice.claimInterface(0);
+      setPrinter(usbDevice);
+      printBill(billRef, setMsg, setBillOpen, usbDevice);
+    }
+  }, [printer]);
 
   return (
     <>
@@ -41,16 +70,7 @@ const Bill = ({
       <TableCell>
         <ButtonGroup variant="outlined">
           <Button onClick={() => setBillOpen(true)}>معاينة</Button>
-          <Button
-            onClick={() => {
-              setBillOpen(true);
-              setTimeout(() => {
-                printBill(billRef, setMsg, setBillOpen);
-              }, 1000);
-            }}
-          >
-            طباعة
-          </Button>
+          <Button onClick={printWithPrinter}>طباعة</Button>
         </ButtonGroup>
       </TableCell>
     </>

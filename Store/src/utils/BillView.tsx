@@ -3,6 +3,7 @@ import {
   createTheme,
   Dialog,
   DialogActions,
+  Divider,
   Grid,
   Table,
   TableBody,
@@ -44,21 +45,31 @@ const BillView = forwardRef(
             container
             spacing={3}
             sx={{
-              width: "88mm",
-              p: 3,
+              width: "150mm",
+              p: 0.5,
             }}
             ref={ref}
           >
             <Grid item xs={12}>
-              <Typography variant="h4" align="center">
+              <Typography variant="h2" align="center">
                 فحم المهندس
               </Typography>
             </Grid>
             <Grid item xs={12}>
-              <Typography variant="h6" align="center">
+              <Typography variant="h5" align="center">
+                01276761414
+              </Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="h5" align="center">
+                مول البنوك - مدينة السادات - المنوفية
+              </Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="h4" align="center">
                 {
                   {
-                    sell: "فاتورة بيع",
+                    sell: "فاتورة مبيعات",
                     buy: "فاتورة شراء",
                     return: "فاتورة مرتجع",
                     BNPL: "فاتورة بيع اجل",
@@ -67,18 +78,29 @@ const BillView = forwardRef(
               </Typography>
             </Grid>
             <Grid item xs={12}>
-              <Typography variant="h6" align="center">
+              <Typography variant="h4" align="center">
                 {new Date(bill.time).toLocaleString("ar-EG")}
               </Typography>
             </Grid>
             <Grid item xs={12}>
+              <Divider />
+            </Grid>
+            <Grid item xs={12}>
               <TableContainer>
-                <Table>
+                <Table
+                  sx={{
+                    // make TableCell size 2em
+                    "& .MuiTableCell-root": {
+                      fontSize: "2em",
+                      textAlign: "center",
+                    },
+                  }}
+                >
                   <TableHead>
                     <TableRow>
                       <TableCell>المنتج</TableCell>
-                      <TableCell>السعر</TableCell>
                       <TableCell>الكمية</TableCell>
+                      <TableCell>السعر</TableCell>
                       <TableCell>ألاجمالى</TableCell>
                     </TableRow>
                   </TableHead>
@@ -86,12 +108,12 @@ const BillView = forwardRef(
                     {bill.products.map((product, i) => (
                       <TableRow key={i}>
                         <TableCell>{product.name}</TableCell>
+                        <TableCell>{Math.abs(product.amount)}</TableCell>
                         <TableCell>
                           {["sell", "return", "BNPL"].includes(bill.type)
                             ? product.price
                             : product.wholesale_price}
                         </TableCell>
-                        <TableCell>{Math.abs(product.amount)}</TableCell>
                         <TableCell>
                           {["sell", "return", "BNPL"].includes(bill.type)
                             ? product.price * Math.abs(product.amount)
@@ -105,11 +127,28 @@ const BillView = forwardRef(
               </TableContainer>
             </Grid>
             <Grid item xs={12}>
+              <Typography variant="h6" align="left">
+                اجمالى المنتجات:
+                {bill.products.reduce((acc, p) => acc + Math.abs(p.amount), 0)}
+              </Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <Divider />
+            </Grid>
+            <Grid item xs={12}>
               <TableContainer>
-                <Table>
+                <Table
+                  sx={{
+                    // make TableCell size 2em
+                    "& .MuiTableCell-root": {
+                      fontSize: "2em",
+                      textAlign: "center",
+                    },
+                  }}
+                >
                   <TableBody>
                     <TableRow>
-                      <TableCell>المجموع المبدئي</TableCell>
+                      <TableCell>الاجمالى</TableCell>
                       <TableCell>
                         {Math.abs(bill.total) + Math.abs(bill.discount)}
                       </TableCell>
@@ -119,12 +158,17 @@ const BillView = forwardRef(
                       <TableCell>{bill.discount}</TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell>المجموع</TableCell>
+                      <TableCell>الصافى</TableCell>
                       <TableCell>{Math.abs(bill.total)}</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="h5" align="center">
+                عند ارجاع المنتجات لا تقبل الا من خلال هذة الفاتورة
+              </Typography>
             </Grid>
           </Grid>
           <DialogActions>
