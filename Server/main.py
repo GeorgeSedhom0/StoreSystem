@@ -406,10 +406,10 @@ def start_shift():
                                     detail="There is already a current shift")
             cur.execute(
                 """
-                INSERT INTO shifts (start_date_time, current)
-                VALUES (%s, %s)
+                INSERT INTO shifts (start_date_time, current, store_id)
+                VALUES (%s, %s, %s)
                 RETURNING start_date_time
-                """, (datetime.now(), True))
+                """, (datetime.now(), True, STORE_ID))
             return cur.fetchone()
     except Exception as e:
         logging.error(f"Error: {e}")
