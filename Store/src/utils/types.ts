@@ -14,6 +14,7 @@ export interface SCProduct {
   wholesale_price: number;
   price: number;
   quantity: number;
+  stock: number;
 }
 
 export interface Bill {

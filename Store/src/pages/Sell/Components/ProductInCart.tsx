@@ -63,6 +63,7 @@ const ProductInCart = ({
           حذف
         </Button>
       </TableCell>
+      <TableCell>{product.stock}</TableCell>
     </TableRow>
   );
 };

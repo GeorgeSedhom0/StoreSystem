@@ -1,6 +1,7 @@
 import {
   Autocomplete,
   Button,
+  ButtonGroup,
   Card,
   FormControl,
   Grid,
@@ -85,7 +86,7 @@ const Sell = () => {
             prod.name.toLowerCase().includes(query.toLowerCase()) ||
             prod.bar_code.includes(query)
         )
-        .slice(0, 10)
+        .slice(0, 30)
     );
   }, [products, query]);
 
@@ -148,6 +149,7 @@ const Sell = () => {
             price: product.price,
             wholesale_price: product.wholesale_price,
             quantity: 1,
+            stock: product.stock,
           },
         ];
       }
@@ -224,6 +226,7 @@ const Sell = () => {
         });
         setLastBill(data.bill);
         setShoppingCart([]);
+        setDiscount(0);
         setMsg({
           type: "success",
           text: "تم اضافة الفاتورة بنجاح",
@@ -238,6 +241,25 @@ const Sell = () => {
     },
     [billPayment]
   );
+
+  useEffect(() => {
+    const handleF2 = async (e: KeyboardEvent) => {
+      if (e.key === "F2") {
+        submitBill(shoppingCart, discount);
+      }
+      if (e.key === "F1") {
+        e.preventDefault();
+        await submitBill(shoppingCart, discount);
+        setTimeout(() => {
+          printWithPrinter();
+        }, 500);
+      }
+    };
+    window.addEventListener("keydown", handleF2);
+    return () => {
+      window.removeEventListener("keydown", handleF2);
+    };
+  }, [shoppingCart, discount, submitBill]);
 
   const printWithPrinter = useCallback(async () => {
     setLastBillOpen(true);
@@ -287,23 +309,10 @@ const Sell = () => {
       <Grid item xs={12}>
         <Card elevation={3} sx={{ p: 3 }}>
           <Grid container spacing={3} alignItems="center">
-            <Grid item container xs={12} gap={3}>
+            <Grid item xs={12}>
               <Button variant="contained" onClick={() => setShiftDialog(true)}>
                 الشيفتات
               </Button>
-              <Button
-                variant="contained"
-                onClick={printWithPrinter}
-                disabled={!lastBill}
-              >
-                طباعة الفاتورة
-              </Button>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Typography variant="h6">
-                اختار منتج ليتم اضافته الى الفاتورة
-              </Typography>
             </Grid>
 
             <Grid item xs={12} sm={3}>
@@ -336,14 +345,28 @@ const Sell = () => {
             </Grid>
 
             <Grid item xs={12} sm={3}>
-              <Button
-                variant="contained"
-                onClick={() => submitBill(shoppingCart, discount)}
-                disabled={shoppingCart.length === 0}
-                fullWidth
-              >
-                اضافة فاتورة
-              </Button>
+              <ButtonGroup fullWidth>
+                <Button
+                  variant="contained"
+                  onClick={() => submitBill(shoppingCart, discount)}
+                  disabled={shoppingCart.length === 0}
+                  fullWidth
+                >
+                  حفظ الفاتورة (F2)
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={async () => {
+                    await submitBill(shoppingCart, discount);
+                    setTimeout(() => {
+                      printWithPrinter();
+                    }, 500);
+                  }}
+                  disabled={shoppingCart.length === 0}
+                >
+                  حفظ و طباعة الفاتورة (F1)
+                </Button>
+              </ButtonGroup>
             </Grid>
 
             <Grid item xs={12} sm={3}>
@@ -378,7 +401,30 @@ const Sell = () => {
                   <TextField
                     {...params}
                     label="المنتج"
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                      const currentValue = e.target.value;
+                      setQuery(currentValue);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        // if an enter is pressed, and the query is more than or equal to 8 numbers
+                        // then search for the product with the barcode and add it to the cart
+                        if (query.length >= 8 && !isNaN(parseInt(query))) {
+                          const product = products.find(
+                            (prod) => prod.bar_code === query
+                          );
+                          if (product) {
+                            addToCart(product);
+                          } else {
+                            setMsg({
+                              type: "error",
+                              text: "المنتج غير موجود",
+                            });
+                          }
+                          setQuery("");
+                        }
+                      }
+                    }}
                   />
                 )}
               />
@@ -388,31 +434,43 @@ const Sell = () => {
       </Grid>
 
       <Grid item xs={12}>
-        <Card elevation={1} sx={{ p: 3 }}>
-          <Grid container spacing={3}>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>المنتج</TableCell>
-                    <TableCell>الكمية</TableCell>
-                    <TableCell>السعر</TableCell>
-                    <TableCell>الاجمالي</TableCell>
-                    <TableCell>حذف</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {shoppingCart.map((product) => (
-                    <ProductInCart
-                      key={product.id}
-                      product={product}
-                      setShoppingCart={setShoppingCart}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Grid>
+        <Card elevation={3}>
+          <TableContainer
+            sx={{
+              height: 580,
+              overflowY: "auto",
+            }}
+          >
+            <Table
+              stickyHeader
+              sx={{
+                // the Table Cell from Table Row from Table Head should be grey.900
+                "& .MuiTableCell-head": {
+                  bgcolor: "grey.900",
+                },
+              }}
+            >
+              <TableHead>
+                <TableRow>
+                  <TableCell>المنتج</TableCell>
+                  <TableCell>الكمية</TableCell>
+                  <TableCell>السعر</TableCell>
+                  <TableCell>الاجمالي</TableCell>
+                  <TableCell>حذف</TableCell>
+                  <TableCell>الكمية المتاحة بالمخزن</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {shoppingCart.map((product) => (
+                  <ProductInCart
+                    key={product.id}
+                    product={product}
+                    setShoppingCart={setShoppingCart}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </Card>
       </Grid>
     </Grid>
