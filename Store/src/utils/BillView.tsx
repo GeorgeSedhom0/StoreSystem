@@ -89,9 +89,9 @@ const BillView = forwardRef(
               <TableContainer>
                 <Table
                   sx={{
-                    // make TableCell size 2em
+                    // make TableCell size 1.5em
                     "& .MuiTableCell-root": {
-                      fontSize: "2em",
+                      fontSize: "1.5em",
                       textAlign: "center",
                     },
                   }}
@@ -139,9 +139,9 @@ const BillView = forwardRef(
               <TableContainer>
                 <Table
                   sx={{
-                    // make TableCell size 2em
+                    // make TableCell size 1.5em
                     "& .MuiTableCell-root": {
-                      fontSize: "2em",
+                      fontSize: "1.5em",
                       textAlign: "center",
                     },
                   }}
