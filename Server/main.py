@@ -229,7 +229,6 @@ def get_bills(start_date: Optional[str] = None,
                 GROUP BY bills.ref_id, bills.time, bills.discount,
                     bills.total, bills.type
                 ORDER BY bills.time DESC
-                LIMIT 100
                     """,
                 (start_date if start_date else "1970-01-01",
                  end_date if end_date else datetime.now().isoformat()))
