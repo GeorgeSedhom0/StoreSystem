@@ -227,6 +227,7 @@ const Sell = () => {
         setLastBill(data.bill);
         setShoppingCart([]);
         setDiscount(0);
+        setBillPayment("sell");
         setMsg({
           type: "success",
           text: "تم اضافة الفاتورة بنجاح",

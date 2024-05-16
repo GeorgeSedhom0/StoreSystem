@@ -16,6 +16,7 @@ export const fixedHeaderContent = () => {
         bgcolor: "grey.900",
       }}
     >
+      <TableCell>رقم الفاتورة</TableCell>
       <TableCell>نوع الفاتورة</TableCell>
       <TableCell>الوقت</TableCell>
       <TableCell>الخصم</TableCell>

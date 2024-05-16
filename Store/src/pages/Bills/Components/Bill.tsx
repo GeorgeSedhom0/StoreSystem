@@ -52,6 +52,7 @@ const Bill = ({
         setOpen={setBillOpen}
         ref={billRef}
       />
+      <TableCell>{bill.id}</TableCell>
       <TableCell>
         فاتورة{" "}
         {bill.type === "sell"

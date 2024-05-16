@@ -52,7 +52,7 @@ const Buy = () => {
             prod.name.toLowerCase().includes(query.toLowerCase()) ||
             prod.bar_code.includes(query)
         )
-        .slice(0, 10)
+        .slice(0, 30)
     );
   }, [products, query]);
 
@@ -76,6 +76,7 @@ const Buy = () => {
             price: product.price,
             wholesale_price: product.wholesale_price,
             quantity: 1,
+            stock: product.stock,
           },
         ];
       }

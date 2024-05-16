@@ -169,6 +169,35 @@ def add_product(product: Product):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.put("/product/{product_id}")
+def update_product(product_id: int, product: Product):
+    """
+    Update a product in the database
+
+    Args:
+        product_id (int): The ID of the product to update
+        product (Product): The product data to update
+
+    Returns:
+        Dict: The updated product
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                UPDATE products
+                SET name = %s, bar_code = %s, last_update = %s
+                WHERE id = %s
+                RETURNING *
+                """,
+                (product.name, product.bar_code, datetime.now().isoformat(),
+                 product_id))
+            return cur.fetchone()
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.delete("/product/{product_id}")
 def delete_product(product_id: int):
     """

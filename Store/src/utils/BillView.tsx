@@ -150,7 +150,12 @@ const BillView = forwardRef(
                     <TableRow>
                       <TableCell>الاجمالى</TableCell>
                       <TableCell>
-                        {Math.abs(bill.total) + Math.abs(bill.discount)}
+                        {bill.type === "BNPL"
+                          ? bill.products.reduce(
+                              (acc, p) => acc + Math.abs(p.amount),
+                              0
+                            ) * bill.products[0].price
+                          : Math.abs(bill.total) + Math.abs(bill.discount)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
@@ -159,7 +164,16 @@ const BillView = forwardRef(
                     </TableRow>
                     <TableRow>
                       <TableCell>الصافى</TableCell>
-                      <TableCell>{Math.abs(bill.total)}</TableCell>
+                      <TableCell>
+                        {bill.type === "BNPL"
+                          ? bill.products.reduce(
+                              (acc, p) => acc + Math.abs(p.amount),
+                              0
+                            ) *
+                              bill.products[0].price -
+                            bill.discount
+                          : Math.abs(bill.total)}
+                      </TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>

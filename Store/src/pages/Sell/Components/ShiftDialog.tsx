@@ -12,6 +12,7 @@ import { Box } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import axios from "axios";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface ShiftDialogProps {
   dialogOpen: boolean;
@@ -35,6 +36,8 @@ const ShiftDialog = ({
     buy_total: 0,
     return_total: 0,
   });
+
+  const navigate = useNavigate();
 
   const handleClose = () => {
     if (!shift) return;
@@ -139,6 +142,7 @@ const ShiftDialog = ({
         <Button onClick={closeShift} disabled={!shift}>
           إغلاق شيفت
         </Button>
+        <Button onClick={() => navigate("/bills")}>الفواتير</Button>
       </DialogActions>
     </Dialog>
   );

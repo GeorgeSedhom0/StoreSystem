@@ -89,7 +89,7 @@ const Products = () => {
               <Grid item container xs={12} gap={3}>
                 <Button
                   onClick={submitProducts}
-                  disabled={loading}
+                  disabled={true}
                   variant="contained"
                 >
                   حفظ التعديلات
@@ -97,6 +97,7 @@ const Products = () => {
                 <Button
                   onClick={() => setChangedOnly((prev) => !prev)}
                   variant="contained"
+                  disabled={true}
                 >
                   {changedOnly ? "عرض الكل" : "عرض المعدلة فقط"}
                 </Button>
@@ -133,6 +134,8 @@ const Products = () => {
                   product={product}
                   setEditedProducts={setEditedProducts}
                   editedProducts={editedProducts}
+                  setMsg={setMsg}
+                  getProds={getProds}
                   key={product.id || product.bar_code}
                 />
               )}
