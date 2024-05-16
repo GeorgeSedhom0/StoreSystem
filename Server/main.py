@@ -372,7 +372,6 @@ def get_cash_flow(start_date: Optional[str] = None,
                 WHERE time >= %s
                 AND time <= %s
                 ORDER BY cash_flow.time DESC
-                LIMIT 100
                     """,
                 (start_date if start_date else "1970-01-01",
                  end_date if end_date else datetime.now().isoformat()))
