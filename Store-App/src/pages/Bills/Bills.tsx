@@ -1,4 +1,4 @@
-import { Card, Grid, Typography } from "@mui/material";
+import { Card, Grid, Typography, FormControl, InputLabel, Select, MenuItem } from "@mui/material";
 import { ViewContainer } from "../Shared/Utils";
 import { useCallback, useEffect, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -22,6 +22,8 @@ const Bills = () => {
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [loading, setLoading] = useState(false);
   const [bills, setBills] = useState<BillType[]>([]);
+  const [filteredBills, setFilteredBills] = useState<BillType[]>([]); 
+  const [filters, setFilters] = useState<string[]>(["cash", "BNPL", "buy", "return"]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [printer, setPrinter] = useState<any | null>(null);
 
@@ -48,7 +50,7 @@ const Bills = () => {
     getBills();
   }, [startDate, endDate]);
 
-  const total = bills.reduce((acc, bill) => acc + bill.total, 0);
+  const total = filteredBills.reduce((acc, bill) => acc + bill.total, 0);
 
   return (
     <ViewContainer>
@@ -92,6 +94,19 @@ const Bills = () => {
                     }}
                   />
                 </LocalizationProvider>
+
+                <FormControl>
+                  <InputLabel>نوع الفانورة</InputLabel>
+                  <Select
+                  value={filters}
+                  onChange={(e) => setFilters(e.target.value)}
+                  multiple>
+                    <MenuItem value="cash">نقدي</MenuItem>
+                    <MenuItem value="BNPL">آجل</MenuItem>
+                    <MenuItem value="buy">شراء</MenuItem>
+                    <MenuItem value="return">مرتجع</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="body2">المجموع: {total}</Typography>
@@ -111,7 +126,7 @@ const Bills = () => {
             <TableVirtuoso
               fixedHeaderContent={fixedHeaderContent}
               components={VirtuosoTableComponents}
-              data={bills}
+              data={filteredBills}
               itemContent={(_, bill) => (
                 <Bill
                   bill={bill}

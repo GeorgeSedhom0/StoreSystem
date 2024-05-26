@@ -1,6 +1,7 @@
 from typing import Optional
 from fastapi import FastAPI, HTTPException  # type: ignore
-from fastapi.responses import JSONResponse  # type: ignore
+from fastapi.responses import JSONResponse, StreamingResponse  # type: ignore
+import io
 from typing import Literal
 from pydantic import BaseModel  # type: ignore
 import psycopg2  # type: ignore
@@ -11,6 +12,9 @@ from datetime import datetime
 import logging
 from dotenv import load_dotenv  # type: ignore
 from os import getenv
+import openpyxl # type: ignore
+from openpyxl import Workbook # type: ignore
+import io
 
 load_dotenv()
 
@@ -510,6 +514,60 @@ def shift_total():
                 totals["return_total"] += row["total"]
 
         return totals
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+def generate_xlsx(data):
+    # Create an in-memory output file for the new workbook
+    output = io.BytesIO()
+
+    # Create a workbook and select the active worksheet
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventory"
+
+    # Column titles in Arabic
+    ws.append(["اسم المنتج", "الكمية بالمخزن", "سعر الشراء", "اجمالى قيمة المنتج"])
+
+    total = 0
+    for row in data:
+        ws.append([row['name'], row['stock'], row['wholesale_price'], row['total_value']])
+        total += row['total_value']
+    
+    ws.append(["الاجمالى", "", "", total])
+
+    # Save the workbook to the in-memory file
+    wb.save(output)
+    output.seek(0)
+
+    return output
+
+@app.get("/inventory")
+async def inventory():
+    """
+    Get the products in the inventory and their total value
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute("""
+                SELECT
+                    name,
+                    stock,
+                    wholesale_price,
+                    stock * wholesale_price AS total_value
+                FROM products
+                """)
+            # make an .xlsx file and return it
+            data = cur.fetchall()
+
+            output = generate_xlsx(data)
+
+            return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={
+                "Content-Disposition": "attachment;filename=inv.xlsx"
+            })
+            
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
