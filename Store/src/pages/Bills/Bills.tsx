@@ -32,7 +32,7 @@ const Bills = () => {
   const [bills, setBills] = useState<BillType[]>([]);
   const [filteredBills, setFilteredBills] = useState<BillType[]>([]);
   const [filters, setFilters] = useState<string[]>([
-    "cash",
+    "sell",
     "BNPL",
     "buy",
     "return",
