@@ -32,6 +32,23 @@ const App = () => {
     direction: "rtl",
     palette: {
       mode: themeMode,
+      background: {
+        default: themeMode === "dark" ? "#323f54" : "#d5e5ff",
+        paper: themeMode === "dark" ? "#293649" : "#c1d9ff",
+      },
+      divider: themeMode === "dark" ? "#3d4d64" : "#94b6ff",
+    },
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          body: {
+            backgroundImage:
+              themeMode === "dark"
+                ? "radial-gradient(circle at center, #3d4d64 0%, #263245 100%);"
+                : "radial-gradient(circle at center, #94b6ff 0%, #8cb2ed 70%);",
+          },
+        },
+      },
     },
   });
 

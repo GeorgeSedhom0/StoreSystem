@@ -38,7 +38,12 @@ const Layout = ({
 
   return (
     <>
-      <AppBar position="sticky" color="transparent">
+      <AppBar
+        position="sticky"
+        sx={{
+          bgcolor: "background.paper",
+        }}
+      >
         <Toolbar>
           <Grid
             container
@@ -46,7 +51,7 @@ const Layout = ({
             sx={{
               flexGrow: 1,
               ".active > Button": {
-                border: 1,
+                borderBottom: 1,
                 borderColor: "primary.dark",
               },
               Button: {

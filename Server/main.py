@@ -1,20 +1,23 @@
 from typing import Optional
-from fastapi import FastAPI, HTTPException  # type: ignore
-from fastapi.responses import JSONResponse, StreamingResponse  # type: ignore
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
 import io
 from typing import Literal
-from pydantic import BaseModel  # type: ignore
-import psycopg2  # type: ignore
-from psycopg2.extras import RealDictCursor  # type: ignore
-from fastapi.middleware.cors import CORSMiddleware  # type: ignore
-import requests  # type: ignore
+from pydantic import BaseModel
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import UploadFile, File
+import requests
 from datetime import datetime
 import logging
-from dotenv import load_dotenv  # type: ignore
+from dotenv import load_dotenv
 from os import getenv
-import openpyxl # type: ignore
-from openpyxl import Workbook # type: ignore
-import io
+from openpyxl import Workbook
+import gzip
+import subprocess
+import os
+
 
 load_dotenv()
 
@@ -544,6 +547,7 @@ def generate_xlsx(data):
 
     return output
 
+
 @app.get("/inventory")
 async def inventory():
     """
@@ -568,6 +572,49 @@ async def inventory():
                 "Content-Disposition": "attachment;filename=inv.xlsx"
             })
             
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/backup")
+async def backup():
+    """
+    Backs up everything in the database as a save point to restore later
+    """
+    try:
+        # Create a gzip file to store the backup
+        with gzip.open("backup.sql.gz", "wb") as f:
+            os.environ["PGPASSWORD"] = PASS
+            subprocess.run(["pg_dump", "-h", HOST, "-U", USER, "-d", DATABASE], stdout=f)
+
+        # Return the file
+        return StreamingResponse(open("backup.sql.gz", "rb"), media_type="application/gzip", headers={
+            "Content-Disposition": "attachment;filename=backup.sql.gz"
+        })
+
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/restore")
+async def restore(file: UploadFile = File(...)):
+    """
+    Restores the database to a previous save point
+    """
+    try:
+        fileBytes = await file.read()
+        with open("restore.sql", "wb") as f:
+            f.write(fileBytes)
+
+        # Restore the database
+        os.environ["PGPASSWORD"] = PASS
+        with open("restore.sql", "r") as f:
+            subprocess.run(["psql", "-h", HOST, "-U", USER, "-d", DATABASE], stdin=f)
+
+        return {"message": "Database restored successfully"}
+
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
