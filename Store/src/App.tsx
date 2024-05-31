@@ -45,7 +45,12 @@ const App = () => {
             backgroundImage:
               themeMode === "dark"
                 ? "radial-gradient(circle at center, #3d4d64 0%, #263245 100%);"
-                : "radial-gradient(circle at center, #94b6ff 0%, #8cb2ed 70%);",
+                : "radial-gradient(circle at center, #8cb2ed 0%, #aabbff 70%);",
+            backgroundAttachment: "fixed",
+            backgroundSize: "cover",
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center",
+            minHeight: "100vh",
           },
         },
       },

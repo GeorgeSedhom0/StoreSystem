@@ -35,16 +35,22 @@ const Settings = () => {
     setLoading(true);
     try {
       // let use pick the file .sql
-      const file = document.createElement("input");
-      file.type = "file";
-      file.accept = ".sql";
-      file.click();
-      file.onchange = async (e: any) => {
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = ".sql";
+      fileInput.click();
+      fileInput.onchange = async (e: any) => {
         const file = e.target.files[0];
         if (!file) {
           setMsg({ type: "error", text: "حدث خطا ما" });
         }
-        await axios.post("http://localhost:8000/restore", file);
+        const formData = new FormData();
+        formData.append("file", file);
+        await axios.post("http://localhost:8000/restore", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
       };
     } catch (e) {
       console.log(e);

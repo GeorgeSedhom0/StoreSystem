@@ -4,3 +4,5 @@ Server/env
 .env
 __pycache__
 olddata.xls
+restore.sql
+backup.sql

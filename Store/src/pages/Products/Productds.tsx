@@ -10,6 +10,7 @@ import {
   VirtuosoTableComponents,
 } from "./Components/VirtualTableHelpers";
 import LoadingScreen from "../Shared/LoadingScreen";
+import { Link } from "react-router-dom";
 
 const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -22,7 +23,7 @@ const Products = () => {
   const [changedOnly, setChangedOnly] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
 
-  const data = useMemo(() => {
+  const filteredProducts = useMemo(() => {
     if (query === "") {
       if (changedOnly) {
         return editedProducts;
@@ -100,22 +101,32 @@ const Products = () => {
               <Grid item xs={12}>
                 <Typography variant="h4">المنتجات</Typography>
                 <Typography variant="subtitle1">
-                  المنتجات التى يحيطها خط أزرق هى المنتجات التى تم تعديلها
+                  عند الانتهاء من التعديل يرجى الضغط على "عرض المعدلة فقط"
+                  للتأكد من الحفظ بشكل صحيح
+                </Typography>
+                <Typography variant="subtitle2">
+                  لا يمكن تعديل سعر الشراء او البيع للمنتج من هذة الصفحة للتعديل
+                  يجب الذهاب الى{" "}
+                  <Link
+                    to="/buy"
+                    style={{
+                      color: "inherit",
+                      textDecoration: "underline",
+                      cursor: "pointer",
+                    }}
+                  >
+                    صفحة الشراء
+                  </Link>
                 </Typography>
               </Grid>
 
               <Grid item container xs={12} gap={3}>
-                <Button
-                  onClick={submitProducts}
-                  disabled={true}
-                  variant="contained"
-                >
+                <Button onClick={submitProducts} variant="contained">
                   حفظ التعديلات
                 </Button>
                 <Button
                   onClick={() => setChangedOnly((prev) => !prev)}
                   variant="contained"
-                  disabled={true}
                 >
                   {changedOnly ? "عرض الكل" : "عرض المعدلة فقط"}
                 </Button>
@@ -148,15 +159,12 @@ const Products = () => {
             <TableVirtuoso
               fixedHeaderContent={fixedHeaderContent}
               components={VirtuosoTableComponents}
-              data={data}
+              data={filteredProducts}
               itemContent={(_, product) => (
                 <ProductCard
-                  secretAgentActivated={false}
                   product={product}
                   setEditedProducts={setEditedProducts}
                   editedProducts={editedProducts}
-                  setMsg={setMsg}
-                  getProds={getProds}
                   key={product.id || product.bar_code}
                 />
               )}

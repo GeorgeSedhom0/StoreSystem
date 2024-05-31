@@ -172,6 +172,10 @@ const Buy = () => {
               <Typography variant="h6">
                 اختار منتج ليتم اضافته الى الفاتورة
               </Typography>
+              <Typography variant="subtitle1">
+                يمكنك اضافة منتج الى الفاتورة و جعل الكمية 0 لتغير سعر الشراء او
+                البيع للمنتج
+              </Typography>
             </Grid>
 
             <Grid item xs={12} sm={3}>
