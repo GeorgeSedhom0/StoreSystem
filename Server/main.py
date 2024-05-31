@@ -1,20 +1,23 @@
 from typing import Optional
-from fastapi import FastAPI, HTTPException  # type: ignore
-from fastapi.responses import JSONResponse, StreamingResponse  # type: ignore
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
 import io
 from typing import Literal
-from pydantic import BaseModel  # type: ignore
-import psycopg2  # type: ignore
-from psycopg2.extras import RealDictCursor  # type: ignore
-from fastapi.middleware.cors import CORSMiddleware  # type: ignore
-import requests  # type: ignore
+from pydantic import BaseModel
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import UploadFile, File
+import requests
 from datetime import datetime
 import logging
-from dotenv import load_dotenv  # type: ignore
+from dotenv import load_dotenv
 from os import getenv
-import openpyxl # type: ignore
-from openpyxl import Workbook # type: ignore
-import io
+from openpyxl import Workbook
+from reset_db import reset_db
+import subprocess
+import os
+
 
 load_dotenv()
 
@@ -173,30 +176,55 @@ def add_product(product: Product):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.put("/product/{product_id}")
-def update_product(product_id: int, product: Product):
+@app.put("/products")
+def update_product(products: list[Product]):
     """
     Update a product in the database
 
     Args:
-        product_id (int): The ID of the product to update
-        product (Product): The product data to update
+        products (list[Product]): The products to update
 
     Returns:
         Dict: The updated product
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
+            db_products = []
+            db_products_flow = []
+            for product in products:
+                db_products.append(
+                    (product.name, product.bar_code,
+                     product.category, datetime.now().isoformat(),
+                     product.id))
+                db_products_flow.append((STORE_ID, f"{STORE_ID}_-1",
+                                         product.id, product.stock, product.wholesale_price,
+                                         product.price, product.id))
+
+            cur.executemany(
                 """
                 UPDATE products
-                SET name = %s, bar_code = %s, last_update = %s
+                SET
+                    name = %s, bar_code = %s,
+                    category = %s, last_update = %s
                 WHERE id = %s
                 RETURNING *
                 """,
-                (product.name, product.bar_code, datetime.now().isoformat(),
-                 product_id))
-            return cur.fetchone()
+                db_products)
+
+            cur.executemany(
+                """
+                INSERT INTO products_flow (
+                    store_id, bill_id, product_id,
+                    amount, wholesale_price, price
+                )
+                SELECT %s, %s, %s,
+                    %s - products.stock,
+                    %s, %s
+                FROM products
+                WHERE id = %s
+                """, db_products_flow)
+
+            return JSONResponse(content={"message": "Products updated successfully"})
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -544,6 +572,7 @@ def generate_xlsx(data):
 
     return output
 
+
 @app.get("/inventory")
 async def inventory():
     """
@@ -573,6 +602,50 @@ async def inventory():
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.get("/backup")
+async def backup():
+    """
+    Backs up everything in the database as a save point to restore later
+    """
+    try:
+        # Create a .sql file to store the backup
+        with open("backup.sql", "wb") as f:
+            os.environ["PGPASSWORD"] = PASS
+            subprocess.run(["pg_dump", "-h", HOST, "-U", USER, "-d", DATABASE], stdout=f)
+
+        # Return the file
+        return StreamingResponse(open("backup.sql", "rb"), media_type="application/octet-stream", headers={
+            "Content-Disposition": "attachment;filename=backup.sql"
+        })
+
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/restore")
+async def restore(file: UploadFile = File(...)):
+    """
+    Restores the database to a previous save point
+    """
+    try:
+        reset_db()
+        fileBytes = await file.read()
+        with open("restore.sql", "wb") as f:
+            f.write(fileBytes)
+
+        # Restore the database
+        os.environ["PGPASSWORD"] = PASS
+        with open("restore.sql", "r") as f:
+            subprocess.run(["psql", "-h", HOST, "-U", USER, "-d", DATABASE], stdin=f)
+
+        return {"message": "Database restored successfully"}
+
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.post("/accept-sync")
 def accept_sync(data: dict):
     """
@@ -592,7 +665,12 @@ def accept_sync(data: dict):
                         price, category, last_update, stock
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
-                    ON CONFLICT (id) DO NOTHING
+                    ON CONFLICT (id) DO UPDATE
+                    SET
+                        name = EXCLUDED.name,
+                        bar_code = EXCLUDED.bar_code,
+                        category = EXCLUDED.category,
+                        last_update = EXCLUDED.last_update
                 """, row)
 
             logging.info("Inserting bills data...")

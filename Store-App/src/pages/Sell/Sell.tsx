@@ -444,9 +444,9 @@ const Sell = () => {
             <Table
               stickyHeader
               sx={{
-                // the Table Cell from Table Row from Table Head should be grey.900
+                // the Table Cell from Table Row from Table Head should be background.paper
                 "& .MuiTableCell-head": {
-                  bgcolor: "grey.900",
+                  bgcolor: "background.paper",
                 },
               }}
             >

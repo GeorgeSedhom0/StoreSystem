@@ -7,7 +7,6 @@ import {
   Select,
   MenuItem,
 } from "@mui/material";
-import { ViewContainer } from "../Shared/Utils";
 import { useCallback, useEffect, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -72,7 +71,7 @@ const Bills = () => {
   const total = filteredBills.reduce((acc, bill) => acc + bill.total, 0);
 
   return (
-    <ViewContainer>
+    <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid container spacing={3}>
         <Grid item xs={12}>
@@ -169,7 +168,7 @@ const Bills = () => {
           </Card>
         </Grid>
       </Grid>
-    </ViewContainer>
+    </>
   );
 };
 

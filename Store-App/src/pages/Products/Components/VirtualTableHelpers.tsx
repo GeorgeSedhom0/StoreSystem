@@ -13,7 +13,7 @@ export const fixedHeaderContent = () => {
   return (
     <TableRow
       sx={{
-        bgcolor: "grey.900",
+        bgcolor: "background.paper",
       }}
     >
       <TableCell>اسم المنتج</TableCell>

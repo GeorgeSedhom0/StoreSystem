@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import { ViewContainer } from "../Shared/Utils";
 import {
   Grid,
   Button,
@@ -67,7 +66,7 @@ const Cash = () => {
   };
 
   return (
-    <ViewContainer>
+    <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <LoadingScreen loading={loading} />
       <Grid container spacing={3}>
@@ -137,7 +136,7 @@ const Cash = () => {
           </Card>
         </Grid>
       </Grid>
-    </ViewContainer>
+    </>
   );
 };
 

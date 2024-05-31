@@ -1,5 +1,12 @@
-import { Card, Grid, Typography, FormControl, InputLabel, Select, MenuItem } from "@mui/material";
-import { ViewContainer } from "../Shared/Utils";
+import {
+  Card,
+  Grid,
+  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -22,8 +29,13 @@ const Bills = () => {
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [loading, setLoading] = useState(false);
   const [bills, setBills] = useState<BillType[]>([]);
-  const [filteredBills, setFilteredBills] = useState<BillType[]>([]); 
-  const [filters, setFilters] = useState<string[]>(["cash", "BNPL", "buy", "return"]);
+  const [filteredBills, setFilteredBills] = useState<BillType[]>([]);
+  const [filters, setFilters] = useState<string[]>([
+    "cash",
+    "BNPL",
+    "buy",
+    "return",
+  ]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [printer, setPrinter] = useState<any | null>(null);
 
@@ -53,7 +65,7 @@ const Bills = () => {
   const total = filteredBills.reduce((acc, bill) => acc + bill.total, 0);
 
   return (
-    <ViewContainer>
+    <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid container spacing={3}>
         <Grid item xs={12}>
@@ -98,9 +110,10 @@ const Bills = () => {
                 <FormControl>
                   <InputLabel>نوع الفانورة</InputLabel>
                   <Select
-                  value={filters}
-                  onChange={(e) => setFilters(e.target.value)}
-                  multiple>
+                    value={filters}
+                    onChange={(e) => setFilters(e.target.value)}
+                    multiple
+                  >
                     <MenuItem value="cash">نقدي</MenuItem>
                     <MenuItem value="BNPL">آجل</MenuItem>
                     <MenuItem value="buy">شراء</MenuItem>
@@ -139,7 +152,7 @@ const Bills = () => {
           </Card>
         </Grid>
       </Grid>
-    </ViewContainer>
+    </>
   );
 };
 

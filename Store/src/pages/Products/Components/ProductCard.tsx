@@ -1,28 +1,18 @@
 import { TableCell, TextField } from "@mui/material";
 import { Product } from "../../../utils/types";
-import { useCallback, useMemo, useState } from "react";
-import axios from "axios";
-import { LoadingButton } from "@mui/lab";
-import { AlertMsg } from "../../Shared/AlertMessage";
+import { useMemo } from "react";
 
 interface ProductCardProps {
   product: Product;
   setEditedProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   editedProducts: Product[];
-  secretAgentActivated: boolean;
-  setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>;
-  getProds: () => Promise<void>;
 }
 
 const ProductCard = ({
   product,
   setEditedProducts,
   editedProducts,
-  secretAgentActivated,
-  setMsg,
-  getProds,
 }: ProductCardProps) => {
-  const [loading, setLoading] = useState<boolean>(false);
   const productInCart = useMemo(
     () => editedProducts.find((p) => p.id === product.id),
     [editedProducts, product.id]
@@ -32,23 +22,6 @@ const ProductCard = ({
     () => (productInCart ? productInCart : product),
     [productInCart, product]
   );
-
-  const saveProduct = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: _ } = await axios.put<Product>(
-        `http://localhost:8000/product/${product.id}`,
-        productToMap
-      );
-      await getProds();
-      setEditedProducts((prev) => prev.filter((p) => p.id !== product.id));
-      setMsg({ type: "success", text: "تم حفظ التعديلات" });
-    } catch (error) {
-      console.log(error);
-      setMsg({ type: "error", text: "حدث خطأ ما" });
-    }
-    setLoading(false);
-  }, [product.id, productToMap, setEditedProducts]);
 
   return (
     <>
@@ -98,7 +71,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
-          disabled={!secretAgentActivated}
+          disabled={true}
           value={productToMap.price}
           variant="standard"
           onChange={(e) =>
@@ -123,7 +96,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
-          disabled={!secretAgentActivated}
+          disabled={true}
           value={productToMap.wholesale_price}
           variant="standard"
           onChange={(e) =>
@@ -149,7 +122,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
-          disabled={!secretAgentActivated}
+          disabled={false}
           value={productToMap.stock}
           variant="standard"
           onChange={(e) =>
@@ -174,7 +147,7 @@ const ProductCard = ({
 
       <TableCell>
         <TextField
-          disabled={!secretAgentActivated}
+          disabled={false}
           value={productToMap.category}
           variant="standard"
           onChange={(e) =>
@@ -192,17 +165,6 @@ const ProductCard = ({
             })
           }
         />
-      </TableCell>
-
-      <TableCell>
-        <LoadingButton
-          variant="contained"
-          onClick={saveProduct}
-          loading={loading}
-          disabled={loading || !productInCart}
-        >
-          حفظ
-        </LoadingButton>
       </TableCell>
     </>
   );
