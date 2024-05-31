@@ -1,7 +1,6 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Product } from "../../utils/types";
-import { ViewContainer } from "../Shared/Utils";
 import { Button, Card, Grid, TextField, Typography } from "@mui/material";
 import { TableVirtuoso } from "react-virtuoso";
 import ProductCard from "./Components/ProductCard";
@@ -92,7 +91,7 @@ const Products = () => {
   }, [editedProducts]);
 
   return (
-    <ViewContainer>
+    <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid container spacing={3}>
         <Grid item xs={12}>
@@ -165,7 +164,7 @@ const Products = () => {
           </Card>
         </Grid>
       </Grid>
-    </ViewContainer>
+    </>
   );
 };
 
