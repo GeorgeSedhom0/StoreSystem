@@ -51,6 +51,7 @@ const Settings = () => {
             "Content-Type": "multipart/form-data",
           },
         });
+        setMsg({ type: "success", text: "تم استعادة النسخة الاحطياتية" });
       };
     } catch (e) {
       console.log(e);

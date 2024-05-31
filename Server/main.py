@@ -14,7 +14,7 @@ import logging
 from dotenv import load_dotenv
 from os import getenv
 from openpyxl import Workbook
-import gzip
+from reset_db import reset_db
 import subprocess
 import os
 
@@ -629,6 +629,7 @@ async def restore(file: UploadFile = File(...)):
     Restores the database to a previous save point
     """
     try:
+        reset_db()
         fileBytes = await file.read()
         with open("restore.sql", "wb") as f:
             f.write(fileBytes)
