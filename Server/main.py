@@ -682,7 +682,10 @@ def accept_sync(data: dict):
                         id, store_id, ref_id, time, discount, total, type
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO NOTHING
+                    ON CONFLICT (id, store_id) DO UPDATE
+                    SET
+                        discount = EXCLUDED.discount,
+                        total = EXCLUDED.total;
                 """, row)
 
             logging.info("Bills data inserted successfully.")
@@ -698,7 +701,8 @@ def accept_sync(data: dict):
                         wholesale_price, price, amount
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO NOTHING
+                    ON CONFLICT (id, store_id) DO UPDATE
+                    SET bill_id = EXCLUDED.bill_id;
                 """, row)
 
             logging.info("Products_flow data inserted successfully.")
@@ -713,7 +717,8 @@ def accept_sync(data: dict):
                         id, bill_id, store_id, time, amount, type, description
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO NOTHING
+                    ON CONFLICT (id, store_id) DO UPDATE
+                    SET amount = EXCLUDED.amount;
                 """, row)
 
             logging.info("Cash_flow data inserted successfully.")
@@ -779,7 +784,10 @@ def sync(step: int = 0, time_now: str = ""):
                     products_flow.amount
                 FROM products_flow
                 JOIN bills ON ref_id = bill_id
-                WHERE time > %s
+                (
+                    WHERE time > %s
+                    OR products_flow.needs_update = TRUE
+                )
                 AND products_flow.store_id = %s
             """, (latest_sync_time, STORE_ID))
 
@@ -799,7 +807,10 @@ def sync(step: int = 0, time_now: str = ""):
                     total,
                     type
                 FROM bills
-                WHERE time > %s
+                (
+                    WHERE time > %s
+                    OR needs_update = TRUE
+                )
                 AND store_id = %s
                 ORDER BY time
             """, (latest_sync_time, STORE_ID))
@@ -820,7 +831,10 @@ def sync(step: int = 0, time_now: str = ""):
                     description
                 FROM cash_flow
                 WHERE bill_id IS NULL
-                AND time > %s
+                OR (
+                    time > %s
+                    OR needs_update = TRUE
+                )
                 AND store_id = %s
                 ORDER BY time
             """, (latest_sync_time, STORE_ID))
@@ -838,8 +852,8 @@ def sync(step: int = 0, time_now: str = ""):
                         last_update, 'YYYY-MM-DD HH24:MI:SS.MS'
                     ) AS last_update
                 FROM products
-                WHERE last_update > %s
-            """, (latest_sync_time, ))
+                WHERE needs_update = TRUE
+            """)
 
             products = cur.fetchall()
 
