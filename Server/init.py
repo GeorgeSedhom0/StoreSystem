@@ -36,7 +36,7 @@ CREATE TABLE products (
   price FLOAT,
   stock INT,
   category VARCHAR,
-  last_update TIMESTAMP NOT NULL
+  needs_update BOOLEAN DEFAULT FALSE
 )
 """)
 
@@ -61,6 +61,7 @@ CREATE TABLE bills (
   discount FLOAT,
   total FLOAT,
   type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL'
+  needs_update BOOLEAN DEFAULT FALSE,
   PRIMARY KEY (id, store_id)
 )
 """)
@@ -76,6 +77,7 @@ CREATE TABLE cash_flow (
   bill_id VARCHAR,
   description VARCHAR,
   total FLOAT,
+  needs_update BOOLEAN DEFAULT FALSE,
   PRIMARY KEY (id, store_id)
 )
 """)
@@ -90,6 +92,7 @@ CREATE TABLE products_flow (
   wholesale_price FLOAT,
   price FLOAT,
   amount INT,
+  needs_update BOOLEAN DEFAULT FALSE,
   PRIMARY KEY (id, store_id)
 )
 """)
@@ -233,6 +236,91 @@ CREATE TRIGGER trigger_update_total_after_insert
 AFTER INSERT ON cash_flow
 FOR EACH ROW
 EXECUTE FUNCTION update_total_after_insert();
+""")
+
+# create the trigger to bubble fix the total after updating a cash_flow
+cur.execute("""
+-- Trigger to bubble fix the total after update
+CREATE OR REPLACE FUNCTION bubble_fix_total_after_update()
+RETURNS TRIGGER AS $$
+DECLARE
+    latest_total FLOAT;
+BEGIN
+    latest_total := OLD.total - OLD.amount;
+
+    IF latest_total IS NULL THEN
+        latest_total := 0;
+    END IF;
+
+    -- Update the total on the updated row
+    UPDATE cash_flow
+    SET
+        total = NEW.amount + latest_total,
+        needs_update = TRUE
+    WHERE id = NEW.id
+    AND store_id = NEW.store_id;
+
+    -- Bubble correct the total on all rows that were inserted after the updated row
+    UPDATE cash_flow
+    SET total = total - OLD.amount + New.amount
+    WHERE time > OLD.time;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_bubble_fix_total_after_update
+AFTER UPDATE ON cash_flow
+FOR EACH ROW
+WHEN (NEW.amount != OLD.amount)
+EXECUTE FUNCTION bubble_fix_total_after_update();
+""")
+
+# create the trigger to update cash_flow after updating a bill nd set needs_update to true
+cur.execute("""
+-- Trigger to update cash_flow after update
+CREATE OR REPLACE FUNCTION update_cash_flow_after_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE cash_flow
+    SET amount = NEW.total
+    WHERE bill_id = NEW.ref_id;
+
+    IF NEW.needs_update IS FALSE THEN
+        UPDATE bills
+        SET needs_update = TRUE
+        WHERE id = NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_cash_flow_after_update
+AFTER UPDATE ON bills
+FOR EACH ROW
+EXECUTE FUNCTION update_cash_flow_after_update();
+""")
+
+cur.execute("""
+-- Trigger to set needs_update to true after update
+CREATE OR REPLACE FUNCTION set_needs_update_after_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.needs_update IS FALSE THEN
+        UPDATE products_flow
+        SET needs_update = TRUE
+        WHERE id = NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_set_needs_update_after_update
+AFTER UPDATE ON products_flow
+FOR EACH ROW
+EXECUTE FUNCTION set_needs_update_after_update();
 """)
 
 # --------------------------------------------------------------------
