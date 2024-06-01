@@ -93,13 +93,14 @@ const BillView = forwardRef(
                     "& .MuiTableCell-root": {
                       fontSize: "1.5em",
                       textAlign: "center",
+                      wordBreak: "break-all",
                     },
                   }}
                 >
                   <TableHead>
                     <TableRow>
-                      <TableCell>المنتج</TableCell>
-                      <TableCell>الكمية</TableCell>
+                      <TableCell width={100}>المنتج</TableCell>
+                      <TableCell width={100}>الكمية</TableCell>
                       <TableCell>السعر</TableCell>
                       <TableCell>ألاجمالى</TableCell>
                     </TableRow>

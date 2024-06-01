@@ -79,6 +79,26 @@ class Bill(BaseModel):
     total: float
     products_flow: list[ProductFlow]
 
+class dbProduct(BaseModel):
+    "Define the dbProductFlow model"
+
+    id: int
+    name: str
+    bar_code: str
+    amount: int
+    wholesale_price: float
+    price: float
+
+
+class dbBill(BaseModel):
+    "Define the dbBill model"
+
+    id: str
+    time: str
+    discount: float
+    total: float
+    type: str
+    products: list[dbProduct]
 
 class Database:
     "Database context manager to handle the connection and cursor"
@@ -276,7 +296,9 @@ def get_bills(start_date: Optional[str] = None,
                     bills.type,
                     json_agg(
                         json_build_object(
+                            'id', products_flow.product_id,
                             'name', products.name,
+                            'bar_code', products.bar_code,
                             'amount', products_flow.amount,
                             'wholesale_price', products_flow.wholesale_price,
                             'price', products_flow.price
@@ -298,6 +320,79 @@ def get_bills(start_date: Optional[str] = None,
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/bill")
+def update_bill(bill: dbBill):
+    """
+    Update a bill in the database
+
+    To update the bill successfully, you MUST follow these steps:
+        1. Update the bill total, discount, and needs_update
+        2. Set all the old products_flow assosiated with the bill to ref_id {id}_-1
+        3. Insert the new products_flow with the "-1" ref_id that reverts the old products_flow
+        4. Insert the new products_flow with the correct ref_id
+
+    Args:
+        bill (Bill): The bill to update
+
+    Returns:
+        Dict: The updated bill
+    """
+    # minuplate the bill to be able to update it
+    # 1. set the total to a negative value in case of return or buy bills
+    bill.total = (-bill.total if bill.type in ["buy", "return"] else
+                  bill.total)
+    # 2. set the amount in the products to a negative value in case of return or buy bills
+    products = bill.products
+    for product in products:
+        product.amount = (-product.amount if bill.type in ["buy", "return"]
+                          else product.amount)
+
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                UPDATE bills
+                SET
+                    discount = %s,
+                    total = %s,
+                    needs_update = TRUE
+                WHERE ref_id = %s
+                RETURNING *
+                """, (bill.discount, bill.total, bill.id))
+
+            cur.execute(
+                """
+                UPDATE products_flow
+                SET bill_id = %s
+                WHERE bill_id = %s
+                RETURNING *
+                """, (f"{STORE_ID}_-1", bill.id))
+
+            values_to_reverse = cur.fetchall()
+            values = [(STORE_ID, f"{STORE_ID}_-1", product["product_id"],
+                       -product["amount"], product["wholesale_price"],
+                       product["price"]) for product in values_to_reverse]
+
+            values += [(STORE_ID, bill.id, product_flow.id,
+                        -product_flow.amount, product_flow.wholesale_price,
+                        product_flow.price)
+                       for product_flow in bill.products]
+
+            cur.executemany(
+                """
+                INSERT INTO products_flow (
+                    store_id, bill_id, product_id,
+                    amount, wholesale_price, price
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """, values)
+            return JSONResponse(content={"message": "Bill updated successfully"})
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
 
 
 @app.post("/bill")

@@ -66,8 +66,6 @@ const Bills = () => {
     setFilteredBills(bills.filter((bill) => filters.includes(bill.type)));
   }, [bills, filters]);
 
-  console.log(bills, filteredBills, filters);
-
   const total = filteredBills.reduce((acc, bill) => acc + bill.total, 0);
 
   return (
@@ -162,6 +160,7 @@ const Bills = () => {
                   setMsg={setMsg}
                   printer={printer}
                   setPrinter={setPrinter}
+                  getBills={getBills}
                 />
               )}
             />

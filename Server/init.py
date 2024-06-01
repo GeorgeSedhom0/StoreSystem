@@ -246,7 +246,7 @@ RETURNS TRIGGER AS $$
 DECLARE
     latest_total FLOAT;
 BEGIN
-    latest_total := OLD.total - OLD.amount;
+    latest_total := OLD.total + OLD.amount;
 
     IF latest_total IS NULL THEN
         latest_total := 0;
@@ -302,6 +302,7 @@ FOR EACH ROW
 EXECUTE FUNCTION update_cash_flow_after_update();
 """)
 
+# create the trigger to update products_flow after updating a bill nd set needs_update to true
 cur.execute("""
 -- Trigger to set needs_update to true after update
 CREATE OR REPLACE FUNCTION set_needs_update_after_update()

@@ -29,6 +29,7 @@ export interface Bill {
     price: number;
     wholesale_price: number;
     amount: number;
+    bar_code: string;
   }[];
 }
 

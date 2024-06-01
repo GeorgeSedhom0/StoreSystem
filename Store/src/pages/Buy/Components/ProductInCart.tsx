@@ -69,7 +69,7 @@ const ProductInCart = ({
         />
       </TableCell>
 
-      <TableCell>{product.price * product.quantity}</TableCell>
+      <TableCell>{product.wholesale_price * product.quantity}</TableCell>
 
       <TableCell>
         <Button
