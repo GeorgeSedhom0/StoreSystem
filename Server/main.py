@@ -79,6 +79,26 @@ class Bill(BaseModel):
     total: float
     products_flow: list[ProductFlow]
 
+class dbProduct(BaseModel):
+    "Define the dbProductFlow model"
+
+    id: int
+    name: str
+    bar_code: str
+    amount: int
+    wholesale_price: float
+    price: float
+
+
+class dbBill(BaseModel):
+    "Define the dbBill model"
+
+    id: str
+    time: str
+    discount: float
+    total: float
+    type: str
+    products: list[dbProduct]
 
 class Database:
     "Database context manager to handle the connection and cursor"
@@ -163,13 +183,13 @@ def add_product(product: Product):
                 """
                 INSERT INTO products (
                     name, bar_code, wholesale_price,
-                    price, stock, category, last_update
+                    price, stock, category
                 )
-                VALUES (%s, %s, %s, %s, 0, %s, %s)
+                VALUES (%s, %s, %s, %s, 0, %s)
                 RETURNING *
                 """,
                 (product.name, product.bar_code, product.wholesale_price,
-                 product.price, product.category, datetime.now().isoformat()))
+                 product.price, product.category))
             return cur.fetchone()
     except Exception as e:
         print(f"Error: {e}")
@@ -194,8 +214,7 @@ def update_product(products: list[Product]):
             for product in products:
                 db_products.append(
                     (product.name, product.bar_code,
-                     product.category, datetime.now().isoformat(),
-                     product.id))
+                     product.category, product.id))
                 db_products_flow.append((STORE_ID, f"{STORE_ID}_-1",
                                          product.id, product.stock, product.wholesale_price,
                                          product.price, product.id))
@@ -205,7 +224,7 @@ def update_product(products: list[Product]):
                 UPDATE products
                 SET
                     name = %s, bar_code = %s,
-                    category = %s, last_update = %s
+                    category = %s, needs_update = TRUE
                 WHERE id = %s
                 RETURNING *
                 """,
@@ -276,7 +295,9 @@ def get_bills(start_date: Optional[str] = None,
                     bills.type,
                     json_agg(
                         json_build_object(
+                            'id', products_flow.product_id,
                             'name', products.name,
+                            'bar_code', products.bar_code,
                             'amount', products_flow.amount,
                             'wholesale_price', products_flow.wholesale_price,
                             'price', products_flow.price
@@ -295,6 +316,80 @@ def get_bills(start_date: Optional[str] = None,
                  end_date if end_date else datetime.now().isoformat()))
             bills = cur.fetchall()
             return bills
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/bill")
+def update_bill(bill: dbBill):
+    """
+    Update a bill in the database
+
+    To update the bill successfully, you MUST follow these steps:
+        1. Update the bill total, discount, and needs_update
+        2. Set all the old products_flow assosiated with the bill to ref_id {id}_-1
+        3. Insert the new products_flow with the "-1" ref_id that reverts the old products_flow
+        4. Insert the new products_flow with the correct ref_id
+
+    Args:
+        bill (Bill): The bill to update
+
+    Returns:
+        Dict: The updated bill
+    """
+    # minuplate the bill to be able to update it
+    # 1. set the total to a negative value in case of return or buy bills
+    bill.total = (-bill.total if bill.type in ["buy", "return"] else
+                  bill.total)
+    # 2. set the amount in the products to a negative value in case of return or buy bills
+    products = bill.products
+    for product in products:
+        product.amount = (-product.amount if bill.type in ["buy", "return"]
+                          else product.amount)
+
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                UPDATE bills
+                SET
+                    discount = %s,
+                    total = %s,
+                    needs_update = TRUE
+                WHERE ref_id = %s
+                RETURNING *
+                """, (bill.discount, bill.total, bill.id))
+
+            cur.execute(
+                """
+                UPDATE products_flow
+                SET
+                    bill_id = %s
+                    needs_update = TRUE
+                WHERE bill_id = %s
+                RETURNING *
+                """, (f"{STORE_ID}_-1", bill.id))
+
+            values_to_reverse = cur.fetchall()
+            values = [(STORE_ID, f"{STORE_ID}_-1", product["product_id"],
+                       -product["amount"], product["wholesale_price"],
+                       product["price"]) for product in values_to_reverse]
+
+            values += [(STORE_ID, bill.id, product_flow.id,
+                        -product_flow.amount, product_flow.wholesale_price,
+                        product_flow.price)
+                       for product_flow in bill.products]
+
+            cur.executemany(
+                """
+                INSERT INTO products_flow (
+                    store_id, bill_id, product_id,
+                    amount, wholesale_price, price
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """, values)
+            return JSONResponse(content={"message": "Bill updated successfully"})
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -662,15 +757,14 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products (
                         id, name, bar_code, wholesale_price,
-                        price, category, last_update, stock
+                        price, category, stock, needs_update
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
                     ON CONFLICT (id) DO UPDATE
                     SET
                         name = EXCLUDED.name,
                         bar_code = EXCLUDED.bar_code,
-                        category = EXCLUDED.category,
-                        last_update = EXCLUDED.last_update
+                        category = EXCLUDED.category
                 """, row)
 
             logging.info("Inserting bills data...")
@@ -679,10 +773,13 @@ def accept_sync(data: dict):
                 cur.execute(
                     """
                     INSERT INTO bills (
-                        id, store_id, ref_id, time, discount, total, type
+                        id, store_id, ref_id, time, discount, total, type, needs_update
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO NOTHING
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
+                    ON CONFLICT (id, store_id) DO UPDATE
+                    SET
+                        discount = EXCLUDED.discount,
+                        total = EXCLUDED.total;
                 """, row)
 
             logging.info("Bills data inserted successfully.")
@@ -695,10 +792,11 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products_flow (
                         id, store_id, bill_id, product_id,
-                        wholesale_price, price, amount
+                        wholesale_price, price, amount, needs_update
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO NOTHING
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
+                    ON CONFLICT (id, store_id) DO UPDATE
+                    SET bill_id = EXCLUDED.bill_id;
                 """, row)
 
             logging.info("Products_flow data inserted successfully.")
@@ -710,10 +808,11 @@ def accept_sync(data: dict):
                 cur.execute(
                     """
                     INSERT INTO cash_flow (
-                        id, bill_id, store_id, time, amount, type, description
+                        id, bill_id, store_id, time, amount, type, description, needs_update
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (id, store_id) DO NOTHING
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
+                    ON CONFLICT (id, store_id) DO UPDATE
+                    SET amount = EXCLUDED.amount;
                 """, row)
 
             logging.info("Cash_flow data inserted successfully.")
@@ -779,8 +878,10 @@ def sync(step: int = 0, time_now: str = ""):
                     products_flow.amount
                 FROM products_flow
                 JOIN bills ON ref_id = bill_id
-                WHERE time > %s
-                AND products_flow.store_id = %s
+                WHERE
+                    products_flow.needs_update = TRUE
+                    AND products_flow.store_id = %s
+                ORDER BY time
             """, (latest_sync_time, STORE_ID))
 
             products_flow = cur.fetchall()
@@ -799,8 +900,9 @@ def sync(step: int = 0, time_now: str = ""):
                     total,
                     type
                 FROM bills
-                WHERE time > %s
-                AND store_id = %s
+                WHERE
+                    needs_update = TRUE
+                    AND store_id = %s
                 ORDER BY time
             """, (latest_sync_time, STORE_ID))
 
@@ -819,9 +921,9 @@ def sync(step: int = 0, time_now: str = ""):
                     type,
                     description
                 FROM cash_flow
-                WHERE bill_id IS NULL
-                AND time > %s
-                AND store_id = %s
+                WHERE
+                    needs_update = TRUE
+                    AND store_id = %s
                 ORDER BY time
             """, (latest_sync_time, STORE_ID))
 
@@ -833,13 +935,10 @@ def sync(step: int = 0, time_now: str = ""):
                 """
                 SELECT
                     id, name, bar_code, wholesale_price,
-                    price, category,
-                    TO_CHAR(
-                        last_update, 'YYYY-MM-DD HH24:MI:SS.MS'
-                    ) AS last_update
+                    price, category
                 FROM products
-                WHERE last_update > %s
-            """, (latest_sync_time, ))
+                WHERE needs_update = TRUE
+            """)
 
             products = cur.fetchall()
 
@@ -862,6 +961,35 @@ def sync(step: int = 0, time_now: str = ""):
             response.raise_for_status()
 
             logging.info("Data sent to the other store successfully.")
+
+            # Update the needs_update flag
+            logging.info("Updating the needs_update flag...")
+
+            cur.execute(
+                """
+                UPDATE products_flow
+                SET needs_update = FALSE
+                WHERE store_id = %s
+            """, (STORE_ID, ))
+            cur.execute(
+                """
+                UPDATE bills
+                SET needs_update = FALSE
+                WHERE store_id = %s
+            """, (STORE_ID, ))
+            cur.execute(
+                """
+                UPDATE cash_flow
+                SET needs_update = FALSE
+                WHERE store_id = %s
+            """, (STORE_ID, ))
+            cur.execute(
+                """
+                UPDATE products
+                SET needs_update = FALSE
+            """)
+
+            logging.info("Needs_update flag updated successfully.")
 
         logging.info("Sync completed in %s.", datetime.now() - start_time)
         return {"message": "Sync completed successfully"}

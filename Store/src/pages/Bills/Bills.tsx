@@ -7,7 +7,7 @@ import {
   Select,
   MenuItem,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -29,7 +29,6 @@ const Bills = () => {
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [loading, setLoading] = useState(false);
   const [bills, setBills] = useState<BillType[]>([]);
-  const [filteredBills, setFilteredBills] = useState<BillType[]>([]);
   const [filters, setFilters] = useState<string[]>([
     "sell",
     "BNPL",
@@ -62,11 +61,10 @@ const Bills = () => {
     getBills();
   }, [startDate, endDate]);
 
-  useEffect(() => {
-    setFilteredBills(bills.filter((bill) => filters.includes(bill.type)));
-  }, [bills, filters]);
-
-  console.log(bills, filteredBills, filters);
+  const filteredBills = useMemo(
+    () => bills.filter((bill) => filters.includes(bill.type)),
+    [bills, filters]
+  );
 
   const total = filteredBills.reduce((acc, bill) => acc + bill.total, 0);
 
@@ -162,6 +160,7 @@ const Bills = () => {
                   setMsg={setMsg}
                   printer={printer}
                   setPrinter={setPrinter}
+                  getBills={getBills}
                 />
               )}
             />

@@ -4,26 +4,30 @@ import { useCallback, useRef, useState } from "react";
 import BillView from "../../../utils/BillView";
 import { printBill } from "../../../utils/functions";
 import { AlertMsg } from "../../Shared/AlertMessage";
+import EditableBill from "./EditableBill";
 
 const Bill = ({
   bill,
   setMsg,
   printer,
   setPrinter,
+  getBills,
 }: {
   bill: BillType;
   setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>;
   printer: any;
   setPrinter: React.Dispatch<React.SetStateAction<any>>;
+  getBills: () => void;
 }) => {
-  const [billOpen, setBillOpen] = useState(false);
+  const [billPreviewOpen, setBillPreviewOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
 
   const printWithPrinter = useCallback(async () => {
-    setBillOpen(true);
+    setBillPreviewOpen(true);
     if (printer) {
       setTimeout(() => {
-        printBill(billRef, setMsg, setBillOpen, printer);
+        printBill(billRef, setMsg, setBillPreviewOpen, printer);
       }, 500);
     } else {
       // request access to usb device, no filter listing all devices
@@ -40,7 +44,7 @@ const Bill = ({
       await usbDevice.selectConfiguration(1);
       await usbDevice.claimInterface(0);
       setPrinter(usbDevice);
-      printBill(billRef, setMsg, setBillOpen, usbDevice);
+      printBill(billRef, setMsg, setBillPreviewOpen, usbDevice);
     }
   }, [printer]);
 
@@ -48,10 +52,13 @@ const Bill = ({
     <>
       <BillView
         bill={bill}
-        open={billOpen}
-        setOpen={setBillOpen}
+        open={billPreviewOpen}
+        setOpen={setBillPreviewOpen}
         ref={billRef}
       />
+      {editing ? (
+        <EditableBill bill={bill} setEditing={setEditing} getBills={getBills} />
+      ) : null}
       <TableCell>{bill.id}</TableCell>
       <TableCell>
         فاتورة{" "}
@@ -70,7 +77,8 @@ const Bill = ({
       <TableCell>{Math.abs(bill.total)}</TableCell>
       <TableCell>
         <ButtonGroup variant="outlined">
-          <Button onClick={() => setBillOpen(true)}>معاينة</Button>
+          <Button onClick={() => setEditing(true)}>تعديل</Button>
+          <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
           <Button onClick={printWithPrinter}>طباعة</Button>
         </ButtonGroup>
       </TableCell>
