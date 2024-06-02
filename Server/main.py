@@ -183,13 +183,13 @@ def add_product(product: Product):
                 """
                 INSERT INTO products (
                     name, bar_code, wholesale_price,
-                    price, stock, category, last_update
+                    price, stock, category
                 )
-                VALUES (%s, %s, %s, %s, 0, %s, %s)
+                VALUES (%s, %s, %s, %s, 0, %s)
                 RETURNING *
                 """,
                 (product.name, product.bar_code, product.wholesale_price,
-                 product.price, product.category, datetime.now().isoformat()))
+                 product.price, product.category))
             return cur.fetchone()
     except Exception as e:
         print(f"Error: {e}")
@@ -214,8 +214,7 @@ def update_product(products: list[Product]):
             for product in products:
                 db_products.append(
                     (product.name, product.bar_code,
-                     product.category, datetime.now().isoformat(),
-                     product.id))
+                     product.category, product.id))
                 db_products_flow.append((STORE_ID, f"{STORE_ID}_-1",
                                          product.id, product.stock, product.wholesale_price,
                                          product.price, product.id))
@@ -225,7 +224,7 @@ def update_product(products: list[Product]):
                 UPDATE products
                 SET
                     name = %s, bar_code = %s,
-                    category = %s, last_update = %s
+                    category = %s, needs_update = TRUE
                 WHERE id = %s
                 RETURNING *
                 """,
@@ -757,15 +756,14 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products (
                         id, name, bar_code, wholesale_price,
-                        price, category, last_update, stock
+                        price, category, stock
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE
                     SET
                         name = EXCLUDED.name,
                         bar_code = EXCLUDED.bar_code,
-                        category = EXCLUDED.category,
-                        last_update = EXCLUDED.last_update
+                        category = EXCLUDED.category
                 """, row)
 
             logging.info("Inserting bills data...")
@@ -942,10 +940,7 @@ def sync(step: int = 0, time_now: str = ""):
                 """
                 SELECT
                     id, name, bar_code, wholesale_price,
-                    price, category,
-                    TO_CHAR(
-                        last_update, 'YYYY-MM-DD HH24:MI:SS.MS'
-                    ) AS last_update
+                    price, category
                 FROM products
                 WHERE needs_update = TRUE
             """)
