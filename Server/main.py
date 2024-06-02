@@ -817,18 +817,6 @@ def accept_sync(data: dict):
 
             logging.info("Cash_flow data inserted successfully.")
 
-            # Update the sync time
-            logging.info("Updating the sync time...")
-
-            cur.execute(
-                """
-                UPDATE syncs
-                SET time = %s
-                WHERE id = 1
-            """, (data["sync_time"], ))
-
-            logging.info("Sync time updated successfully.")
-
         if data["step"] == 0:
             sync(1, data["sync_time"])
 
@@ -850,19 +838,6 @@ def sync(step: int = 0, time_now: str = ""):
     try:
         with Database(HOST, DATABASE, USER, PASS,
                       real_dict_cursor=False) as cur:
-            # Get the latest sync time
-            logging.info("Fetching the latest sync time...")
-            cur.execute("""
-                SELECT time FROM syncs LIMIT 1
-            """)
-            latest_sync_time = cur.fetchone()
-            if latest_sync_time:
-                latest_sync_time = latest_sync_time[0]
-            else:
-                latest_sync_time = "1970-01-01T00:00:00"
-
-            logging.info("Latest sync time: %s", latest_sync_time)
-
             # Fetch the changes since the last sync
             logging.info("Fetching the changes since the last sync...")
 
@@ -882,7 +857,7 @@ def sync(step: int = 0, time_now: str = ""):
                     products_flow.needs_update = TRUE
                     AND products_flow.store_id = %s
                 ORDER BY time
-            """, (latest_sync_time, STORE_ID))
+            """, (STORE_ID))
 
             products_flow = cur.fetchall()
 
@@ -904,7 +879,7 @@ def sync(step: int = 0, time_now: str = ""):
                     needs_update = TRUE
                     AND store_id = %s
                 ORDER BY time
-            """, (latest_sync_time, STORE_ID))
+            """, (STORE_ID))
 
             bills = cur.fetchall()
 
@@ -925,7 +900,7 @@ def sync(step: int = 0, time_now: str = ""):
                     needs_update = TRUE
                     AND store_id = %s
                 ORDER BY time
-            """, (latest_sync_time, STORE_ID))
+            """, (STORE_ID))
 
             cash_flow = cur.fetchall()
 
