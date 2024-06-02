@@ -364,7 +364,9 @@ def update_bill(bill: dbBill):
             cur.execute(
                 """
                 UPDATE products_flow
-                SET bill_id = %s
+                SET
+                    bill_id = %s
+                    needs_update = TRUE
                 WHERE bill_id = %s
                 RETURNING *
                 """, (f"{STORE_ID}_-1", bill.id))
@@ -391,7 +393,6 @@ def update_bill(bill: dbBill):
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
-
 
 
 @app.post("/bill")
@@ -756,9 +757,9 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products (
                         id, name, bar_code, wholesale_price,
-                        price, category, stock
+                        price, category, stock, needs_update
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
                     ON CONFLICT (id) DO UPDATE
                     SET
                         name = EXCLUDED.name,
@@ -772,9 +773,9 @@ def accept_sync(data: dict):
                 cur.execute(
                     """
                     INSERT INTO bills (
-                        id, store_id, ref_id, time, discount, total, type
+                        id, store_id, ref_id, time, discount, total, type, needs_update
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
                     ON CONFLICT (id, store_id) DO UPDATE
                     SET
                         discount = EXCLUDED.discount,
@@ -791,9 +792,9 @@ def accept_sync(data: dict):
                     """
                     INSERT INTO products_flow (
                         id, store_id, bill_id, product_id,
-                        wholesale_price, price, amount
+                        wholesale_price, price, amount, needs_update
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
                     ON CONFLICT (id, store_id) DO UPDATE
                     SET bill_id = EXCLUDED.bill_id;
                 """, row)
@@ -807,9 +808,9 @@ def accept_sync(data: dict):
                 cur.execute(
                     """
                     INSERT INTO cash_flow (
-                        id, bill_id, store_id, time, amount, type, description
+                        id, bill_id, store_id, time, amount, type, description, needs_update
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
                     ON CONFLICT (id, store_id) DO UPDATE
                     SET amount = EXCLUDED.amount;
                 """, row)
@@ -877,11 +878,10 @@ def sync(step: int = 0, time_now: str = ""):
                     products_flow.amount
                 FROM products_flow
                 JOIN bills ON ref_id = bill_id
-                (
-                    WHERE time > %s
-                    OR products_flow.needs_update = TRUE
-                )
-                AND products_flow.store_id = %s
+                WHERE
+                    products_flow.needs_update = TRUE
+                    AND products_flow.store_id = %s
+                ORDER BY time
             """, (latest_sync_time, STORE_ID))
 
             products_flow = cur.fetchall()
@@ -900,11 +900,9 @@ def sync(step: int = 0, time_now: str = ""):
                     total,
                     type
                 FROM bills
-                (
-                    WHERE time > %s
-                    OR needs_update = TRUE
-                )
-                AND store_id = %s
+                WHERE
+                    needs_update = TRUE
+                    AND store_id = %s
                 ORDER BY time
             """, (latest_sync_time, STORE_ID))
 
@@ -923,12 +921,9 @@ def sync(step: int = 0, time_now: str = ""):
                     type,
                     description
                 FROM cash_flow
-                WHERE bill_id IS NULL
-                OR (
-                    time > %s
-                    OR needs_update = TRUE
-                )
-                AND store_id = %s
+                WHERE
+                    needs_update = TRUE
+                    AND store_id = %s
                 ORDER BY time
             """, (latest_sync_time, STORE_ID))
 
@@ -966,6 +961,35 @@ def sync(step: int = 0, time_now: str = ""):
             response.raise_for_status()
 
             logging.info("Data sent to the other store successfully.")
+
+            # Update the needs_update flag
+            logging.info("Updating the needs_update flag...")
+
+            cur.execute(
+                """
+                UPDATE products_flow
+                SET needs_update = FALSE
+                WHERE store_id = %s
+            """, (STORE_ID, ))
+            cur.execute(
+                """
+                UPDATE bills
+                SET needs_update = FALSE
+                WHERE store_id = %s
+            """, (STORE_ID, ))
+            cur.execute(
+                """
+                UPDATE cash_flow
+                SET needs_update = FALSE
+                WHERE store_id = %s
+            """, (STORE_ID, ))
+            cur.execute(
+                """
+                UPDATE products
+                SET needs_update = FALSE
+            """)
+
+            logging.info("Needs_update flag updated successfully.")
 
         logging.info("Sync completed in %s.", datetime.now() - start_time)
         return {"message": "Sync completed successfully"}
