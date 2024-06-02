@@ -255,7 +255,7 @@ BEGIN
     -- Update the total on the updated row
     UPDATE cash_flow
     SET
-        total = NEW.amount + latest_total,
+        total = NEW.amount + latest_total
     WHERE id = NEW.id
     AND store_id = NEW.store_id;
 
