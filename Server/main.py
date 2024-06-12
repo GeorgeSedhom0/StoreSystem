@@ -837,17 +837,18 @@ def fetch_sync_data(cur, store_id):
 
 
 def insert_sync_data(cur, data):
+    logging.info("Inserting products")
     for row in data["products"]:
         cur.execute(
             """
             INSERT INTO products (id, name, bar_code, wholesale_price, price,
             category, needs_update)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
+            VALUES (%s, %s, %s, %s, %s, %s, FALSE)
             ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, bar_code = EXCLUDED.bar_code,
             category = EXCLUDED.category
         """, row)
-
+    logging.info("Inserting bills")
     for row in data["bills"]:
         cur.execute(
             """
@@ -857,7 +858,7 @@ def insert_sync_data(cur, data):
             ON CONFLICT (id, store_id) DO UPDATE
             SET discount = EXCLUDED.discount, total = EXCLUDED.total
         """, row)
-
+    logging.info("Inserting products_flow")
     for row in data["products_flow"]:
         cur.execute(
             """
@@ -867,7 +868,7 @@ def insert_sync_data(cur, data):
             ON CONFLICT (id, store_id) DO UPDATE
             SET bill_id = EXCLUDED.bill_id
         """, row)
-
+    logging.info("Inserting cash_flow")
     for row in data["cash_flow"]:
         cur.execute(
             """
