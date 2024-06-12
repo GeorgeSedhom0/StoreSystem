@@ -15,6 +15,7 @@ import Bills from "./pages/Bills/Bills";
 import Cash from "./pages/Cash/Cash";
 import Settings from "./pages/Setting/Setting";
 import { useState } from "react";
+import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 
 const localMode = localStorage.getItem("mode");
 let mode: "dark" | "light";
@@ -25,6 +26,8 @@ if (!localMode || (localMode !== "dark" && localMode !== "light")) {
 } else {
   mode = localMode;
 }
+
+const queryClient = new QueryClient();
 
 const App = () => {
   const [themeMode, setThemeMode] = useState<"dark" | "light">(mode);
@@ -45,7 +48,7 @@ const App = () => {
             backgroundImage:
               themeMode === "dark"
                 ? "radial-gradient(circle at center, #3d4d64 0%, #263245 100%);"
-                : "radial-gradient(circle at center, #8cb2ed 0%, #aabbff 70%);",
+                : "radial-gradient(circle at center, #8cb2ed 0%, #aabbff 7  0%);",
             backgroundAttachment: "fixed",
             backgroundSize: "cover",
             backgroundRepeat: "no-repeat",
@@ -61,21 +64,23 @@ const App = () => {
     <Rtl>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Router>
-          <Layout themeMode={themeMode} setThemeMode={setThemeMode}>
-            <Routes>
-              {/* if any route other than the defined go to /sell */}
-              <Route path="*" element={<Navigate to="/sell" />} />
-              <Route path="/sell" element={<Sell />} />
-              <Route path="/add-to-storage" element={<Storage />} />
-              <Route path="/buy" element={<Buy />} />
-              <Route path="/products" element={<Products />} />
-              <Route path="/bills" element={<Bills />} />
-              <Route path="/cash" element={<Cash />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </Layout>
-        </Router>
+        <QueryClientProvider client={queryClient}>
+          <Router>
+            <Layout themeMode={themeMode} setThemeMode={setThemeMode}>
+              <Routes>
+                {/* if any route other than the defined go to /sell */}
+                <Route path="*" element={<Navigate to="/sell" />} />
+                <Route path="/sell" element={<Sell />} />
+                <Route path="/add-to-storage" element={<Storage />} />
+                <Route path="/buy" element={<Buy />} />
+                <Route path="/products" element={<Products />} />
+                <Route path="/bills" element={<Bills />} />
+                <Route path="/cash" element={<Cash />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </Layout>
+          </Router>
+        </QueryClientProvider>
       </ThemeProvider>
     </Rtl>
   );

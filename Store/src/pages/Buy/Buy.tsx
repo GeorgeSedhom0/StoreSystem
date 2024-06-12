@@ -17,9 +17,15 @@ import { Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "./Components/ProductInCart";
+import { useQuery } from "@tanstack/react-query";
+import LoadingScreen from "../Shared/LoadingScreen";
+
+const getProducts = async () => {
+  const { data } = await axios.get<Product[]>("http://localhost:8000/products");
+  return data;
+};
 
 const Buy = () => {
-  const [products, setProducts] = useState<Product[]>([]);
   const [options, setOptions] = useState<Product[]>([]);
   const [query, setQuery] = useState<string>("");
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
@@ -28,17 +34,15 @@ const Buy = () => {
     text: "",
   });
 
-  useEffect(() => {
-    const getProds = async () => {
-      try {
-        const { data } = await axios.get("http://localhost:8000/products");
-        setProducts(data);
-      } catch (error) {
-        console.log(error);
-      }
-    };
-    getProds();
-  }, []);
+  const {
+    data: products,
+    refetch: updateProducts,
+    isLoading,
+  } = useQuery({
+    queryKey: ["products"],
+    queryFn: getProducts,
+    initialData: [],
+  });
 
   useEffect(() => {
     if (!query) {
@@ -145,6 +149,7 @@ const Buy = () => {
             move_type: "buy",
           },
         });
+        await updateProducts();
         setShoppingCart([]);
         setMsg({
           type: "success",
@@ -164,6 +169,8 @@ const Buy = () => {
   return (
     <Grid container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
+
+      <LoadingScreen loading={isLoading} />
 
       <Grid item xs={12}>
         <Card elevation={3} sx={{ p: 3 }}>

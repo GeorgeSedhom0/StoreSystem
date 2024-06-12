@@ -11,32 +11,36 @@ import {
 import { Box } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import axios from "axios";
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import LoadingScreen from "../../Shared/LoadingScreen";
 
 interface ShiftDialogProps {
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
   shift: string | null;
-  setShift: (shift: string | null) => void;
+  refetchShift: () => void;
 }
+
+interface ShiftTotal {
+  sell_total: number;
+  buy_total: number;
+  return_total: number;
+}
+
+const getShiftTotal = async () => {
+  const { data } = await axios.get<ShiftTotal>(
+    "http://localhost:8000/shift-total"
+  );
+  return data;
+};
 
 const ShiftDialog = ({
   dialogOpen,
   setDialogOpen,
   shift,
-  setShift,
+  refetchShift,
 }: ShiftDialogProps) => {
-  const [shiftTotal, setShiftTotal] = useState<{
-    sell_total: number;
-    buy_total: number;
-    return_total: number;
-  }>({
-    sell_total: 0,
-    buy_total: 0,
-    return_total: 0,
-  });
-
   const navigate = useNavigate();
 
   const handleClose = () => {
@@ -44,25 +48,16 @@ const ShiftDialog = ({
     setDialogOpen(false);
   };
 
-  useEffect(() => {
-    const fetchShiftTotal = async () => {
-      try {
-        const { data } = await axios.get("http://localhost:8000/shift-total");
-        setShiftTotal(data);
-      } catch (err) {
-        console.log(err);
-      }
-    };
-
-    if (shift) {
-      fetchShiftTotal();
-    }
-  }, [shift, dialogOpen]);
+  const { data: shiftTotal, isLoading: isShiftTotalLoading } = useQuery({
+    queryKey: ["shiftTotal"],
+    queryFn: getShiftTotal,
+    initialData: { sell_total: 0, buy_total: 0, return_total: 0 },
+  });
 
   const openShift = async () => {
     try {
-      const { data } = await axios.get("http://localhost:8000/start-shift");
-      setShift(data.start_date_time);
+      await axios.get("http://localhost:8000/start-shift");
+      refetchShift();
     } catch (err) {
       console.log(err);
     }
@@ -71,7 +66,7 @@ const ShiftDialog = ({
   const closeShift = async () => {
     try {
       await axios.get("http://localhost:8000/end-shift");
-      setShift(null);
+      refetchShift();
     } catch (err) {
       console.log(err);
     }
@@ -85,6 +80,7 @@ const ShiftDialog = ({
       maxWidth="md"
       style={{ height: "90vh" }}
     >
+      <LoadingScreen loading={isShiftTotalLoading} />
       <DialogTitle align="center">الشيفتات</DialogTitle>
       <DialogContent>
         <Box

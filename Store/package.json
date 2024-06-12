@@ -17,6 +17,7 @@
     "@mui/lab": "^5.0.0-alpha.170",
     "@mui/material": "^5.15.14",
     "@mui/x-date-pickers": "^7.2.0",
+    "@tanstack/react-query": "^5.44.0",
     "axios": "^1.6.8",
     "dayjs": "^1.11.10",
     "dom-to-image": "^2.6.0",

@@ -26,9 +26,23 @@ import ShiftDialog from "./Components/ShiftDialog";
 import BillView from "../../utils/BillView";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { printBill } from "../../utils/functions";
+import { useQuery } from "@tanstack/react-query";
+
+const getProds = async () => {
+  const { data } = await axios.get<Product[]>("http://localhost:8000/products");
+  return data;
+};
+
+const getShift = async () => {
+  const { data } = await axios.get("http://localhost:8000/current-shift");
+  if (data.start_date_time) {
+    return data.start_date_time;
+  } else {
+    throw new Error("No shift opened");
+  }
+};
 
 const Sell = () => {
-  const [products, setProducts] = useState<Product[]>([]);
   const [options, setOptions] = useState<Product[]>([]);
   const [query, setQuery] = useState<string>("");
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
@@ -40,39 +54,48 @@ const Sell = () => {
   const [billPayment, setBillPayment] = useState<"sell" | "BNPL" | "return">(
     "sell"
   );
-  const [shift, setShift] = useState<string | null>("");
   const [shiftDialog, setShiftDialog] = useState<boolean>(false);
   const [lastBill, setLastBill] = useState<Bill | null>(null);
   const [lastBillOpen, setLastBillOpen] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
   const [printer, setPrinter] = useState<any | null>(null);
 
   const billRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const getProds = async () => {
-      setLoading(true);
-      try {
-        const { data } = await axios.get("http://localhost:8000/products");
-        const { data: currentShift } = await axios.get(
-          "http://localhost:8000/current-shift"
-        );
-        setProducts(data);
-        setShift(currentShift.start_date_time);
-      } catch (error) {
-        console.log(error);
-        // reload the page since these 2 requests are crucial
-        window.location.reload();
-      }
-      setLoading(false);
-    };
-    getProds();
-  }, []);
+  const {
+    data: products,
+    isLoading: isProductsLoading,
+    refetch: updateProducts,
+  } = useQuery({
+    queryKey: ["products"],
+    queryFn: getProds,
+    initialData: [],
+  });
+
+  const {
+    data: shift,
+    isLoading: isShiftLoading,
+    isError: isShiftError,
+    refetch: refetchShift,
+  } = useQuery({
+    queryKey: ["shift"],
+    queryFn: getShift,
+    initialData: "",
+    retry: false,
+  });
 
   useEffect(() => {
-    if (!shift) setShiftDialog(true);
-    else setShiftDialog(false);
-  }, [shift]);
+    if (isShiftError) {
+      setMsg({
+        type: "error",
+        text: "لا يوجد شيفت مفتوح",
+      });
+      setShiftDialog(true);
+    } else if (shift) {
+      setShiftDialog(false);
+    }
+  }, [isShiftError, shift]);
+
+  const loading = isProductsLoading || isShiftLoading;
 
   useEffect(() => {
     if (!query) {
@@ -228,6 +251,7 @@ const Sell = () => {
         setShoppingCart([]);
         setDiscount(0);
         setBillPayment("sell");
+        await updateProducts();
         setMsg({
           type: "success",
           text: "تم اضافة الفاتورة بنجاح",
@@ -303,8 +327,8 @@ const Sell = () => {
       <ShiftDialog
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
-        shift={shift}
-        setShift={setShift}
+        shift={isShiftError ? null : shift}
+        refetchShift={refetchShift}
       />
 
       <Grid item xs={12}>

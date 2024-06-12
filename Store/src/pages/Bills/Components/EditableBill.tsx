@@ -244,7 +244,10 @@ const EditableBill = ({
                               (prod) => prod.id !== product.id
                             ),
                           };
-                          setEditedBill(newBill);
+                          setEditedBill({
+                            ...newBill,
+                            total: totalEval(newBill),
+                          });
                         }}
                         color="error"
                       >

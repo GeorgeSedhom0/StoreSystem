@@ -40,14 +40,6 @@ CREATE TABLE products (
 )
 """)
 
-# Create the syncs table
-cur.execute("""
-CREATE TABLE syncs (
-  id BIGSERIAL PRIMARY KEY,
-  time TIMESTAMP
-)
-""")
-
 cur.execute("""INSERT INTO syncs (time) VALUES
   (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Cairo')""")
 
