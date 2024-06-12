@@ -18,13 +18,16 @@ cur = conn.cursor()
 
 # add needs update column to all tables as a boolean, being false by default
 
-cur.execute("ALTER TABLE products ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
+cur.execute(
+    "ALTER TABLE products ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
 # remove the column last_update from the products table
 cur.execute("ALTER TABLE products DROP COLUMN last_update")
 
 cur.execute("ALTER TABLE bills ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
-cur.execute("ALTER TABLE cash_flow ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
-cur.execute("ALTER TABLE products_flow ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
+cur.execute(
+    "ALTER TABLE cash_flow ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
+cur.execute(
+    "ALTER TABLE products_flow ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
 
 # the column is not added on syncs/shifts tables as they are not synced between devices
 
@@ -47,7 +50,7 @@ BEGIN
     -- Update the total on the updated row
     UPDATE cash_flow
     SET
-        total = NEW.amount + latest_total,
+        total = NEW.amount + latest_total
     WHERE id = NEW.id
     AND store_id = NEW.store_id;
 
@@ -85,7 +88,6 @@ AFTER UPDATE ON bills
 FOR EACH ROW
 EXECUTE FUNCTION update_cash_flow_after_update();
 """)
-
 
 # Commit the changes and close the connection
 conn.commit()
