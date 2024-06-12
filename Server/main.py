@@ -821,8 +821,7 @@ def fetch_sync_data(cur, store_id):
         SELECT id, store_id, bill_id, product_id,
         wholesale_price, price, amount
         FROM products_flow
-        WHERE products_flow.needs_update = TRUE AND products_flow.store_id = %s
-        ORDER BY time
+        WHERE products_flow.needs_update = TRUE AND products_flow.store_id = %s;
     """, (store_id, ))
     products_flow = cur.fetchall()
     cur.execute(
