@@ -841,7 +841,7 @@ def insert_sync_data(cur, data):
         cur.execute(
             """
             INSERT INTO products (id, name, bar_code, wholesale_price, price,
-            category, stock, needs_update)
+            category, needs_update)
             VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
             ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, bar_code = EXCLUDED.bar_code,
