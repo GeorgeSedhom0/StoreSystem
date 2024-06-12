@@ -121,6 +121,8 @@ const ShiftDialog = ({
                 {shiftTotal.sell_total +
                   shiftTotal.buy_total +
                   shiftTotal.return_total}
+                <br />
+                اجمالى الرصيد: {shiftTotal.sell_total + shiftTotal.return_total}
               </Typography>
             ) : (
               "لا يوجد فواتير"
