@@ -821,7 +821,6 @@ def fetch_sync_data(cur, store_id):
         SELECT id, store_id, bill_id, product_id,
         wholesale_price, price, amount
         FROM products_flow
-        JOIN bills ON ref_id = bill_id
         WHERE products_flow.needs_update = TRUE AND products_flow.store_id = %s
         ORDER BY time
     """, (store_id, ))
