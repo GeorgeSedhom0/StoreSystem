@@ -1,6 +1,7 @@
-import { TableCell, TextField } from "@mui/material";
+import { Button, InputAdornment, TableCell, TextField } from "@mui/material";
 import { Product } from "../../../utils/types";
 import { useMemo } from "react";
+import { printCode } from "../../../utils/functions";
 
 interface ProductCardProps {
   product: Product;
@@ -66,6 +67,15 @@ const ProductCard = ({
               return newProducts;
             })
           }
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <Button onClick={() => printCode(product.bar_code)}>
+                  طباعة
+                </Button>
+              </InputAdornment>
+            ),
+          }}
         />
       </TableCell>
 

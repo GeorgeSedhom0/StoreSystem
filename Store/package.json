@@ -22,6 +22,8 @@
     "dayjs": "^1.11.10",
     "dom-to-image": "^2.6.0",
     "esc-pos-encoder": "^2.0.1",
+    "jsbarcode": "^3.11.6",
+    "print-js": "^1.6.0",
     "react": "^17.0.0 || ^18.0.0",
     "react-dom": "^17.0.0 || ^18.0.0",
     "react-router-dom": "^6.22.3",

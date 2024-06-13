@@ -1,5 +1,7 @@
 import domtoimage from "dom-to-image";
 import { AlertMsg } from "../pages/Shared/AlertMessage";
+import JsBarcode from "jsbarcode";
+import printJS from "print-js";
 
 export const printBill = async (
   billRef: React.RefObject<HTMLDivElement>,
@@ -105,3 +107,24 @@ export const printBill = async (
     setLastBillOpen(false);
   }
 };
+
+
+export const printCode =  (code: string) => {
+  const svg = document.createElement("svg");
+  svg.classList.add("barcode");
+  JsBarcode(svg, code, { 
+    format: "CODE128",
+    width: 2,
+    height: 80,
+    fontSize: 25,
+  });
+  const svgHtml = svg.outerHTML;
+  printJS({
+    printable: svgHtml,
+    type: "raw-html",
+    targetStyles: ["*"],
+    scanStyles: false,
+    style: ".barcode { width: 100%; height: 80px; }",
+  });
+  svg.remove();
+}
