@@ -18,7 +18,6 @@ cur = conn.cursor()
 
 # Drop all tables before creating
 cur.execute("DROP TABLE IF EXISTS products CASCADE")
-cur.execute("DROP TABLE IF EXISTS syncs CASCADE")
 cur.execute("DROP TABLE IF EXISTS bills CASCADE")
 cur.execute("DROP TABLE IF EXISTS cash_flow CASCADE")
 cur.execute("DROP TABLE IF EXISTS products_flow CASCADE")
@@ -39,9 +38,6 @@ CREATE TABLE products (
   needs_update BOOLEAN DEFAULT TRUE
 )
 """)
-
-cur.execute("""INSERT INTO syncs (time) VALUES
-  (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Cairo')""")
 
 # Create the bills table
 cur.execute("""
