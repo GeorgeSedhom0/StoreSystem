@@ -251,31 +251,6 @@ def update_product(products: list[Product]):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.delete("/product/{product_id}")
-def delete_product(product_id: int):
-    """
-    Delete a product from the database
-
-    Args:
-        product_id (int): The ID of the product to delete
-
-    Returns:
-        Dict: A message indicating the result of the operation
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                DELETE FROM products
-                WHERE id = %s
-                RETURNING *
-                """, (product_id, ))
-            return cur.fetchone()
-    except Exception as e:
-        print(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
 @app.get("/bills")
 def get_bills(start_date: Optional[str] = None,
               end_date: Optional[str] = None):
@@ -781,6 +756,16 @@ async def restore(file: UploadFile = File(...)):
 
 
 def fetch_sync_data(cur, store_id):
+    logging.info("Fetching products data")
+    cur.execute("""
+        SELECT id, name, bar_code, wholesale_price, price, category
+        FROM products
+        WHERE needs_update = TRUE
+    """)
+    products = cur.fetchall()
+    cur.execute("UPDATE products SET needs_update = FALSE")
+
+    logging.info("Fetching bills data")
     cur.execute(
         """
         SELECT id, store_id, ref_id,
@@ -791,42 +776,34 @@ def fetch_sync_data(cur, store_id):
         ORDER BY time
     """, (store_id, ))
     bills = cur.fetchall()
-    cur.execute("UPDATE bills SET needs_update = FALSE WHERE store_id = %s",
-                (store_id, ))
+    cur.execute("UPDATE bills SET needs_update = FALSE")
 
+    logging.info("Fetching products flow data")
+    cur.execute(
+        """
+        SELECT id, store_id, bill_id, product_id,
+        wholesale_price, price, amount
+        FROM products_flow
+        WHERE needs_update = TRUE AND store_id = %s;
+    """, (store_id, ))
+    products_flow = cur.fetchall()
+    cur.execute("UPDATE products_flow SET needs_update = FALSE")
+
+    logging.info("Fetching cash data")
     cur.execute(
         """
         SELECT id, bill_id, store_id,
                TO_CHAR(time, 'YYYY-MM-DD HH24:MI:SS.MS') AS time,
                amount, type, description
         FROM cash_flow
-        WHERE needs_update = TRUE AND store_id = %s
+        WHERE
+            needs_update = TRUE
+            AND store_id = %s
+            AND bill_id IS NULL
         ORDER BY time
     """, (store_id, ))
     cash_flow = cur.fetchall()
-    cur.execute(
-        "UPDATE cash_flow SET needs_update = FALSE WHERE store_id = %s",
-        (store_id, ))
-
-    cur.execute("""
-        SELECT id, name, bar_code, wholesale_price, price, category
-        FROM products
-        WHERE needs_update = TRUE
-    """)
-    products = cur.fetchall()
-    cur.execute("UPDATE products SET needs_update = FALSE")
-
-    cur.execute(
-        """
-        SELECT id, store_id, bill_id, product_id,
-        wholesale_price, price, amount
-        FROM products_flow
-        WHERE products_flow.needs_update = TRUE AND products_flow.store_id = %s;
-    """, (store_id, ))
-    products_flow = cur.fetchall()
-    cur.execute(
-        "UPDATE products_flow SET needs_update = FALSE WHERE store_id = %s",
-        (store_id, ))
+    cur.execute("UPDATE cash_flow SET needs_update = FALSE")
 
     return {
         "products": products,
@@ -848,6 +825,7 @@ def insert_sync_data(cur, data):
             SET name = EXCLUDED.name, bar_code = EXCLUDED.bar_code,
             category = EXCLUDED.category
         """, row)
+
     logging.info("Inserting bills")
     for row in data["bills"]:
         cur.execute(
@@ -858,6 +836,7 @@ def insert_sync_data(cur, data):
             ON CONFLICT (id, store_id) DO UPDATE
             SET discount = EXCLUDED.discount, total = EXCLUDED.total
         """, row)
+
     logging.info("Inserting products_flow")
     for row in data["products_flow"]:
         cur.execute(
@@ -868,6 +847,7 @@ def insert_sync_data(cur, data):
             ON CONFLICT (id, store_id) DO UPDATE
             SET bill_id = EXCLUDED.bill_id
         """, row)
+
     logging.info("Inserting cash_flow")
     for row in data["cash_flow"]:
         cur.execute(
@@ -881,27 +861,20 @@ def insert_sync_data(cur, data):
 
 
 @app.post("/send-sync")
-def sync(time_now: str = ""):
-    if not time_now:
-        time_now = datetime.now().isoformat()
-    start_time = datetime.now()
+def sync():
     try:
         with Database(HOST, DATABASE, USER, PASS,
                       real_dict_cursor=False) as cur:
             data = fetch_sync_data(cur, STORE_ID)
 
             response = requests.post(f"{OTHER_STORE}/accept-sync",
-                                     json={
-                                         **data,
-                                         "sync_time": str(time_now),
-                                     },
+                                     json=data,
                                      timeout=250)
             response.raise_for_status()
 
             new_data = response.json()
             insert_sync_data(cur, new_data)
 
-        logging.info("Sync completed in %s.", datetime.now() - start_time)
         return {"message": "Sync completed successfully"}
 
     except Exception as e:
@@ -913,8 +886,8 @@ def sync(time_now: str = ""):
 def accept_sync(data: dict):
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            insert_sync_data(cur, data)
             new_data = fetch_sync_data(cur, STORE_ID)
+            insert_sync_data(cur, data)
             return {**new_data, "message": "Sync completed successfully"}
 
     except Exception as e:
