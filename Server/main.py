@@ -134,7 +134,7 @@ def get_bar_code():
     """
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute(
-            "SELECT COALESCE(MAX(bar_code), '100000000000') AS b FROM products"
+            "SELECT COALESCE(MAX(CAST(bar_code AS BIGINT)), '100000000000') AS b FROM products"
         )
         return str(int(cur.fetchone()["b"]) + 1)
 
