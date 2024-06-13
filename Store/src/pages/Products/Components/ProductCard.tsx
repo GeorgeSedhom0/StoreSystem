@@ -70,7 +70,16 @@ const ProductCard = ({
           InputProps={{
             endAdornment: (
               <InputAdornment position="end">
-                <Button onClick={() => printCode(product.bar_code)}>
+                <Button
+                  onClick={() =>
+                    printCode(
+                      product.bar_code,
+                      `فحم المهندس \n ${product.name}`,
+                      product.price.toString() + " " + "جنية ",
+                      "ar"
+                    )
+                  }
+                >
                   طباعة
                 </Button>
               </InputAdornment>
