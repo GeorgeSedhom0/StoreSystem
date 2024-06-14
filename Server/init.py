@@ -26,7 +26,8 @@ cur.execute("DROP TABLE IF EXISTS shifts CASCADE")
 cur.execute("SET TIME ZONE 'Africa/Cairo'")
 
 # Create the products table
-cur.execute("""
+cur.execute(
+    """
 CREATE TABLE products (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR,
@@ -37,10 +38,12 @@ CREATE TABLE products (
   category VARCHAR,
   needs_update BOOLEAN DEFAULT TRUE
 )
-""")
+"""
+)
 
 # Create the bills table
-cur.execute("""
+cur.execute(
+    """
 CREATE TABLE bills (
   id BIGSERIAL,
   store_id BIGINT,
@@ -52,10 +55,12 @@ CREATE TABLE bills (
   needs_update BOOLEAN DEFAULT TRUE,
   PRIMARY KEY (id, store_id)
 )
-""")
+"""
+)
 
 # Create the cash_flow table
-cur.execute("""
+cur.execute(
+    """
 CREATE TABLE cash_flow (
   id BIGSERIAL,
   store_id BIGINT,
@@ -68,10 +73,12 @@ CREATE TABLE cash_flow (
   needs_update BOOLEAN DEFAULT TRUE,
   PRIMARY KEY (id, store_id)
 )
-""")
+"""
+)
 
 # Create the products_flow table
-cur.execute("""
+cur.execute(
+    """
 CREATE TABLE products_flow (
   id BIGSERIAL,
   store_id BIGINT,
@@ -83,10 +90,12 @@ CREATE TABLE products_flow (
   needs_update BOOLEAN DEFAULT TRUE,
   PRIMARY KEY (id, store_id)
 )
-""")
+"""
+)
 
 # Create the shifts table
-cur.execute("""
+cur.execute(
+    """
 CREATE TABLE shifts (
   id BIGSERIAL,
   store_id BIGINT,
@@ -94,14 +103,16 @@ CREATE TABLE shifts (
   end_date_time TIMESTAMP,
   current BOOLEAN
 )
-""")
+"""
+)
 
 # --------------------------------------------------------------------
 # ----------------------------triggers--------------------------------
 # --------------------------------------------------------------------
 
 # Create the trigger to update stock after inserting a product flow
-cur.execute("""
+cur.execute(
+    """
 -- Trigger to update stock after insert
 CREATE OR REPLACE FUNCTION update_stock_after_insert()
 RETURNS TRIGGER AS $$
@@ -117,10 +128,12 @@ CREATE TRIGGER trigger_update_stock_insert
 AFTER INSERT ON products_flow
 FOR EACH ROW
 EXECUTE FUNCTION update_stock_after_insert();
-""")
+"""
+)
 
 # Create the trigger to insert into cash_flow after inserting a bill
-cur.execute("""
+cur.execute(
+    """
 -- Trigger to insert into cash_flow after inserting a bill
 CREATE OR REPLACE FUNCTION insert_cash_flow_after_insert()
 RETURNS TRIGGER AS $$
@@ -151,10 +164,12 @@ CREATE TRIGGER trigger_insert_cash_flow_after_insert
 AFTER INSERT ON bills
 FOR EACH ROW
 EXECUTE FUNCTION insert_cash_flow_after_insert();
-""")
+"""
+)
 
 # Create the trigger to update ref_id after inserting a bill
-cur.execute("""
+cur.execute(
+    """
 -- Trigger to update ref_id after insert
 CREATE OR REPLACE FUNCTION update_ref_id_after_insert()
 RETURNS TRIGGER AS $$
@@ -171,10 +186,12 @@ CREATE TRIGGER trigger_update_ref_id_after_insert
 AFTER INSERT ON bills
 FOR EACH ROW
 EXECUTE FUNCTION update_ref_id_after_insert();
-""")
+"""
+)
 
 # Create the trigger to update product price when inserting a buy bill
-cur.execute("""
+cur.execute(
+    """
 -- Trigger to update product price when inserting a buy bill
 CREATE OR REPLACE FUNCTION update_product_price_after_insert()
 RETURNS TRIGGER AS $$
@@ -194,10 +211,12 @@ CREATE TRIGGER trigger_update_product_price_after_insert
 AFTER INSERT ON products_flow
 FOR EACH ROW
 EXECUTE FUNCTION update_product_price_after_insert();
-""")
+"""
+)
 
 # Create the trigger to update total after inserting a cash_flow
-cur.execute("""
+cur.execute(
+    """
 -- Trigger to update total after insert
 CREATE OR REPLACE FUNCTION update_total_after_insert()
 RETURNS TRIGGER AS $$
@@ -224,32 +243,23 @@ CREATE TRIGGER trigger_update_total_after_insert
 AFTER INSERT ON cash_flow
 FOR EACH ROW
 EXECUTE FUNCTION update_total_after_insert();
-""")
+"""
+)
 
 # create the trigger to bubble fix the total after updating a cash_flow
-cur.execute("""
+cur.execute(
+    """
 -- Trigger to bubble fix the total after update
 CREATE OR REPLACE FUNCTION bubble_fix_total_after_update()
 RETURNS TRIGGER AS $$
 DECLARE
-    latest_total FLOAT;
+    amount_diff FLOAT;
 BEGIN
-    latest_total := OLD.total + OLD.amount;
-
-    IF latest_total IS NULL THEN
-        latest_total := 0;
-    END IF;
-
-    -- Update the total on the updated row
-    UPDATE cash_flow
-    SET
-        total = NEW.amount + latest_total
-    WHERE id = NEW.id
-    AND store_id = NEW.store_id;
+    amount_diff := NEW.amount - OLD.amount;
 
     -- Bubble correct the total on all rows that were inserted after the updated row
     UPDATE cash_flow
-    SET total = total - OLD.amount + New.amount
+    SET total = total + amount_diff
     WHERE time > OLD.time;
 
     RETURN NEW;
@@ -261,16 +271,20 @@ AFTER UPDATE ON cash_flow
 FOR EACH ROW
 WHEN (NEW.amount != OLD.amount)
 EXECUTE FUNCTION bubble_fix_total_after_update();
-""")
+"""
+)
 
 # create the trigger to update cash_flow after updating a bill and set needs_update to true
-cur.execute("""
+cur.execute(
+    """
 -- Trigger to update cash_flow after update
 CREATE OR REPLACE FUNCTION update_cash_flow_after_update()
 RETURNS TRIGGER AS $$
 BEGIN
     UPDATE cash_flow
-    SET amount = NEW.total
+    SET
+        amount = NEW.total,
+        total = total + NEW.total - OLD.total
     WHERE bill_id = NEW.ref_id;
     RETURN NEW;
 END;
@@ -280,7 +294,9 @@ CREATE TRIGGER trigger_update_cash_flow_after_update
 AFTER UPDATE ON bills
 FOR EACH ROW
 EXECUTE FUNCTION update_cash_flow_after_update();
-""")
+"""
+)
+
 
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------
