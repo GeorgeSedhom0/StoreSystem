@@ -507,9 +507,9 @@ def add_cash_flow(amount: float, move_type: Literal["in", "out"],
             cur.execute(
                 """
                 INSERT INTO cash_flow (
-                    store_id, time, amount, type, description
+                    store_id, time, amount, type, description, needs_update
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, TRUE)
                 """, (
                     STORE_ID,
                     datetime.now().isoformat(),
@@ -792,7 +792,7 @@ def fetch_sync_data(cur, store_id):
     logging.info("Fetching cash data")
     cur.execute(
         """
-        SELECT id, bill_id, store_id,
+        SELECT bill_id, store_id,
                TO_CHAR(time, 'YYYY-MM-DD HH24:MI:SS.MS') AS time,
                amount, type, description
         FROM cash_flow
@@ -852,11 +852,9 @@ def insert_sync_data(cur, data):
     for row in data["cash_flow"]:
         cur.execute(
             """
-            INSERT INTO cash_flow (id, bill_id, store_id, time, amount,
+            INSERT INTO cash_flow (bill_id, store_id, time, amount,
             type, description, needs_update)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
-            ON CONFLICT (id, store_id) DO UPDATE
-            SET amount = EXCLUDED.amount
+            VALUES (%s, %s, %s, %s, %s, %s, FALSE)
         """, row)
 
 
