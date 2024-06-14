@@ -826,17 +826,6 @@ def insert_sync_data(cur, data):
             category = EXCLUDED.category
         """, row)
 
-    logging.info("Inserting bills")
-    for row in data["bills"]:
-        cur.execute(
-            """
-            INSERT INTO bills (id, store_id, ref_id, time, discount,
-            total, type, needs_update)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
-            ON CONFLICT (id, store_id) DO UPDATE
-            SET discount = EXCLUDED.discount, total = EXCLUDED.total
-        """, row)
-
     logging.info("Inserting products_flow")
     for row in data["products_flow"]:
         cur.execute(
@@ -848,14 +837,32 @@ def insert_sync_data(cur, data):
             SET bill_id = EXCLUDED.bill_id
         """, row)
 
-    logging.info("Inserting cash_flow")
+    logging.info("Merging and sorting bills and cash_flow data")
+    merged_data = []
+    for row in data["bills"]:
+        merged_data.append(row + ['bill', row[3]])  # assuming the 4th element is the time in bills
     for row in data["cash_flow"]:
-        cur.execute(
-            """
-            INSERT INTO cash_flow (bill_id, store_id, time, amount,
-            type, description, needs_update)
-            VALUES (%s, %s, %s, %s, %s, %s, FALSE)
-        """, row)
+        merged_data.append(row + ['cash_flow', row[2]])  # assuming the 3rd element is the time in cash_flow
+    merged_data.sort(key=lambda x: x[-1])  # sort by the last element which is the time
+    
+    logging.info("Inserting merged data")
+    for row in merged_data:
+        if row[-2] == 'bill':
+            cur.execute(
+                """
+                INSERT INTO bills (id, store_id, ref_id, time, discount,
+                total, type, needs_update)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
+                ON CONFLICT (id, store_id) DO UPDATE
+                SET discount = EXCLUDED.discount, total = EXCLUDED.total
+            """, row[:-2])
+        else:
+            cur.execute(
+                """
+                INSERT INTO cash_flow (bill_id, store_id, time, amount,
+                type, description, needs_update)
+                VALUES (%s, %s, %s, %s, %s, %s, FALSE)
+            """, row[:-2])
 
 
 @app.post("/send-sync")
