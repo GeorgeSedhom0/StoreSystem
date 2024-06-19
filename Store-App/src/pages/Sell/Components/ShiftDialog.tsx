@@ -44,7 +44,9 @@ const ShiftDialog = ({
   useEffect(() => {
     const fetchShiftTotal = async () => {
       try {
-        const { data } = await axios.get("http://localhost:8000/shift-total");
+        const { data } = await axios.get(
+          import.meta.env.VITE_SERVER_URL + "/shift-total"
+        );
         setShiftTotal(data);
       } catch (err) {
         console.log(err);
@@ -58,7 +60,9 @@ const ShiftDialog = ({
 
   const openShift = async () => {
     try {
-      const { data } = await axios.get("http://localhost:8000/start-shift");
+      const { data } = await axios.get(
+        import.meta.env.VITE_SERVER_URL + "/start-shift"
+      );
       setShift(data.start_date_time);
     } catch (err) {
       console.log(err);
@@ -67,7 +71,7 @@ const ShiftDialog = ({
 
   const closeShift = async () => {
     try {
-      await axios.get("http://localhost:8000/end-shift");
+      await axios.get(import.meta.env.VITE_SERVER_URL + "/end-shift");
       setShift(null);
     } catch (err) {
       console.log(err);

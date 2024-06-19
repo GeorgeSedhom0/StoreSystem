@@ -44,7 +44,7 @@ const Products = () => {
     setLoading(true);
     try {
       const { data } = await axios.get<Product[]>(
-        "http://localhost:8000/products"
+        import.meta.env.VITE_SERVER_URL + "/products"
       );
       setProducts(data);
     } catch (error) {
@@ -60,7 +60,10 @@ const Products = () => {
   const submitProducts = useCallback(async () => {
     setLoading(true);
     try {
-      await axios.put("http://localhost:8000/products", editedProducts);
+      await axios.put(
+        import.meta.env.VITE_SERVER_URL + "/products",
+        editedProducts
+      );
       setMsg({ type: "success", text: "تم تعديل المنتجات بنجاح" });
     } catch (error) {
       console.log(error);

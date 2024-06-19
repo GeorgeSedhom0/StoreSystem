@@ -29,12 +29,16 @@ import { printBill } from "../../utils/functions";
 import { useQuery } from "@tanstack/react-query";
 
 const getProds = async () => {
-  const { data } = await axios.get<Product[]>("http://localhost:8000/products");
+  const { data } = await axios.get<Product[]>(
+    import.meta.env.VITE_SERVER_URL + "/products"
+  );
   return data;
 };
 
 const getShift = async () => {
-  const { data } = await axios.get("http://localhost:8000/current-shift");
+  const { data } = await axios.get(
+    import.meta.env.VITE_SERVER_URL + "/current-shift"
+  );
   if (data.start_date_time) {
     return data.start_date_time;
   } else {
@@ -242,11 +246,15 @@ const Sell = () => {
             ) - discount,
           products_flow: shoppingCart,
         };
-        const { data } = await axios.post("http://localhost:8000/bill", bill, {
-          params: {
-            move_type: billPayment,
-          },
-        });
+        const { data } = await axios.post(
+          import.meta.env.VITE_SERVER_URL + "/bill",
+          bill,
+          {
+            params: {
+              move_type: billPayment,
+            },
+          }
+        );
         setLastBill(data.bill);
         setShoppingCart([]);
         setDiscount(0);

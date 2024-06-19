@@ -11,7 +11,9 @@ const Settings = () => {
   const backUp = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get("http://localhost:8000/backup");
+      const { data } = await axios.get(
+        import.meta.env.VITE_SERVER_URL + "/backup"
+      );
       // download the backup file
       const url = window.URL.createObjectURL(new Blob([data]));
       const link = document.createElement("a");
@@ -46,11 +48,15 @@ const Settings = () => {
         }
         const formData = new FormData();
         formData.append("file", file);
-        await axios.post("http://localhost:8000/restore", formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        });
+        await axios.post(
+          import.meta.env.VITE_SERVER_URL + "/restore",
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
         setMsg({ type: "success", text: "تم استعادة النسخة الاحطياتية" });
       };
     } catch (e) {

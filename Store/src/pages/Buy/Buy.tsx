@@ -21,7 +21,9 @@ import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../Shared/LoadingScreen";
 
 const getProducts = async () => {
-  const { data } = await axios.get<Product[]>("http://localhost:8000/products");
+  const { data } = await axios.get<Product[]>(
+    import.meta.env.VITE_SERVER_URL + "/products"
+  );
   return data;
 };
 
@@ -144,7 +146,7 @@ const Buy = () => {
             ) - discount,
           products_flow: shoppingCart,
         };
-        await axios.post("http://localhost:8000/bill", bill, {
+        await axios.post(import.meta.env.VITE_SERVER_URL + "/bill", bill, {
           params: {
             move_type: "buy",
           },

@@ -44,7 +44,7 @@ const Products = () => {
     setLoading(true);
     try {
       const { data } = await axios.get<Product[]>(
-        "http://localhost:8000/products"
+        import.meta.env.VITE_SERVER_URL + "/products"
       );
       setProducts(data);
     } catch (error) {
@@ -56,9 +56,12 @@ const Products = () => {
   const getInventory = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get("http://localhost:8000/inventory", {
-        responseType: "blob", // important
-      });
+      const response = await axios.get(
+        import.meta.env.VITE_SERVER_URL + "/inventory",
+        {
+          responseType: "blob", // important
+        }
+      );
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -79,12 +82,16 @@ const Products = () => {
   const submitProducts = useCallback(async () => {
     setLoading(true);
     try {
-      await axios.put("http://localhost:8000/products", editedProducts);
+      await axios.put(
+        import.meta.env.VITE_SERVER_URL + "/products",
+        editedProducts
+      );
       setMsg({ type: "success", text: "تم تعديل المنتجات بنجاح" });
     } catch (error) {
       console.log(error);
       setMsg({ type: "error", text: "حدث خطأ أثناء تعديل المنتجات" });
     }
+    await getProds();
     setLoading(false);
     setQuery("");
     setChangedOnly(false);

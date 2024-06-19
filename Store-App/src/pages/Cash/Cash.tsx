@@ -32,7 +32,9 @@ const Cash = () => {
   const getCashFlow = async () => {
     setLoading(true);
     try {
-      const response = await axios.get("http://localhost:8000/cash-flow");
+      const response = await axios.get(
+        import.meta.env.VITE_SERVER_URL + "/cash-flow"
+      );
       setCashFlow(response.data);
     } catch (error) {
       setMsg({ type: "error", text: "حدث خطأ ما" });
@@ -48,7 +50,7 @@ const Cash = () => {
     setLoading(true);
     try {
       await axios.post(
-        "http://localhost:8000/cash-flow",
+        import.meta.env.VITE_SERVER_URL + "/cash-flow",
         {},
         {
           params: {

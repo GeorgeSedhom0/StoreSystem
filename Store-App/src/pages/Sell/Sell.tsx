@@ -53,9 +53,11 @@ const Sell = () => {
     const getProds = async () => {
       setLoading(true);
       try {
-        const { data } = await axios.get("http://localhost:8000/products");
+        const { data } = await axios.get(
+          import.meta.env.VITE_SERVER_URL + "/products"
+        );
         const { data: currentShift } = await axios.get(
-          "http://localhost:8000/current-shift"
+          import.meta.env.VITE_SERVER_URL + "/current-shift"
         );
         setProducts(data);
         setShift(currentShift.start_date_time);
@@ -219,11 +221,15 @@ const Sell = () => {
             ) - discount,
           products_flow: shoppingCart,
         };
-        const { data } = await axios.post("http://localhost:8000/bill", bill, {
-          params: {
-            move_type: billPayment,
-          },
-        });
+        const { data } = await axios.post(
+          import.meta.env.VITE_SERVER_URL + "/bill",
+          bill,
+          {
+            params: {
+              move_type: billPayment,
+            },
+          }
+        );
         setLastBill(data.bill);
         setShoppingCart([]);
         setDiscount(0);

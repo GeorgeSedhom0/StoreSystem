@@ -8,7 +8,6 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import UploadFile, File
-import requests
 from datetime import datetime
 import logging
 from dotenv import load_dotenv
@@ -161,7 +160,8 @@ def get_products():
             cur.execute("""SELECT
                         id, name, bar_code, wholesale_price,
                         price, stock, category
-                        FROM products""")
+                        FROM products
+                        ORDER BY id;""")
             products = cur.fetchall()
         return JSONResponse(content=products)
     except Exception as e:
@@ -226,7 +226,7 @@ def update_product(products: list[Product]):
                 UPDATE products
                 SET
                     name = %s, bar_code = %s,
-                    category = %s, needs_update = TRUE
+                    category = %s
                 WHERE id = %s
                 RETURNING *
                 """, db_products)
@@ -304,7 +304,7 @@ def update_bill(bill: dbBill):
     Update a bill in the database
 
     To update the bill successfully, you MUST follow these steps:
-        1. Update the bill total, discount, and needs_update
+        1. Update the bill total, discount
         2. Set all the old products_flow assosiated with the bill to ref_id {id}_-1
         3. Insert the new products_flow with the "-1" ref_id that reverts the old products_flow
         4. Insert the new products_flow with the correct ref_id
@@ -332,8 +332,7 @@ def update_bill(bill: dbBill):
                 UPDATE bills
                 SET
                     discount = %s,
-                    total = %s,
-                    needs_update = TRUE
+                    total = %s
                 WHERE ref_id = %s
                 RETURNING *
                 """, (bill.discount, bill.total, bill.id))
@@ -342,8 +341,7 @@ def update_bill(bill: dbBill):
                 """
                 UPDATE products_flow
                 SET
-                    bill_id = %s,
-                    needs_update = TRUE
+                    bill_id = %s
                 WHERE bill_id = %s
                 RETURNING *
                 """, (f"{STORE_ID}_-1", bill.id))
@@ -507,9 +505,9 @@ def add_cash_flow(amount: float, move_type: Literal["in", "out"],
             cur.execute(
                 """
                 INSERT INTO cash_flow (
-                    store_id, time, amount, type, description, needs_update
+                    store_id, time, amount, type, description
                 )
-                VALUES (%s, %s, %s, %s, %s, TRUE)
+                VALUES (%s, %s, %s, %s, %s)
                 """, (
                     STORE_ID,
                     datetime.now().isoformat(),
@@ -752,149 +750,4 @@ async def restore(file: UploadFile = File(...)):
 
     except Exception as e:
         logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-def fetch_sync_data(cur, store_id):
-    logging.info("Fetching products data")
-    cur.execute("""
-        SELECT id, name, bar_code, wholesale_price, price, category
-        FROM products
-        WHERE needs_update = TRUE
-    """)
-    products = cur.fetchall()
-    cur.execute("UPDATE products SET needs_update = FALSE")
-
-    logging.info("Fetching bills data")
-    cur.execute(
-        """
-        SELECT id, store_id, ref_id,
-               TO_CHAR(time, 'YYYY-MM-DD HH24:MI:SS.MS') AS time,
-               discount, total, type
-        FROM bills
-        WHERE needs_update = TRUE AND store_id = %s
-        ORDER BY time
-    """, (store_id, ))
-    bills = cur.fetchall()
-    cur.execute("UPDATE bills SET needs_update = FALSE")
-
-    logging.info("Fetching products flow data")
-    cur.execute(
-        """
-        SELECT id, store_id, bill_id, product_id,
-        wholesale_price, price, amount
-        FROM products_flow
-        WHERE needs_update = TRUE AND store_id = %s;
-    """, (store_id, ))
-    products_flow = cur.fetchall()
-    cur.execute("UPDATE products_flow SET needs_update = FALSE")
-
-    logging.info("Fetching cash data")
-    cur.execute(
-        """
-        SELECT bill_id, store_id,
-               TO_CHAR(time, 'YYYY-MM-DD HH24:MI:SS.MS') AS time,
-               amount, type, description
-        FROM cash_flow
-        WHERE
-            needs_update = TRUE
-            AND store_id = %s
-            AND bill_id IS NULL
-        ORDER BY time
-    """, (store_id, ))
-    cash_flow = cur.fetchall()
-    cur.execute("UPDATE cash_flow SET needs_update = FALSE")
-
-    return {
-        "products": products,
-        "bills": bills,
-        "cash_flow": cash_flow,
-        "products_flow": products_flow
-    }
-
-
-def insert_sync_data(cur, data):
-    logging.info("Inserting products")
-    for row in data["products"]:
-        cur.execute(
-            """
-            INSERT INTO products (id, name, bar_code, wholesale_price, price,
-            category, needs_update)
-            VALUES (%s, %s, %s, %s, %s, %s, FALSE)
-            ON CONFLICT (id) DO UPDATE
-            SET name = EXCLUDED.name, bar_code = EXCLUDED.bar_code,
-            category = EXCLUDED.category
-        """, row)
-
-    logging.info("Inserting products_flow")
-    for row in data["products_flow"]:
-        cur.execute(
-            """
-            INSERT INTO products_flow (id, store_id, bill_id, product_id,
-            wholesale_price, price, amount, needs_update)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
-            ON CONFLICT (id, store_id) DO UPDATE
-            SET bill_id = EXCLUDED.bill_id
-        """, row)
-
-    logging.info("Merging and sorting bills and cash_flow data")
-    merged_data = []
-    for row in data["bills"]:
-        merged_data.append(row + ['bill', row[3]])  # assuming the 4th element is the time in bills
-    for row in data["cash_flow"]:
-        merged_data.append(row + ['cash_flow', row[2]])  # assuming the 3rd element is the time in cash_flow
-    merged_data.sort(key=lambda x: x[-1])  # sort by the last element which is the time
-    
-    logging.info("Inserting merged data")
-    for row in merged_data:
-        if row[-2] == 'bill':
-            cur.execute(
-                """
-                INSERT INTO bills (id, store_id, ref_id, time, discount,
-                total, type, needs_update)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE)
-                ON CONFLICT (id, store_id) DO UPDATE
-                SET discount = EXCLUDED.discount, total = EXCLUDED.total
-            """, row[:-2])
-        else:
-            cur.execute(
-                """
-                INSERT INTO cash_flow (bill_id, store_id, time, amount,
-                type, description, needs_update)
-                VALUES (%s, %s, %s, %s, %s, %s, FALSE)
-            """, row[:-2])
-
-
-@app.post("/send-sync")
-def sync():
-    try:
-        with Database(HOST, DATABASE, USER, PASS,
-                      real_dict_cursor=False) as cur:
-            data = fetch_sync_data(cur, STORE_ID)
-
-            response = requests.post(f"{OTHER_STORE}/accept-sync",
-                                     json=data,
-                                     timeout=250)
-            response.raise_for_status()
-
-            new_data = response.json()
-            insert_sync_data(cur, new_data)
-
-        return {"message": "Sync completed successfully"}
-
-    except Exception as e:
-        logging.error("Error: %s", e)
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.post("/accept-sync")
-def accept_sync(data: dict):
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            new_data = fetch_sync_data(cur, STORE_ID)
-            insert_sync_data(cur, data)
-            return {**new_data, "message": "Sync completed successfully"}
-
-    except Exception as e:
-        logging.error("Error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from e

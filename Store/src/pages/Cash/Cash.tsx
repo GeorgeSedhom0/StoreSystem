@@ -27,7 +27,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 
 const getCashFlow = async (startDate: Dayjs, endDate: Dayjs) => {
   const { data } = await axios.get<CashFlow[]>(
-    "http://localhost:8000/cash-flow",
+    import.meta.env.VITE_SERVER_URL + "/cash-flow",
     {
       params: {
         start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
@@ -49,7 +49,9 @@ const Cash = () => {
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
     queryFn: async () => {
-      const { data } = await axios.get("http://localhost:8000/last-shift");
+      const { data } = await axios.get(
+        import.meta.env.VITE_SERVER_URL + "/last-shift"
+      );
       return data;
     },
   });
@@ -97,7 +99,7 @@ const Cash = () => {
   const addCashFlow = async () => {
     try {
       await axios.post(
-        "http://localhost:8000/cash-flow",
+        import.meta.env.VITE_SERVER_URL + "/cash-flow",
         {},
         {
           params: {

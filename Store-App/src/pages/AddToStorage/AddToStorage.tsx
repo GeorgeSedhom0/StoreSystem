@@ -25,7 +25,7 @@ const Storage = () => {
   const addProduct = useCallback(async () => {
     try {
       const { data } = await axios.post(
-        "http://localhost:8000/product",
+        import.meta.env.VITE_SERVER_URL + "/product",
         product
       );
       console.log(data);
@@ -46,7 +46,9 @@ const Storage = () => {
 
   const getBarcode = useCallback(async () => {
     try {
-      const { data } = await axios.get("http://localhost:8000/barcode");
+      const { data } = await axios.get(
+        import.meta.env.VITE_SERVER_URL + "/barcode"
+      );
       setProduct({ ...product, bar_code: data });
     } catch (error) {
       console.log(error);

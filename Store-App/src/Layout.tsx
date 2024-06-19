@@ -15,7 +15,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const sync = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.post("http://localhost:8000/send-sync");
+      const { data } = await axios.post(
+        import.meta.env.VITE_SERVER_URL + "/send-sync"
+      );
       console.log(data);
       setMsg({ type: "success", text: "تمت المزامنة بنجاح" });
     } catch (e) {

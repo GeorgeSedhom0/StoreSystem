@@ -31,7 +31,9 @@ const Buy = () => {
   useEffect(() => {
     const getProds = async () => {
       try {
-        const { data } = await axios.get("http://localhost:8000/products");
+        const { data } = await axios.get(
+          import.meta.env.VITE_SERVER_URL + "/products"
+        );
         setProducts(data);
       } catch (error) {
         console.log(error);
@@ -139,7 +141,7 @@ const Buy = () => {
             ) - discount,
           products_flow: shoppingCart,
         };
-        await axios.post("http://localhost:8000/bill", bill, {
+        await axios.post(import.meta.env.VITE_SERVER_URL + "/bill", bill, {
           params: {
             move_type: "buy",
           },

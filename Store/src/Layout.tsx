@@ -1,11 +1,9 @@
 import { AppBar, Button, Toolbar, Grid, IconButton } from "@mui/material";
-import { LoadingButton } from "@mui/lab";
 import { ViewContainer } from "./pages/Shared/Utils";
 import { useNavigate } from "react-router-dom";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import AlertMessage, { AlertMsg } from "./pages/Shared/AlertMessage";
 import SettingsIcon from "@mui/icons-material/Settings";
-import axios from "axios";
 import { NavLink } from "react-router-dom";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import BrightnessHighIcon from "@mui/icons-material/BrightnessHigh";
@@ -20,22 +18,8 @@ const Layout = ({
   setThemeMode: React.Dispatch<React.SetStateAction<"dark" | "light">>;
 }) => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
-  const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
-
-  const sync = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await axios.post("http://localhost:8000/send-sync");
-      console.log(data);
-      setMsg({ type: "success", text: "تمت المزامنة بنجاح" });
-    } catch (e) {
-      setMsg({ type: "error", text: "حدث خطا ما" });
-    }
-    setLoading(false);
-  }, []);
-
   return (
     <>
       <AppBar
@@ -77,9 +61,6 @@ const Layout = ({
             <NavLink to="/cash">
               <Button>الحركات المالية</Button>
             </NavLink>
-            <LoadingButton loading={loading} onClick={sync}>
-              مزامنة
-            </LoadingButton>
           </Grid>
           <IconButton
             onClick={() => {

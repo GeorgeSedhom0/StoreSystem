@@ -43,7 +43,7 @@ const Bills = () => {
     setLoading(true);
     try {
       const { data } = await axios.get<BillType[]>(
-        "http://localhost:8000/bills",
+        import.meta.env.VITE_SERVER_URL + "/bills",
         {
           params: {
             start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),

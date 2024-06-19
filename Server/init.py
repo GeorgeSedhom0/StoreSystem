@@ -274,7 +274,8 @@ EXECUTE FUNCTION bubble_fix_total_after_update();
 """
 )
 
-# create the trigger to update cash_flow after updating a bill and set needs_update to true
+# create the trigger to update cash_flow
+# after updating a bill and set needs_update to true
 cur.execute(
     """
 -- Trigger to update cash_flow after update

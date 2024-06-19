@@ -28,12 +28,15 @@ import {
 import { useQuery } from "@tanstack/react-query";
 
 const getBills = async (startDate: Dayjs, endDate: Dayjs) => {
-  const { data } = await axios.get<BillType[]>("http://localhost:8000/bills", {
-    params: {
-      start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
-      end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
-    },
-  });
+  const { data } = await axios.get<BillType[]>(
+    import.meta.env.VITE_SERVER_URL + "/bills",
+    {
+      params: {
+        start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
+        end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
+      },
+    }
+  );
   return data;
 };
 
@@ -52,7 +55,9 @@ const Bills = () => {
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
     queryFn: async () => {
-      const { data } = await axios.get("http://localhost:8000/last-shift");
+      const { data } = await axios.get(
+        import.meta.env.VITE_SERVER_URL + "/last-shift"
+      );
       return data;
     },
   });

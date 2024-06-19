@@ -54,7 +54,9 @@ const EditableBill = ({
     const getProds = async () => {
       setLoading(true);
       try {
-        const { data } = await axios.get("http://localhost:8000/products");
+        const { data } = await axios.get(
+          import.meta.env.VITE_SERVER_URL + "/products"
+        );
         setProducts(data);
       } catch (error) {
         console.log(error);
@@ -127,7 +129,7 @@ const EditableBill = ({
   const submitBill = useCallback(async () => {
     setLoading(true);
     try {
-      await axios.put(`http://localhost:8000/bill`, editedBill);
+      await axios.put(import.meta.env.VITE_SERVER_URL + "/bill", editedBill);
       getBills();
       setEditing(false);
     } catch (error) {
