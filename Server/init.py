@@ -35,8 +35,7 @@ CREATE TABLE products (
   wholesale_price FLOAT,
   price FLOAT,
   stock INT,
-  category VARCHAR,
-  needs_update BOOLEAN DEFAULT TRUE
+  category VARCHAR
 )
 """
 )
@@ -52,7 +51,6 @@ CREATE TABLE bills (
   discount FLOAT,
   total FLOAT,
   type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL'
-  needs_update BOOLEAN DEFAULT TRUE,
   PRIMARY KEY (id, store_id)
 )
 """
@@ -70,7 +68,6 @@ CREATE TABLE cash_flow (
   bill_id VARCHAR,
   description VARCHAR,
   total FLOAT,
-  needs_update BOOLEAN DEFAULT TRUE,
   PRIMARY KEY (id, store_id)
 )
 """
@@ -87,7 +84,6 @@ CREATE TABLE products_flow (
   wholesale_price FLOAT,
   price FLOAT,
   amount INT,
-  needs_update BOOLEAN DEFAULT TRUE,
   PRIMARY KEY (id, store_id)
 )
 """
@@ -274,8 +270,7 @@ EXECUTE FUNCTION bubble_fix_total_after_update();
 """
 )
 
-# create the trigger to update cash_flow
-# after updating a bill and set needs_update to true
+# create the trigger to update cash_flow after updating a bill
 cur.execute(
     """
 -- Trigger to update cash_flow after update
