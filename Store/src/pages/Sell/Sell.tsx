@@ -64,6 +64,7 @@ const Sell = () => {
   const [printer, setPrinter] = useState<any | null>(null);
 
   const billRef = useRef<HTMLDivElement>(null);
+  const savingRef = useRef<boolean>(false);
 
   const {
     data: products,
@@ -228,6 +229,8 @@ const Sell = () => {
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
+      if (savingRef.current) return;
+      savingRef.current = true;
       if (discount >= shoppingCart.reduce((acc, item) => acc + item.price, 0)) {
         setMsg({
           type: "error",
@@ -271,6 +274,7 @@ const Sell = () => {
           text: "حدث خطأ ما",
         });
       }
+      savingRef.current = false;
     },
     [billPayment]
   );
