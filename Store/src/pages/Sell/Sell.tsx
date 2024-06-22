@@ -255,6 +255,7 @@ const Sell = () => {
           {
             params: {
               move_type: billPayment,
+              store_id: import.meta.env.VITE_STORE_ID,
             },
           }
         );

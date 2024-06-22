@@ -149,6 +149,7 @@ const Buy = () => {
         await axios.post(import.meta.env.VITE_SERVER_URL + "/bill", bill, {
           params: {
             move_type: "buy",
+            store_id: import.meta.env.VITE_STORE_ID,
           },
         });
         await updateProducts();

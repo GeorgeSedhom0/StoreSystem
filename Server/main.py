@@ -19,8 +19,6 @@ import os
 
 load_dotenv()
 
-STORE_ID = getenv("STORE_ID")
-
 # PostgreSQL connection details
 HOST = getenv("HOST")
 DATABASE = getenv("DATABASE")
@@ -138,14 +136,6 @@ def get_bar_code():
         return str(int(cur.fetchone()["b"]) + 1)
 
 
-@app.get("/store-id")
-def get_store_id():
-    """
-    Get the store ID
-    """
-    return STORE_ID
-
-
 @app.get("/products")
 def get_products():
     """
@@ -200,7 +190,7 @@ def add_product(product: Product):
 
 
 @app.put("/products")
-def update_product(products: list[Product]):
+def update_product(products: list[Product], store_id: int):
     """
     Update a product in the database
 
@@ -218,7 +208,7 @@ def update_product(products: list[Product]):
                 db_products.append((product.name, product.bar_code,
                                     product.category, product.id))
                 db_products_flow.append(
-                    (STORE_ID, f"{STORE_ID}_-1", product.id, product.stock,
+                    (store_id, f"{store_id}_-1", product.id, product.stock,
                      product.wholesale_price, product.price, product.id))
 
             cur.executemany(
@@ -299,7 +289,7 @@ def get_bills(start_date: Optional[str] = None,
 
 
 @app.put("/bill")
-def update_bill(bill: dbBill):
+def update_bill(bill: dbBill, store_id: int):
     """
     Update a bill in the database
 
@@ -324,6 +314,8 @@ def update_bill(bill: dbBill):
     for product in products:
         product.amount = (-product.amount if bill.type in ["buy", "return"]
                           else product.amount)
+    
+    bill_id = bill.id.split("_")[1]
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
@@ -344,15 +336,15 @@ def update_bill(bill: dbBill):
                     bill_id = %s
                 WHERE bill_id = %s
                 RETURNING *
-                """, (f"{STORE_ID}_-1", bill.id))
+                """, (f"{store_id}_-{bill_id}", bill.id))
 
             values_to_reverse = cur.fetchall()
-            values = [(STORE_ID, f"{STORE_ID}_-1", product["product_id"],
+            values = [(store_id, f"{store_id}_-{bill_id}", product["product_id"],
                        -product["amount"], product["wholesale_price"],
                        product["price"]) for product in values_to_reverse]
 
             values += [
-                (STORE_ID, bill.id, product_flow.id, -product_flow.amount,
+                (store_id, bill.id, product_flow.id, -product_flow.amount,
                  product_flow.wholesale_price, product_flow.price)
                 for product_flow in bill.products
             ]
@@ -373,7 +365,8 @@ def update_bill(bill: dbBill):
 
 
 @app.post("/bill")
-def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"]):
+def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"],
+             store_id: int):
     """
     Add a bill to the database
 
@@ -394,7 +387,7 @@ def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"]):
                 VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (STORE_ID, bill.time, bill.discount, bill_total, move_type))
+                (store_id, bill.time, bill.discount, bill_total, move_type))
             result = cur.fetchone()
             if not result:
                 raise HTTPException(status_code=400,
@@ -402,7 +395,7 @@ def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"]):
             bill_id = result["id"]
 
             # Create a list of tuples
-            values = [(STORE_ID, f"{STORE_ID}_{bill_id}", product_flow.id,
+            values = [(store_id, f"{store_id}_{bill_id}", product_flow.id,
                        -product_flow.quantity if move_type in ["sell", "BNPL"]
                        else product_flow.quantity,
                        product_flow.wholesale_price, product_flow.price)
@@ -444,7 +437,7 @@ def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"]):
                 WHERE bills.id = %s
                 AND bills.store_id = %s
                 GROUP BY bills.ref_id, bills.time, bills.discount, bills.total, bills.type
-                    """, (bill_id, STORE_ID))
+                    """, (bill_id, store_id))
 
             bill = cur.fetchone()
         return {"message": "Bill added successfully", "bill": bill}
@@ -488,7 +481,7 @@ def get_cash_flow(start_date: Optional[str] = None,
 
 @app.post("/cash-flow")
 def add_cash_flow(amount: float, move_type: Literal["in", "out"],
-                  description: str):
+                  description: str, store_id: int):
     """
     Add a cash flow record to the database
 
@@ -509,7 +502,7 @@ def add_cash_flow(amount: float, move_type: Literal["in", "out"],
                 )
                 VALUES (%s, %s, %s, %s, %s)
                 """, (
-                    STORE_ID,
+                    store_id,
                     datetime.now().isoformat(),
                     amount,
                     move_type,

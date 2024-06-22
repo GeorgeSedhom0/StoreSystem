@@ -106,6 +106,7 @@ const Cash = () => {
             amount,
             move_type: moveType,
             description,
+            store_id: import.meta.env.VITE_STORE_ID,
           },
         }
       );

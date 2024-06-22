@@ -84,7 +84,12 @@ const Products = () => {
     try {
       await axios.put(
         import.meta.env.VITE_SERVER_URL + "/products",
-        editedProducts
+        editedProducts,
+        {
+          params: {
+            store_id: import.meta.env.VITE_STORE_ID,
+          },
+        }
       );
       setMsg({ type: "success", text: "تم تعديل المنتجات بنجاح" });
     } catch (error) {
