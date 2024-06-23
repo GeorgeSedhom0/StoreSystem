@@ -15,6 +15,7 @@ export interface SCProduct {
   price: number;
   quantity: number;
   stock: number;
+  barCode?: string;
 }
 
 export interface Bill {

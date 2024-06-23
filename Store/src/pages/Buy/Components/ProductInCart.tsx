@@ -1,5 +1,12 @@
-import { Button, TextField, TableRow, TableCell } from "@mui/material";
+import {
+  Button,
+  TextField,
+  TableRow,
+  TableCell,
+  ButtonGroup,
+} from "@mui/material";
 import { SCProduct } from "../../../utils/types";
+import { printCode } from "../../../utils/functions";
 
 const ProductInCart = ({
   product,
@@ -72,17 +79,31 @@ const ProductInCart = ({
       <TableCell>{product.wholesale_price * product.quantity}</TableCell>
 
       <TableCell>
-        <Button
-          variant="contained"
-          color="error"
-          onClick={() => {
-            setShoppingCart((prev) =>
-              prev.filter((item) => item.id !== product.id)
-            );
-          }}
-        >
-          حذف
-        </Button>
+        <ButtonGroup>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setShoppingCart((prev) =>
+                prev.filter((item) => item.id !== product.id)
+              );
+            }}
+          >
+            حذف
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() =>
+              printCode(
+                product.barCode!,
+                `فحم المهندس \n ${product.name}`,
+                product.price.toString() + " " + "جنية ",
+                "ar"
+              )
+            }
+          >
+            طباعة الباركود
+          </Button>
+        </ButtonGroup>
       </TableCell>
     </TableRow>
   );

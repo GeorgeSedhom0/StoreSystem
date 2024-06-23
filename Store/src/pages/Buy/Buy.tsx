@@ -83,6 +83,7 @@ const Buy = () => {
             wholesale_price: product.wholesale_price,
             quantity: 1,
             stock: product.stock,
+            barCode: product.bar_code,
           },
         ];
       }
@@ -252,7 +253,7 @@ const Buy = () => {
                     <TableCell>سعر الشراء</TableCell>
                     <TableCell>السعر</TableCell>
                     <TableCell>الاجمالي</TableCell>
-                    <TableCell>حذف</TableCell>
+                    <TableCell></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
