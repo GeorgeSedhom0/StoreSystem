@@ -93,14 +93,14 @@ const BillView = forwardRef(
                     "& .MuiTableCell-root": {
                       fontSize: "1.5em",
                       textAlign: "center",
-                      wordBreak: "break-all",
+                      whiteSpace: "word-wrap",
                     },
                   }}
                 >
                   <TableHead>
                     <TableRow>
-                      <TableCell width={100}>المنتج</TableCell>
-                      <TableCell width={100}>الكمية</TableCell>
+                      <TableCell width={200}>المنتج</TableCell>
+                      <TableCell>الكمية</TableCell>
                       <TableCell>السعر</TableCell>
                       <TableCell>ألاجمالى</TableCell>
                     </TableRow>
@@ -153,9 +153,9 @@ const BillView = forwardRef(
                       <TableCell>
                         {bill.type === "BNPL"
                           ? bill.products.reduce(
-                              (acc, p) => acc + Math.abs(p.amount),
+                              (acc, p) => acc + Math.abs(p.amount) * p.price,
                               0
-                            ) * bill.products[0].price
+                            )
                           : Math.abs(bill.total) + Math.abs(bill.discount)}
                       </TableCell>
                     </TableRow>
@@ -168,11 +168,9 @@ const BillView = forwardRef(
                       <TableCell>
                         {bill.type === "BNPL"
                           ? bill.products.reduce(
-                              (acc, p) => acc + Math.abs(p.amount),
+                              (acc, p) => acc + Math.abs(p.amount) * p.price,
                               0
-                            ) *
-                              bill.products[0].price -
-                            bill.discount
+                            ) - bill.discount
                           : Math.abs(bill.total)}
                       </TableCell>
                     </TableRow>
