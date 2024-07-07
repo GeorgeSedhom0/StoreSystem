@@ -14,6 +14,7 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../../Shared/LoadingScreen";
+import { useEffect } from "react";
 
 interface ShiftDialogProps {
   dialogOpen: boolean;
@@ -48,11 +49,19 @@ const ShiftDialog = ({
     setDialogOpen(false);
   };
 
-  const { data: shiftTotal, isLoading: isShiftTotalLoading } = useQuery({
+  const {
+    data: shiftTotal,
+    isLoading: isShiftTotalLoading,
+    refetch: refetchShiftDetails,
+  } = useQuery({
     queryKey: ["shiftTotal"],
     queryFn: getShiftTotal,
     initialData: { sell_total: 0, buy_total: 0, return_total: 0 },
   });
+
+  useEffect(() => {
+    refetchShiftDetails();
+  }, [dialogOpen]);
 
   const openShift = async () => {
     try {

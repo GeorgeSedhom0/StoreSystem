@@ -432,7 +432,6 @@ const Sell = () => {
                   addToCart(value);
                   setQuery("");
                 }}
-                filterOptions={(x) => x}
                 autoHighlight
                 inputValue={query}
                 renderInput={(params) => (

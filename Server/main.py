@@ -151,7 +151,8 @@ def get_products():
                         id, name, bar_code, wholesale_price,
                         price, stock, category
                         FROM products
-                        ORDER BY id;""")
+                        ORDER BY name;
+                        """)
             products = cur.fetchall()
         return JSONResponse(content=products)
     except Exception as e:
