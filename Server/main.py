@@ -933,17 +933,18 @@ def shifts_analytics(
                 """
                 SELECT
                     start_date_time,
-                    COALESCE(end_date_time, CURRENT_TIMESTAMP) AS end_date_time,
+                    end_date_time,
                     (
                         SELECT COALESCE(SUM(total), 0)
                         FROM bills
                         WHERE time >= start_date_time
-                        AND time <= end_date_time
+                        AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
                         AND type IN %s
                     ) AS total
                 FROM shifts
                 WHERE start_date_time >= %s
                 AND start_date_time <= %s
+                AND current = False
                 ORDER BY start_date_time
                 """, (tuple(bills_type), start_date, end_date))
             data = [{"start_date_time": str(row["start_date_time"]),
