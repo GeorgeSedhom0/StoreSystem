@@ -17,6 +17,7 @@ import Settings from "./pages/Setting/Setting";
 import { useState } from "react";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import Login from "./pages/Login/Login";
+import Analytics from "./pages/Analytics/Analytics";
 
 const localMode = localStorage.getItem("mode");
 let mode: "dark" | "light";
@@ -83,6 +84,7 @@ const App = () => {
                 <Route path="/products" element={<Products />} />
                 <Route path="/bills" element={<Bills />} />
                 <Route path="/cash" element={<Cash />} />
+                <Route path="/analytics" element={<Analytics />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/login" element={<Login />} />
               </Routes>

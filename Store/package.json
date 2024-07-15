@@ -21,6 +21,7 @@
     "axios": "^1.6.8",
     "dayjs": "^1.11.10",
     "dom-to-image": "^2.6.0",
+    "echarts-for-react": "^3.0.2",
     "esc-pos-encoder": "^2.0.1",
     "jsbarcode": "^3.11.6",
     "print-js": "^1.6.0",
