@@ -11,16 +11,15 @@ import {
 import { Box } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../../Shared/LoadingScreen";
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface ShiftDialogProps {
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
-  shift: string | null;
-  refetchShift: () => void;
+  shift: string;
 }
 
 interface ShiftTotal {
@@ -40,14 +39,13 @@ const ShiftDialog = ({
   dialogOpen,
   setDialogOpen,
   shift,
-  refetchShift,
 }: ShiftDialogProps) => {
-  const navigate = useNavigate();
-
   const handleClose = () => {
     if (!shift) return;
     setDialogOpen(false);
   };
+
+  const navigate = useNavigate();
 
   const {
     data: shiftTotal,
@@ -63,19 +61,12 @@ const ShiftDialog = ({
     refetchShiftDetails();
   }, [dialogOpen]);
 
-  const openShift = async () => {
-    try {
-      await axios.get(import.meta.env.VITE_SERVER_URL + "/start-shift");
-      refetchShift();
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
   const closeShift = async () => {
     try {
-      await axios.get(import.meta.env.VITE_SERVER_URL + "/end-shift");
-      refetchShift();
+      await axios.post(import.meta.env.VITE_SERVER_URL + "/logout", null, {
+        withCredentials: true,
+      });
+      navigate("/login");
     } catch (err) {
       console.log(err);
     }
@@ -99,14 +90,13 @@ const ShiftDialog = ({
           style={{ height: "100%" }}
         >
           <DialogContentText>
-            {shift
-              ? `
+            {shift &&
+              `
             شيفت مفتوحة منذ: ${new Date(shift).toLocaleTimeString("ar-EG", {
               hour: "2-digit",
               minute: "2-digit",
             })}
-            `
-              : "لا يوجد شيفت مفتوحة"}
+            `}
           </DialogContentText>
         </Box>
       </DialogContent>
@@ -118,7 +108,7 @@ const ShiftDialog = ({
           style={{ height: "100%" }}
         >
           <DialogContentText>
-            {shift ? (
+            {shift && (
               <Typography variant="body1" align="center">
                 اجمالى البيع خلال الشيفت: {shiftTotal.sell_total}
                 <br />
@@ -133,8 +123,6 @@ const ShiftDialog = ({
                 <br />
                 اجمالى الرصيد: {shiftTotal.sell_total + shiftTotal.return_total}
               </Typography>
-            ) : (
-              "لا يوجد فواتير"
             )}
           </DialogContentText>
         </Box>
@@ -143,13 +131,9 @@ const ShiftDialog = ({
         <IconButton onClick={handleClose} disabled={!shift}>
           <CloseIcon />
         </IconButton>
-        <Button onClick={openShift} disabled={!!shift}>
-          فتح شيفت
-        </Button>
         <Button onClick={closeShift} disabled={!shift}>
-          إغلاق شيفت
+          إغلاق شيفت و تسجيل الخروج
         </Button>
-        <Button onClick={() => navigate("/bills")}>الفواتير</Button>
       </DialogActions>
     </Dialog>
   );

@@ -16,6 +16,7 @@ import Cash from "./pages/Cash/Cash";
 import Settings from "./pages/Setting/Setting";
 import { useState } from "react";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
+import Login from "./pages/Login/Login";
 
 const localMode = localStorage.getItem("mode");
 let mode: "dark" | "light";
@@ -27,7 +28,13 @@ if (!localMode || (localMode !== "dark" && localMode !== "light")) {
   mode = localMode;
 }
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
 
 const App = () => {
   const [themeMode, setThemeMode] = useState<"dark" | "light">(mode);
@@ -77,6 +84,7 @@ const App = () => {
                 <Route path="/bills" element={<Bills />} />
                 <Route path="/cash" element={<Cash />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/login" element={<Login />} />
               </Routes>
             </Layout>
           </Router>

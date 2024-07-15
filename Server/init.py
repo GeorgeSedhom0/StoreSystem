@@ -1,6 +1,7 @@
 import psycopg2  # type: ignore
 from dotenv import load_dotenv  # type: ignore
 from os import getenv
+import bcrypt  # type: ignore
 
 load_dotenv()
 
@@ -17,6 +18,10 @@ conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
 cur = conn.cursor()
 
 # Drop all tables before creating
+cur.execute("DROP TABLE IF EXISTS users CASCADE")
+cur.execute("DROP TABLE IF EXISTS scopes CASCADE")
+cur.execute("DROP TABLE IF EXISTS store_data CASCADE")
+cur.execute("DROP TABLE IF EXISTS pages CASCADE")
 cur.execute("DROP TABLE IF EXISTS products CASCADE")
 cur.execute("DROP TABLE IF EXISTS bills CASCADE")
 cur.execute("DROP TABLE IF EXISTS cash_flow CASCADE")
@@ -25,9 +30,77 @@ cur.execute("DROP TABLE IF EXISTS shifts CASCADE")
 
 cur.execute("SET TIME ZONE 'Africa/Cairo'")
 
-# Create the products table
+# Create the scopes table
+cur.execute("""
+CREATE TABLE scopes (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR UNIQUE,
+    pages INT[]
+)""")
+cur.execute("""
+INSERT INTO scopes (name, pages)
+VALUES
+('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8])
+""")
+
+# Create pages table
+cur.execute("""
+CREATE TABLE pages (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR,
+    path VARCHAR
+)""")
+
+cur.execute("""
+INSERT INTO pages (name, path)
+VALUES
+('بيع', '/sell'),
+('شراء', '/buy'),
+('اضافة منتجات', '/add-to-storage'),
+('الفواتير', '/bills'),
+('المنتجات', '/products'),
+('الحكرات المالية', '/cash'),
+('التقارير', '/analytics'),
+('الاعدادات', '/settings')
+""")
+
+# Create the users table
+cur.execute("""
+CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    username VARCHAR UNIQUE,
+    password VARCHAR,
+    email VARCHAR,
+    phone VARCHAR,
+    language VARCHAR,
+    scope_id BIGINT REFERENCES scopes(id)
+)
+""")
+# IF for god knows why reason you're using this and you're not me
+# comment out the following query
+password = "verystrongpassword"
+hashed_password = bcrypt.hashpw(
+    password.encode('utf-8'),
+    bcrypt.gensalt(),
+).decode('utf-8')
 cur.execute(
     """
+INSERT INTO users (username, password, email, phone, language, scope_id)
+VALUES
+('george', %s, 'myamazingemail@me.wow.so.cool.email', '01000000000', 'ar', 1)
+""", (hashed_password, ))
+
+# Create the store_data table
+cur.execute("""
+CREATE TABLE store_data (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR,
+    address VARCHAR,
+    phone VARCHAR
+)""")
+
+# Create the products table
+cur.execute("""
 CREATE TABLE products (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR,
@@ -37,12 +110,10 @@ CREATE TABLE products (
   stock INT,
   category VARCHAR
 )
-"""
-)
+""")
 
 # Create the bills table
-cur.execute(
-    """
+cur.execute("""
 CREATE TABLE bills (
   id BIGSERIAL,
   store_id BIGINT,
@@ -53,12 +124,10 @@ CREATE TABLE bills (
   type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL'
   PRIMARY KEY (id, store_id)
 )
-"""
-)
+""")
 
 # Create the cash_flow table
-cur.execute(
-    """
+cur.execute("""
 CREATE TABLE cash_flow (
   id BIGSERIAL,
   store_id BIGINT,
@@ -70,12 +139,10 @@ CREATE TABLE cash_flow (
   total FLOAT,
   PRIMARY KEY (id, store_id)
 )
-"""
-)
+""")
 
 # Create the products_flow table
-cur.execute(
-    """
+cur.execute("""
 CREATE TABLE products_flow (
   id BIGSERIAL,
   store_id BIGINT,
@@ -86,29 +153,26 @@ CREATE TABLE products_flow (
   amount INT,
   PRIMARY KEY (id, store_id)
 )
-"""
-)
+""")
 
 # Create the shifts table
-cur.execute(
-    """
+cur.execute("""
 CREATE TABLE shifts (
   id BIGSERIAL,
   store_id BIGINT,
   start_date_time TIMESTAMP,
   end_date_time TIMESTAMP,
-  current BOOLEAN
+  current BOOLEAN,
+  "user" INT REFERENCES users(id)
 )
-"""
-)
+""")
 
 # --------------------------------------------------------------------
 # ----------------------------triggers--------------------------------
 # --------------------------------------------------------------------
 
 # Create the trigger to update stock after inserting a product flow
-cur.execute(
-    """
+cur.execute("""
 -- Trigger to update stock after insert
 CREATE OR REPLACE FUNCTION update_stock_after_insert()
 RETURNS TRIGGER AS $$
@@ -124,12 +188,10 @@ CREATE TRIGGER trigger_update_stock_insert
 AFTER INSERT ON products_flow
 FOR EACH ROW
 EXECUTE FUNCTION update_stock_after_insert();
-"""
-)
+""")
 
 # Create the trigger to insert into cash_flow after inserting a bill
-cur.execute(
-    """
+cur.execute("""
 -- Trigger to insert into cash_flow after inserting a bill
 CREATE OR REPLACE FUNCTION insert_cash_flow_after_insert()
 RETURNS TRIGGER AS $$
@@ -160,12 +222,10 @@ CREATE TRIGGER trigger_insert_cash_flow_after_insert
 AFTER INSERT ON bills
 FOR EACH ROW
 EXECUTE FUNCTION insert_cash_flow_after_insert();
-"""
-)
+""")
 
 # Create the trigger to update ref_id after inserting a bill
-cur.execute(
-    """
+cur.execute("""
 -- Trigger to update ref_id after insert
 CREATE OR REPLACE FUNCTION update_ref_id_after_insert()
 RETURNS TRIGGER AS $$
@@ -182,12 +242,10 @@ CREATE TRIGGER trigger_update_ref_id_after_insert
 AFTER INSERT ON bills
 FOR EACH ROW
 EXECUTE FUNCTION update_ref_id_after_insert();
-"""
-)
+""")
 
 # Create the trigger to update product price when inserting a buy bill
-cur.execute(
-    """
+cur.execute("""
 -- Trigger to update product price when inserting a buy bill
 CREATE OR REPLACE FUNCTION update_product_price_after_insert()
 RETURNS TRIGGER AS $$
@@ -207,12 +265,10 @@ CREATE TRIGGER trigger_update_product_price_after_insert
 AFTER INSERT ON products_flow
 FOR EACH ROW
 EXECUTE FUNCTION update_product_price_after_insert();
-"""
-)
+""")
 
 # Create the trigger to update total after inserting a cash_flow
-cur.execute(
-    """
+cur.execute("""
 -- Trigger to update total after insert
 CREATE OR REPLACE FUNCTION update_total_after_insert()
 RETURNS TRIGGER AS $$
@@ -239,12 +295,10 @@ CREATE TRIGGER trigger_update_total_after_insert
 AFTER INSERT ON cash_flow
 FOR EACH ROW
 EXECUTE FUNCTION update_total_after_insert();
-"""
-)
+""")
 
 # create the trigger to bubble fix the total after updating a cash_flow
-cur.execute(
-    """
+cur.execute("""
 -- Trigger to bubble fix the total after update
 CREATE OR REPLACE FUNCTION bubble_fix_total_after_update()
 RETURNS TRIGGER AS $$
@@ -267,12 +321,10 @@ AFTER UPDATE ON cash_flow
 FOR EACH ROW
 WHEN (NEW.amount != OLD.amount)
 EXECUTE FUNCTION bubble_fix_total_after_update();
-"""
-)
+""")
 
 # create the trigger to update cash_flow after updating a bill
-cur.execute(
-    """
+cur.execute("""
 -- Trigger to update cash_flow after update
 CREATE OR REPLACE FUNCTION update_cash_flow_after_update()
 RETURNS TRIGGER AS $$
@@ -290,9 +342,7 @@ CREATE TRIGGER trigger_update_cash_flow_after_update
 AFTER UPDATE ON bills
 FOR EACH ROW
 EXECUTE FUNCTION update_cash_flow_after_update();
-"""
-)
-
+""")
 
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------

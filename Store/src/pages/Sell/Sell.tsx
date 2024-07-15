@@ -27,6 +27,7 @@ import BillView from "../../utils/BillView";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { printBill } from "../../utils/functions";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 const getProds = async () => {
   const { data } = await axios.get<Product[]>(
@@ -66,6 +67,8 @@ const Sell = () => {
   const billRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef<boolean>(false);
 
+  const naviagte = useNavigate();
+
   const {
     data: products,
     isLoading: isProductsLoading,
@@ -80,7 +83,6 @@ const Sell = () => {
     data: shift,
     isLoading: isShiftLoading,
     isError: isShiftError,
-    refetch: refetchShift,
   } = useQuery({
     queryKey: ["shift"],
     queryFn: getShift,
@@ -94,7 +96,7 @@ const Sell = () => {
         type: "error",
         text: "لا يوجد شيفت مفتوح",
       });
-      setShiftDialog(true);
+      naviagte("/login");
     } else if (shift) {
       setShiftDialog(false);
     }
@@ -340,8 +342,7 @@ const Sell = () => {
       <ShiftDialog
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
-        shift={isShiftError ? null : shift}
-        refetchShift={refetchShift}
+        shift={shift}
       />
 
       <Grid item xs={12}>

@@ -1,31 +1,96 @@
-import { AppBar, Button, Toolbar, Grid, IconButton } from "@mui/material";
+import {
+  AppBar,
+  Button,
+  Toolbar,
+  Grid,
+  IconButton,
+  CircularProgress,
+} from "@mui/material";
 import { ViewContainer } from "./pages/Shared/Utils";
-import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  Dispatch,
+  ReactNode,
+  SetStateAction,
+  useEffect,
+  useState,
+} from "react";
 import AlertMessage, { AlertMsg } from "./pages/Shared/AlertMessage";
-import SettingsIcon from "@mui/icons-material/Settings";
 import { NavLink } from "react-router-dom";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import BrightnessHighIcon from "@mui/icons-material/BrightnessHigh";
+import axios from "axios";
+import { useQuery } from "@tanstack/react-query";
 
+interface profile {
+  name: string;
+  pages: string[];
+  paths: string[];
+}
+
+const getProfile = async () => {
+  const { data } = await axios.get<profile>(
+    import.meta.env.VITE_SERVER_URL + "/profile",
+    { withCredentials: true }
+  );
+
+  return data;
+};
 const Layout = ({
   children,
   themeMode,
   setThemeMode,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   themeMode: "dark" | "light";
-  setThemeMode: React.Dispatch<React.SetStateAction<"dark" | "light">>;
+  setThemeMode: Dispatch<SetStateAction<"dark" | "light">>;
 }) => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+  const location = useLocation();
 
   const navigate = useNavigate();
+
+  const {
+    data: profile,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["profile"],
+    queryFn: getProfile,
+    enabled: location.pathname !== "/login",
+  });
+
+  useEffect(() => {
+    if (isLoading || isError) return;
+    if (!profile) return;
+
+    if (!profile.paths.includes(location.pathname)) {
+      navigate("/sell");
+    }
+  }, [isLoading, isError, profile]);
+
+  if (isError) {
+    navigate("/login");
+  }
+  if (isLoading) {
+    return (
+      <Grid
+        container
+        justifyContent="center"
+        alignItems="center"
+        height="100vh"
+      >
+        <CircularProgress />
+      </Grid>
+    );
+  }
   return (
     <>
       <AppBar
         position="sticky"
         sx={{
           bgcolor: "background.paper",
+          display: location.pathname === "/login" ? "none" : "block",
         }}
       >
         <Toolbar>
@@ -43,24 +108,11 @@ const Layout = ({
               },
             }}
           >
-            <NavLink to="/sell">
-              <Button>بيع</Button>
-            </NavLink>
-            <NavLink to="/buy">
-              <Button>شراء</Button>
-            </NavLink>
-            <NavLink to="/add-to-storage">
-              <Button>اضافة منتجات</Button>
-            </NavLink>
-            <NavLink to="/bills">
-              <Button>الفواتير</Button>
-            </NavLink>
-            <NavLink to="/products">
-              <Button>المنتجات</Button>
-            </NavLink>
-            <NavLink to="/cash">
-              <Button>الحركات المالية</Button>
-            </NavLink>
+            {profile?.pages.map((page, index) => (
+              <NavLink key={index} to={profile.paths[index]}>
+                <Button>{page}</Button>
+              </NavLink>
+            ))}
           </Grid>
           <IconButton
             onClick={() => {
@@ -72,13 +124,6 @@ const Layout = ({
             }}
           >
             {themeMode === "dark" ? <BrightnessHighIcon /> : <DarkModeIcon />}
-          </IconButton>
-          <IconButton
-            onClick={() => {
-              navigate("/settings");
-            }}
-          >
-            <SettingsIcon />
           </IconButton>
         </Toolbar>
       </AppBar>

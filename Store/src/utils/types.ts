@@ -41,3 +41,9 @@ export interface CashFlow {
   description: string;
   total: number;
 }
+
+export interface Scope {
+  id: number;
+  name: string;
+  pages: number[];
+}

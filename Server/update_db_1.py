@@ -1,6 +1,7 @@
 import psycopg2  # type: ignore
 from dotenv import load_dotenv  # type: ignore
 from os import getenv
+import bcrypt  # type: ignore
 
 load_dotenv()
 
@@ -16,72 +17,73 @@ conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
 # Get a cursor
 cur = conn.cursor()
 
-# add needs update column to all tables as a boolean, being false by default
+# Create the scopes table
+cur.execute("""
+CREATE TABLE scopes (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR UNIQUE,
+    pages INT[]
+)""")
+cur.execute("""
+INSERT INTO scopes (name, pages)
+VALUES
+('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8])
+""")
 
-cur.execute("ALTER TABLE products ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
-# remove the column last_update from the products table
-cur.execute("ALTER TABLE products DROP COLUMN last_update")
+# Create pages table
+cur.execute("""
+CREATE TABLE pages (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR,
+    path VARCHAR
+)""")
 
-cur.execute("ALTER TABLE bills ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
-cur.execute("ALTER TABLE cash_flow ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
-cur.execute("ALTER TABLE products_flow ADD COLUMN needs_update BOOLEAN DEFAULT TRUE")
+cur.execute("""
+INSERT INTO pages (name, path)
+VALUES
+('بيع', '/sell'),
+('شراء', '/buy'),
+('اضافة منتجات', '/add-to-storage'),
+('الفواتير', '/bills'),
+('المنتجات', '/products'),
+('الحكرات المالية', '/cash'),
+('التقارير', '/analytics'),
+('الاعدادات', '/settings')
+""")
 
-# the column is not added on syncs/shifts tables as they are not synced between devices
-
-# creating new triggers
-
-# create the trigger to bubble fix the total after updating a cash_flow
+# Create the users table
+cur.execute("""
+CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    username VARCHAR UNIQUE,
+    password VARCHAR,
+    email VARCHAR,
+    phone VARCHAR,
+    language VARCHAR,
+    scope_id BIGINT REFERENCES scopes(id)
+)
+""")
+# IF for god knows why reason you're using this and you're not me
+# comment out the following query
+password = "verystrongpassword"
+hashed_password = bcrypt.hashpw(
+    password.encode('utf-8'),
+    bcrypt.gensalt(),
+).decode('utf-8')
 cur.execute(
     """
--- Trigger to bubble fix the total after update
-CREATE OR REPLACE FUNCTION bubble_fix_total_after_update()
-RETURNS TRIGGER AS $$
-DECLARE
-    amount_diff FLOAT;
-BEGIN
-    amount_diff := NEW.amount - OLD.amount;
+INSERT INTO users (username, password, email, phone, language, scope_id)
+VALUES
+('george', %s, 'myamazingemail@me.wow.so.cool.email', '01000000000', 'ar', 1)
+""", (hashed_password, ))
 
-    -- Bubble correct the total on all rows that were inserted after the updated row
-    UPDATE cash_flow
-    SET total = total + amount_diff
-    WHERE time > OLD.time;
+# Create the store_data table
+cur.execute("""
+CREATE TABLE store_data (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR,
+    address VARCHAR,
+    phone VARCHAR
+)""")
 
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_bubble_fix_total_after_update
-AFTER UPDATE ON cash_flow
-FOR EACH ROW
-WHEN (NEW.amount != OLD.amount)
-EXECUTE FUNCTION bubble_fix_total_after_update();
-"""
-)
-
-# create the trigger to update cash_flow after updating a bill
-cur.execute(
-    """
--- Trigger to update cash_flow after update
-CREATE OR REPLACE FUNCTION update_cash_flow_after_update()
-RETURNS TRIGGER AS $$
-BEGIN
-    UPDATE cash_flow
-    SET
-        amount = NEW.total,
-        total = total + NEW.total - OLD.total
-    WHERE bill_id = NEW.ref_id;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_update_cash_flow_after_update
-AFTER UPDATE ON bills
-FOR EACH ROW
-EXECUTE FUNCTION update_cash_flow_after_update();
-"""
-)
-
-# Commit the changes and close the connection
-conn.commit()
-cur.close()
-conn.close()
+cur.execute('ALTER TABLE shifts ADD COLUMN "user" INT REFERENCES users(id)')
