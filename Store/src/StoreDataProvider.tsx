@@ -40,12 +40,12 @@ const StoreDataProvider = ({ children }: { children: React.ReactNode }) => {
 
     const interval = setInterval(() => {
       fetchProfile();
-    }, 1000 * 60 * 5);
+    }, 1000 * 60);
 
     return () => clearInterval(interval);
   }, [location.pathname]);
 
-  if ((isLoading || !profile) && location.pathname !== "/login") {
+  if (isLoading && !profile && location.pathname !== "/login") {
     return <LoadingScreen loading={true} />;
   }
 

@@ -134,13 +134,45 @@ class Database:
 @app.get("/barcode")
 def get_bar_code():
     """
-    Get the next available bar code
+    Get the first available barcode where the number right after it is available.
     """
     with Database(HOST, DATABASE, USER, PASS) as cur:
+        # Find the first gap in the existing barcodes.
         cur.execute(
-            "SELECT COALESCE(MAX(CAST(bar_code AS BIGINT)), '100000000000') AS b FROM products"
+            """
+            WITH OrderedBarcodes AS (
+                SELECT bar_code, CAST(bar_code AS BIGINT) AS numeric_barcode
+                FROM products
+                WHERE bar_code ~ '^[0-9]+$'
+                ORDER BY numeric_barcode ASC
+            ), Gaps AS (
+                SELECT numeric_barcode + 1 AS gap_start
+                FROM OrderedBarcodes
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM OrderedBarcodes ob2
+                    WHERE ob2.numeric_barcode = OrderedBarcodes.numeric_barcode + 1
+                )
+                AND numeric_barcode + 1 <= 999999999999 -- Assuming a maximum barcode value
+            )
+            SELECT MIN(gap_start) AS first_available_barcode
+            FROM Gaps
+            """
         )
-        return str(int(cur.fetchone()["b"]) + 1)
+        result = cur.fetchone()
+        first_available_barcode = result["first_available_barcode"]
+        if first_available_barcode is None:
+            # If no gaps were found, find the maximum barcode and add 1.
+            cur.execute(
+                """
+                SELECT COALESCE(MAX(CAST(bar_code AS BIGINT)), 100000000000) + 1 AS first_available_barcode
+                FROM products
+                WHERE bar_code ~ '^[0-9]+$'
+                """
+            )
+            first_available_barcode = cur.fetchone()["first_available_barcode"]
+        
+        return str(first_available_barcode)
 
 
 @app.get("/products")
