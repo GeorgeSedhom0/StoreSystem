@@ -18,6 +18,7 @@ import { useState } from "react";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import Login from "./pages/Login/Login";
 import Analytics from "./pages/Analytics/Analytics";
+import { StoreDataProvider } from "./StoreDataProvider";
 
 const localMode = localStorage.getItem("mode");
 let mode: "dark" | "light";
@@ -70,28 +71,30 @@ const App = () => {
 
   return (
     <Rtl>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <QueryClientProvider client={queryClient}>
-          <Router>
-            <Layout themeMode={themeMode} setThemeMode={setThemeMode}>
-              <Routes>
-                {/* if any route other than the defined go to /sell */}
-                <Route path="*" element={<Navigate to="/sell" />} />
-                <Route path="/sell" element={<Sell />} />
-                <Route path="/add-to-storage" element={<Storage />} />
-                <Route path="/buy" element={<Buy />} />
-                <Route path="/products" element={<Products />} />
-                <Route path="/bills" element={<Bills />} />
-                <Route path="/cash" element={<Cash />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/login" element={<Login />} />
-              </Routes>
-            </Layout>
-          </Router>
-        </QueryClientProvider>
-      </ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <Router>
+          <StoreDataProvider>
+            <ThemeProvider theme={theme}>
+              <CssBaseline />
+              <Layout themeMode={themeMode} setThemeMode={setThemeMode}>
+                <Routes>
+                  {/* if any route other than the defined go to /sell */}
+                  <Route path="*" element={<Navigate to="/sell" />} />
+                  <Route path="/sell" element={<Sell />} />
+                  <Route path="/add-to-storage" element={<Storage />} />
+                  <Route path="/buy" element={<Buy />} />
+                  <Route path="/products" element={<Products />} />
+                  <Route path="/bills" element={<Bills />} />
+                  <Route path="/cash" element={<Cash />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/login" element={<Login />} />
+                </Routes>
+              </Layout>
+            </ThemeProvider>
+          </StoreDataProvider>
+        </Router>
+      </QueryClientProvider>
     </Rtl>
   );
 };

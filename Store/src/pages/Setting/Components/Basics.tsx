@@ -1,12 +1,48 @@
 import { LoadingButton } from "@mui/lab";
-import { ButtonGroup, Grid, Typography } from "@mui/material";
-import { useCallback, useState } from "react";
+import { ButtonGroup, Grid, TextField, Typography } from "@mui/material";
+import { useCallback, useEffect, useState } from "react";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import axios from "axios";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Profile } from "../../Shared/Utils";
+
+const saveStoreData = async ({
+  name,
+  phone,
+  address,
+}: {
+  name: string;
+  phone: string;
+  address: string;
+}) => {
+  await axios.put(
+    import.meta.env.VITE_SERVER_URL + "/store-data",
+    {},
+    {
+      params: {
+        name,
+        phone,
+        address,
+      },
+    }
+  );
+};
+
+const getStoreData = async () => {
+  const { data } = await axios.get<Profile["store"]>(
+    import.meta.env.VITE_SERVER_URL + "/store-data"
+  );
+  return data;
+};
 
 const Basics = () => {
   const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+
+  const queryClient = useQueryClient();
 
   const backUp = useCallback(async () => {
     setLoading(true);
@@ -66,12 +102,39 @@ const Basics = () => {
     setLoading(false);
   }, []);
 
+  const { mutate: setStoreData } = useMutation({
+    mutationFn: saveStoreData,
+    onError: (e) => {
+      console.log(e);
+      setMsg({ type: "error", text: "حدث خطا ما" });
+    },
+    onSuccess: () => {
+      setMsg({ type: "success", text: "تم الحفظ" });
+      queryClient.invalidateQueries({
+        queryKey: ["store-data"],
+      });
+    },
+  });
+
+  const { data: storeInfo } = useQuery({
+    queryKey: ["store-data"],
+    queryFn: getStoreData,
+  });
+
+  useEffect(() => {
+    if (storeInfo) {
+      setName(storeInfo.name);
+      setPhone(storeInfo.phone);
+      setAddress(storeInfo.address);
+    }
+  }, [storeInfo]);
+
   return (
     <Grid item xs={12}>
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid container spacing={3}>
         <Grid item xs={12}>
-          <Typography variant="h4">الاعدادات</Typography>
+          <Typography variant="h4">الاعدادات الاساسية</Typography>
         </Grid>
         <Grid item xs={12}>
           <ButtonGroup>
@@ -82,6 +145,36 @@ const Basics = () => {
               استعادة
             </LoadingButton>
           </ButtonGroup>
+        </Grid>
+        <Grid item xs={12}>
+          <Typography variant="h6">معلومات تظهر فى الفاتورة</Typography>
+        </Grid>
+        <Grid item container xs={12} gap={3}>
+          <TextField
+            size="small"
+            label="الاسم"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <TextField
+            size="small"
+            label="الهاتف"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+          <TextField
+            size="small"
+            label="العنوان"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+          />
+          <LoadingButton
+            variant="contained"
+            loading={loading}
+            onClick={() => setStoreData({ name, phone, address })}
+          >
+            حفظ
+          </LoadingButton>
         </Grid>
       </Grid>
     </Grid>

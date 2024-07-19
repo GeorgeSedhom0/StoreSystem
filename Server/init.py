@@ -59,7 +59,7 @@ VALUES
 ('اضافة منتجات', '/add-to-storage'),
 ('الفواتير', '/bills'),
 ('المنتجات', '/products'),
-('الحكرات المالية', '/cash'),
+('الحركات المالية', '/cash'),
 ('التقارير', '/analytics'),
 ('الاعدادات', '/settings')
 """)
@@ -96,8 +96,14 @@ CREATE TABLE store_data (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR,
     address VARCHAR,
-    phone VARCHAR
+    phone VARCHAR,
+    extra_info JSONB
 )""")
+cur.execute("""
+INSERT INTO store_data (name, address, phone, extra_info)
+VALUES
+('', '', '', '{}')
+""")
 
 # Create the products table
 cur.execute("""
@@ -121,7 +127,8 @@ CREATE TABLE bills (
   time TIMESTAMP,
   discount FLOAT,
   total FLOAT,
-  type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL'
+  type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL',
+  party_id BIGINT,
   PRIMARY KEY (id, store_id)
 )
 """)

@@ -1,4 +1,3 @@
-import bcrypt
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -8,7 +7,7 @@ from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import UploadFile, File, Cookie, Form
+from fastapi import UploadFile, File
 from datetime import datetime
 import logging
 from dotenv import load_dotenv
@@ -17,7 +16,8 @@ from openpyxl import Workbook
 from reset_db import reset_db
 import subprocess
 import os
-import jwt
+from auth import router as auth_router
+from settings import router as setting_router
 
 load_dotenv()
 
@@ -32,6 +32,9 @@ ALGORITHM = getenv("ALGORITHM") or ""
 
 # Create the FastAPI application
 app = FastAPI()
+
+app.include_router(auth_router)
+app.include_router(setting_router)
 
 origins = [
     "http://localhost:5173",
@@ -126,257 +129,6 @@ class Database:
         else:
             self.conn.commit()
         self.conn.close()
-
-
-@app.get("/profile")
-def get_user_profile(access_token=Cookie()) -> JSONResponse:
-    """
-    Get the user profile
-    """
-    try:
-        user = jwt.decode(access_token, SECRET, algorithms=[ALGORITHM])
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT
-                    username,
-                    ARRAY_AGG(pages.name) AS pages,
-                    ARRAY_AGG(pages.path) AS paths
-                FROM users
-                JOIN scopes ON users.scope_id = scopes.id
-                JOIN pages ON pages.id = ANY(scopes.pages)
-                WHERE username = %s
-                GROUP BY username
-                """, (user["sub"], ))
-            user = cur.fetchone()
-            return JSONResponse(content=user)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.post("/login")
-def auth_user(
-        username: str = Form(...),
-        password: str = Form(...),
-) -> JSONResponse:
-    """
-    Authenticate the user and start a new shift
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("SELECT * FROM users WHERE username = %s",
-                        (username, ))
-            user = cur.fetchone()
-
-            if user is None:
-                return JSONResponse(content={"error": "Incorrect username"},
-                                    status_code=401)
-
-            if bcrypt.checkpw(
-                    password.encode('utf-8'),
-                    user["password"].encode('utf-8'),
-            ):
-                access_token = jwt.encode({"sub": username},
-                                          SECRET,
-                                          algorithm=ALGORITHM)
-                del user["password"]
-                response = JSONResponse({
-                    "message": "Logged in successfully",
-                    "user": user
-                })
-
-                response.set_cookie(
-                    key="access_token",
-                    value=access_token,
-                    httponly=True,
-                    samesite="strict",
-                    secure=False,
-                )
-
-                # Start a new shift
-                cur.execute(
-                    """
-                    SELECT start_date_time, "user" FROM shifts
-                    WHERE current = True
-                    """, (user['id'], ))
-                cur_shift = cur.fetchone()
-                logging.info(f"cur_shift: {cur_shift}")
-                if cur_shift:
-                    if cur_shift['user'] != user['id']:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Another user has an active shift")
-                    return response
-
-                cur.execute(
-                    """
-                    INSERT INTO shifts (start_date_time, current, "user")
-                    VALUES (%s, %s, %s)
-                    RETURNING start_date_time
-                    """, (datetime.now(), True, user['id']))
-                return response
-
-            else:
-                return JSONResponse(content={"error": "Incorrect password"},
-                                    status_code=401)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.post("/logout")
-def logout_user(access_token=Cookie()) -> JSONResponse:
-    """
-    Logout the user and end the current shift
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            # Get the user from the access token
-            payload = jwt.decode(access_token, SECRET, algorithms=[ALGORITHM])
-            username = payload.get('sub')
-
-            cur.execute("SELECT * FROM users WHERE username = %s",
-                        (username, ))
-            user = cur.fetchone()
-
-            if user is None:
-                return JSONResponse(content={"error": "User not found"},
-                                    status_code=401)
-
-            # End the current shift
-            cur.execute(
-                """
-                UPDATE shifts
-                SET end_date_time = %s, current = False
-                WHERE current = True AND "user" = %s
-                """, (datetime.now(), user['id']))
-            response = JSONResponse(
-                content={"message": "Logged out successfully"})
-            response.delete_cookie(key="access_token")
-            return response
-
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.post("/signup")
-def add_user(
-        username: str = Form(...),
-        password: str = Form(...),
-        email: str = Form(...),
-        phone: str = Form(...),
-        scope_id: int = Form(...),
-) -> JSONResponse:
-    """
-    Add a user
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            hashed_password = bcrypt.hashpw(
-                password.encode('utf-8'),
-                bcrypt.gensalt(),
-            ).decode('utf-8')
-            cur.execute(
-                """
-                INSERT INTO users (
-                    username, password, email, phone, scope_id
-                )
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING *
-                """, (username, hashed_password, email, phone, scope_id))
-            user = cur.fetchone()
-            return JSONResponse(content=user)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.get("/scopes")
-def get_scopes() -> JSONResponse:
-    query = """
-    SELECT * FROM scopes
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(query)
-            scopes = cur.fetchall()
-            return JSONResponse(content=scopes)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.post("/scope")
-def add_scope(
-    name: str,
-    pages: list[int],
-) -> JSONResponse:
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                INSERT INTO scopes (name, pages)
-                VALUES (%s, %s)
-                RETURNING *
-                """, (name, pages))
-            scope = cur.fetchone()
-            return JSONResponse(content=scope)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.put("/scope")
-def update_scope(
-    id: int,
-    name: str,
-    pages: list[int],
-) -> JSONResponse:
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                UPDATE scopes
-                SET name = %s, pages = %s
-                WHERE id = %s
-                RETURNING *
-                """, (name, pages, id))
-            scope = cur.fetchone()
-            return JSONResponse(content=scope)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.delete("/scope")
-def delete_scope(id: int) -> JSONResponse:
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                DELETE FROM scopes
-                WHERE id = %s
-                RETURNING *
-                """, (id, ))
-            scope = cur.fetchone()
-            return JSONResponse(content=scope)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@app.get("/pages")
-def get_pages() -> JSONResponse:
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("SELECT * FROM pages")
-            pages = cur.fetchall()
-            return JSONResponse(content=pages)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/barcode")
@@ -909,14 +661,13 @@ async def inventory():
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
-    
+
 
 @app.post("/shifts-analytics")
 def shifts_analytics(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    bills_type: Optional[list[str]] = ["sell", "return"]
-) -> JSONResponse:
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        bills_type: Optional[list[str]] = ["sell", "return"]) -> JSONResponse:
     """
     Get the total sales for each shift
 
@@ -947,9 +698,11 @@ def shifts_analytics(
                 AND current = False
                 ORDER BY start_date_time
                 """, (tuple(bills_type), start_date, end_date))
-            data = [{"start_date_time": str(row["start_date_time"]),
-                        "end_date_time": str(row["end_date_time"]),
-                        "total": row["total"]} for row in cur.fetchall()]
+            data = [{
+                "start_date_time": str(row["start_date_time"]),
+                "end_date_time": str(row["end_date_time"]),
+                "total": row["total"]
+            } for row in cur.fetchall()]
             return JSONResponse(content=data)
     except Exception as e:
         logging.error(f"Error: {e}")

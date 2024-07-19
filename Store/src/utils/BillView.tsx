@@ -15,7 +15,8 @@ import {
   Typography,
 } from "@mui/material";
 import { Bill } from "./types";
-import { forwardRef } from "react";
+import { forwardRef, useContext } from "react";
+import { StoreContext } from "../StoreDataProvider";
 
 const theme = createTheme({
   direction: "rtl",
@@ -38,6 +39,7 @@ const BillView = forwardRef(
     ref: any
   ) => {
     if (!bill) return null;
+    const { store } = useContext(StoreContext);
     return (
       <ThemeProvider theme={theme}>
         <Dialog open={open} onClose={() => setOpen(false)}>
@@ -52,17 +54,17 @@ const BillView = forwardRef(
           >
             <Grid item xs={12}>
               <Typography variant="h2" align="center">
-                فحم المهندس
+                {store.name}{" "}
               </Typography>
             </Grid>
             <Grid item xs={12}>
               <Typography variant="h5" align="center">
-                01276761414
+                {store.phone}{" "}
               </Typography>
             </Grid>
             <Grid item xs={12}>
               <Typography variant="h5" align="center">
-                مول البنوك - مدينة السادات - المنوفية
+                {store.address}{" "}
               </Typography>
             </Grid>
             <Grid item xs={12}>

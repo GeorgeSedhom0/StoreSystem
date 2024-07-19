@@ -64,3 +64,13 @@ export const H4 = styled("h4")(({ theme }) => ({
   lineHeight: "45px",
   color: theme.palette.text.secondary,
 }));
+
+export interface Profile {
+  user: { name: string; pages: string[]; paths: string[] };
+  store: {
+    name: string;
+    address: string;
+    phone: string;
+    extra_info: { [key: string]: string };
+  };
+}

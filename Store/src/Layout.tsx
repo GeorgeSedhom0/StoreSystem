@@ -1,41 +1,18 @@
-import {
-  AppBar,
-  Button,
-  Toolbar,
-  Grid,
-  IconButton,
-  CircularProgress,
-} from "@mui/material";
-import { ViewContainer } from "./pages/Shared/Utils";
+import { AppBar, Button, Toolbar, Grid, IconButton } from "@mui/material";
+import { Profile, ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Dispatch,
   ReactNode,
   SetStateAction,
+  useContext,
   useEffect,
-  useState,
 } from "react";
-import AlertMessage, { AlertMsg } from "./pages/Shared/AlertMessage";
 import { NavLink } from "react-router-dom";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import BrightnessHighIcon from "@mui/icons-material/BrightnessHigh";
-import axios from "axios";
-import { useQuery } from "@tanstack/react-query";
+import { StoreContext } from "./StoreDataProvider";
 
-interface profile {
-  name: string;
-  pages: string[];
-  paths: string[];
-}
-
-const getProfile = async () => {
-  const { data } = await axios.get<profile>(
-    import.meta.env.VITE_SERVER_URL + "/profile",
-    { withCredentials: true }
-  );
-
-  return data;
-};
 const Layout = ({
   children,
   themeMode,
@@ -45,45 +22,23 @@ const Layout = ({
   themeMode: "dark" | "light";
   setThemeMode: Dispatch<SetStateAction<"dark" | "light">>;
 }) => {
-  const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+  const profile = useContext(StoreContext) as Profile;
   const location = useLocation();
 
   const navigate = useNavigate();
 
-  const {
-    data: profile,
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["profile"],
-    queryFn: getProfile,
-    enabled: location.pathname !== "/login",
-  });
-
   useEffect(() => {
-    if (isLoading || isError) return;
-    if (!profile) return;
+    if (location.pathname === "/login") return;
 
-    if (!profile.paths.includes(location.pathname)) {
+    if (!profile.user.paths.includes(location.pathname)) {
       navigate("/sell");
     }
-  }, [isLoading, isError, profile]);
+  }, [location.pathname, profile, navigate]);
 
-  if (isError) {
-    navigate("/login");
+  if (location.pathname === "/login") {
+    return <>{children}</>;
   }
-  if (isLoading) {
-    return (
-      <Grid
-        container
-        justifyContent="center"
-        alignItems="center"
-        height="100vh"
-      >
-        <CircularProgress />
-      </Grid>
-    );
-  }
+
   return (
     <>
       <AppBar
@@ -108,8 +63,8 @@ const Layout = ({
               },
             }}
           >
-            {profile?.pages.map((page, index) => (
-              <NavLink key={index} to={profile.paths[index]}>
+            {profile.user.pages.map((page, index) => (
+              <NavLink key={index} to={profile.user.paths[index]}>
                 <Button>{page}</Button>
               </NavLink>
             ))}
@@ -127,10 +82,7 @@ const Layout = ({
           </IconButton>
         </Toolbar>
       </AppBar>
-      <ViewContainer>
-        <AlertMessage message={msg} setMessage={setMsg} />
-        {children}
-      </ViewContainer>
+      <ViewContainer>{children}</ViewContainer>
     </>
   );
 };
