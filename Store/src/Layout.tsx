@@ -12,6 +12,14 @@ import { NavLink } from "react-router-dom";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import BrightnessHighIcon from "@mui/icons-material/BrightnessHigh";
 import { StoreContext } from "./StoreDataProvider";
+import axios from "axios";
+import { useMutation } from "@tanstack/react-query";
+
+const logoutWihtoutEndingShift = async () => {
+  await axios.get(import.meta.env.VITE_SERVER_URL + "/switch", {
+    withCredentials: true,
+  });
+};
 
 const Layout = ({
   children,
@@ -22,22 +30,30 @@ const Layout = ({
   themeMode: "dark" | "light";
   setThemeMode: Dispatch<SetStateAction<"dark" | "light">>;
 }) => {
-  const profile = useContext(StoreContext) as Profile;
   const location = useLocation();
+  if (location.pathname === "/login") {
+    return <>{children}</>;
+  }
 
+  const profile = useContext(StoreContext) as Profile;
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (location.pathname === "/login") return;
-
     if (!profile.user.paths.includes(location.pathname)) {
       navigate("/sell");
     }
   }, [location.pathname, profile, navigate]);
 
-  if (location.pathname === "/login") {
-    return <>{children}</>;
-  }
+  const { mutate: switchAccount } = useMutation({
+    mutationFn: logoutWihtoutEndingShift,
+    onSuccess: () => {
+      navigate("/login");
+    },
+    onError: (error) => {
+      window.location.reload();
+      console.log(error);
+    },
+  });
 
   return (
     <>
@@ -49,37 +65,56 @@ const Layout = ({
         }}
       >
         <Toolbar>
-          <Grid
-            container
-            gap={5}
-            sx={{
-              flexGrow: 1,
-              ".active > Button": {
-                borderBottom: 1,
-                borderColor: "primary.dark",
-              },
-              Button: {
-                color: "text.primary",
-              },
-            }}
-          >
-            {profile.user.pages.map((page, index) => (
-              <NavLink key={index} to={profile.user.paths[index]}>
-                <Button>{page}</Button>
-              </NavLink>
-            ))}
+          <Grid container justifyContent="space-between">
+            <Grid
+              item
+              container
+              gap={5}
+              sx={{
+                ".active > Button": {
+                  borderBottom: 1,
+                  borderColor: "primary.dark",
+                },
+                Button: {
+                  color: "text.primary",
+                },
+                width: "fit-content",
+              }}
+            >
+              {profile.user.pages.map((page, index) => (
+                <NavLink key={index} to={profile.user.paths[index]}>
+                  <Button>{page}</Button>
+                </NavLink>
+              ))}
+            </Grid>
+            <Grid
+              item
+              container
+              gap={5}
+              sx={{
+                width: "fit-content",
+              }}
+            >
+              <Button variant="contained" onClick={() => switchAccount()}>
+                تبديل المستخدم
+              </Button>
+              <IconButton
+                onClick={() => {
+                  setThemeMode((prev) => (prev === "dark" ? "light" : "dark"));
+                  localStorage.setItem(
+                    "mode",
+                    themeMode === "dark" ? "light" : "dark"
+                  );
+                }}
+              >
+                {themeMode === "dark" ? (
+                  <BrightnessHighIcon />
+                ) : (
+                  <DarkModeIcon />
+                )}
+              </IconButton>
+            </Grid>
           </Grid>
-          <IconButton
-            onClick={() => {
-              setThemeMode((prev) => (prev === "dark" ? "light" : "dark"));
-              localStorage.setItem(
-                "mode",
-                themeMode === "dark" ? "light" : "dark"
-              );
-            }}
-          >
-            {themeMode === "dark" ? <BrightnessHighIcon /> : <DarkModeIcon />}
-          </IconButton>
         </Toolbar>
       </AppBar>
       <ViewContainer>{children}</ViewContainer>

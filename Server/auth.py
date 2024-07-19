@@ -196,6 +196,35 @@ def logout_user(access_token=Cookie()) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@router.get("/switch")
+def switch_store(access_token=Cookie()) -> JSONResponse:
+    """
+    Same as logout but without ending the shift 
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get the user from the access token
+            payload = jwt.decode(access_token, SECRET, algorithms=[ALGORITHM])
+            username = payload.get('sub')
+
+            cur.execute("SELECT * FROM users WHERE username = %s",
+                        (username, ))
+            user = cur.fetchone()
+
+            if user is None:
+                return JSONResponse(content={"error": "User not found"},
+                                    status_code=401)
+
+            response = JSONResponse(
+                content={"message": "Switched successfully"})
+            response.delete_cookie(key="access_token")
+            return response
+
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @router.post("/signup")
 def add_user(
         username: str = Form(...),

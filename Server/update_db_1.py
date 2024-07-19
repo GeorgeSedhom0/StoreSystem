@@ -18,6 +18,10 @@ conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
 cur = conn.cursor()
 
 cur.execute("""
+ALTER TABLE store_data ADD COLUMN extra_info JSONB
+""")
+
+cur.execute("""
 INSERT INTO store_data (name, address, phone, extra_info)
 VALUES
 ('', '', '', '{}')
