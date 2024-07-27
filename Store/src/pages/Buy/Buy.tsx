@@ -13,12 +13,13 @@ import {
   TableBody,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { Product, SCProduct } from "../../utils/types";
+import { Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "./Components/ProductInCart";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../Shared/LoadingScreen";
+import { useParties } from "../../utils/data/useParties";
 
 const getProducts = async () => {
   const { data } = await axios.get<Product[]>(
@@ -31,6 +32,16 @@ const Buy = () => {
   const [options, setOptions] = useState<Product[]>([]);
   const [query, setQuery] = useState<string>("");
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
+  const [partyId, setPartyId] = useState<number | null>(null);
+  const [addingParty, setAddingParty] = useState<boolean>(false);
+  const [newParty, setNewParty] = useState<Party>({
+    id: null,
+    name: "",
+    phone: "",
+    address: "",
+    type: "مورد",
+    extra_info: {},
+  });
   const [msg, setMsg] = useState<AlertMsg>({
     type: "",
     text: "",
@@ -45,6 +56,10 @@ const Buy = () => {
     queryFn: getProducts,
     initialData: [],
   });
+
+  const { parties, addPartyMutationAsync } = useParties(setMsg, (data) =>
+    data.filter((party) => party.type === "مورد")
+  );
 
   useEffect(() => {
     if (!query) {
@@ -147,12 +162,30 @@ const Buy = () => {
             ) - discount,
           products_flow: shoppingCart,
         };
+
+        let newPartyId = partyId;
+
+        if (addingParty) {
+          newPartyId = await addPartyMutationAsync(newParty);
+          setAddingParty(false);
+          setNewParty({
+            id: null,
+            name: "",
+            phone: "",
+            address: "",
+            type: "مورد",
+            extra_info: {},
+          });
+        }
+
         await axios.post(import.meta.env.VITE_SERVER_URL + "/bill", bill, {
           params: {
             move_type: "buy",
             store_id: import.meta.env.VITE_STORE_ID,
+            party_id: newPartyId,
           },
         });
+
         await updateProducts();
         setShoppingCart([]);
         setMsg({
@@ -167,7 +200,7 @@ const Buy = () => {
         });
       }
     },
-    []
+    [addingParty, newParty, partyId, updateProducts]
   );
 
   return (
@@ -237,6 +270,73 @@ const Buy = () => {
                 )}
               />
             </Grid>
+            <Grid item xs={12}>
+              <Autocomplete
+                options={
+                  [
+                    { id: null, name: "بدون مورد", phone: "", address: "" },
+                    { id: null, name: "مورد جديد", phone: "", address: "" },
+                    ...parties,
+                  ] as Party[]
+                }
+                getOptionLabel={(option) =>
+                  option.name + " - " + (option.phone || "")
+                }
+                isOptionEqualToValue={(option, value) =>
+                  option.id === value.id && option.name === value.name
+                }
+                value={parties.find((party) => party.id === partyId) || null}
+                onChange={(_, value) => {
+                  if (value && value.id) {
+                    setPartyId(value.id);
+                    setAddingParty(false);
+                  } else {
+                    setPartyId(null);
+                    if (value && value.name === "مورد جديد") {
+                      setAddingParty(true);
+                    } else {
+                      setAddingParty(false);
+                    }
+                  }
+                }}
+                filterOptions={(options, params) => {
+                  const filtered = options.filter(
+                    (option) =>
+                      option.name.toLowerCase().includes(params.inputValue) ||
+                      option.phone.includes(params.inputValue)
+                  );
+                  return filtered;
+                }}
+                renderInput={(params) => (
+                  <TextField {...params} label="اسم المورد" />
+                )}
+              />
+            </Grid>
+            {addingParty && (
+              <Grid item container xs={12} gap={3}>
+                <TextField
+                  label="اسم المورد"
+                  value={newParty.name}
+                  onChange={(e) =>
+                    setNewParty({ ...newParty, name: e.target.value })
+                  }
+                />
+                <TextField
+                  label="رقم الهاتف"
+                  value={newParty.phone}
+                  onChange={(e) =>
+                    setNewParty({ ...newParty, phone: e.target.value })
+                  }
+                />
+                <TextField
+                  label="العنوان"
+                  value={newParty.address}
+                  onChange={(e) =>
+                    setNewParty({ ...newParty, address: e.target.value })
+                  }
+                />
+              </Grid>
+            )}
           </Grid>
         </Card>
       </Grid>

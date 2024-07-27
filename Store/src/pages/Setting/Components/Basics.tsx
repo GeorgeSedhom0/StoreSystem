@@ -130,52 +130,50 @@ const Basics = () => {
   }, [storeInfo]);
 
   return (
-    <Grid item xs={12}>
+    <Grid item container xs={12} spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
-          <Typography variant="h4">الاعدادات الاساسية</Typography>
-        </Grid>
-        <Grid item xs={12}>
-          <ButtonGroup>
-            <LoadingButton loading={loading} onClick={backUp}>
-              نسخ احطياتى
-            </LoadingButton>
-            <LoadingButton loading={loading} onClick={restore}>
-              استعادة
-            </LoadingButton>
-          </ButtonGroup>
-        </Grid>
-        <Grid item xs={12}>
-          <Typography variant="h6">معلومات تظهر فى الفاتورة</Typography>
-        </Grid>
-        <Grid item container xs={12} gap={3}>
-          <TextField
-            size="small"
-            label="الاسم"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <TextField
-            size="small"
-            label="الهاتف"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          <TextField
-            size="small"
-            label="العنوان"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-          />
-          <LoadingButton
-            variant="contained"
-            loading={loading}
-            onClick={() => setStoreData({ name, phone, address })}
-          >
-            حفظ
+      <Grid item xs={12}>
+        <Typography variant="h4">الاعدادات الاساسية</Typography>
+      </Grid>
+      <Grid item xs={12}>
+        <ButtonGroup>
+          <LoadingButton loading={loading} onClick={backUp}>
+            نسخ احطياتى
           </LoadingButton>
-        </Grid>
+          <LoadingButton loading={loading} onClick={restore}>
+            استعادة
+          </LoadingButton>
+        </ButtonGroup>
+      </Grid>
+      <Grid item xs={12}>
+        <Typography variant="h6">معلومات تظهر فى الفاتورة</Typography>
+      </Grid>
+      <Grid item container xs={12} gap={3}>
+        <TextField
+          size="small"
+          label="الاسم"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <TextField
+          size="small"
+          label="الهاتف"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
+        <TextField
+          size="small"
+          label="العنوان"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+        />
+        <LoadingButton
+          variant="contained"
+          loading={loading}
+          onClick={() => setStoreData({ name, phone, address })}
+        >
+          حفظ
+        </LoadingButton>
       </Grid>
     </Grid>
   );

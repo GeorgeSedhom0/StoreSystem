@@ -19,6 +19,9 @@ import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import Login from "./pages/Login/Login";
 import Analytics from "./pages/Analytics/Analytics";
 import { StoreDataProvider } from "./StoreDataProvider";
+import axios from "axios";
+
+axios.defaults.withCredentials = true;
 
 const localMode = localStorage.getItem("mode");
 let mode: "dark" | "light";

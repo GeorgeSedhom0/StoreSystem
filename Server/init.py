@@ -27,6 +27,8 @@ cur.execute("DROP TABLE IF EXISTS bills CASCADE")
 cur.execute("DROP TABLE IF EXISTS cash_flow CASCADE")
 cur.execute("DROP TABLE IF EXISTS products_flow CASCADE")
 cur.execute("DROP TABLE IF EXISTS shifts CASCADE")
+cur.execute("DROP TABLE IF EXISTS assosiated_parties CASCADE")
+cur.execute("DROP TABLE IF EXISTS reserved_products CASCADE")
 
 cur.execute("SET TIME ZONE 'Africa/Cairo'")
 
@@ -118,6 +120,15 @@ CREATE TABLE products (
 )
 """)
 
+# Create reserverd products table
+cur.execute("""
+CREATE TABLE reserved_products (
+    id BIGSERIAL PRIMARY KEY,
+    product_id BIGINT REFERENCES products(id),
+    amount INT
+)
+""")
+
 # Create the bills table
 cur.execute("""
 CREATE TABLE bills (
@@ -144,7 +155,20 @@ CREATE TABLE cash_flow (
   bill_id VARCHAR,
   description VARCHAR,
   total FLOAT,
+  party_id BIGINT,
   PRIMARY KEY (id, store_id)
+)
+""")
+
+# Create the assosiated_parties table
+cur.execute("""
+CREATE TABLE assosiated_parties (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR,
+    phone VARCHAR,
+    address VARCHAR,
+    type VARCHAR, -- 'customer' or 'supplier'
+    extra_info JSONB
 )
 """)
 

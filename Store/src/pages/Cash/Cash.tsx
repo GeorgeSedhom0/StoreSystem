@@ -12,8 +12,9 @@ import {
   MenuItem,
   InputLabel,
   ButtonGroup,
+  Autocomplete,
 } from "@mui/material";
-import { CashFlow } from "../../utils/types";
+import { CashFlow, Party } from "../../utils/types";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { TableVirtuoso } from "react-virtuoso";
 import {
@@ -24,6 +25,7 @@ import dayjs, { Dayjs } from "dayjs";
 import { useQuery } from "@tanstack/react-query";
 import { DateTimePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { useParties } from "../../utils/data/useParties";
 
 const getCashFlow = async (startDate: Dayjs, endDate: Dayjs) => {
   const { data } = await axios.get<CashFlow[]>(
@@ -45,6 +47,16 @@ const Cash = () => {
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
+  const [partyId, setPartyId] = useState<number | null>(null);
+  const [addingParty, setAddingParty] = useState<boolean>(false);
+  const [newParty, setNewParty] = useState<Party>({
+    id: null,
+    name: "",
+    phone: "",
+    address: "",
+    type: "",
+    extra_info: {},
+  });
 
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
@@ -55,6 +67,8 @@ const Cash = () => {
       return data;
     },
   });
+
+  const { parties, addPartyMutationAsync } = useParties(setMsg);
 
   const {
     data: cashFlow,
@@ -98,6 +112,21 @@ const Cash = () => {
 
   const addCashFlow = async () => {
     try {
+      let newPartyId = partyId;
+
+      if (addingParty) {
+        newPartyId = await addPartyMutationAsync(newParty);
+        setAddingParty(false);
+        setNewParty({
+          id: null,
+          name: "",
+          phone: "",
+          address: "",
+          type: "",
+          extra_info: {},
+        });
+      }
+
       await axios.post(
         import.meta.env.VITE_SERVER_URL + "/cash-flow",
         {},
@@ -107,6 +136,7 @@ const Cash = () => {
             move_type: moveType,
             description,
             store_id: import.meta.env.VITE_STORE_ID,
+            party_id: newPartyId,
           },
         }
       );
@@ -196,6 +226,102 @@ const Cash = () => {
                   <Button onClick={() => setRange("month")}>هذا الشهر</Button>
                 </ButtonGroup>
               </Grid>
+
+              <Grid item xs={12}>
+                <Autocomplete
+                  options={
+                    [
+                      ...parties,
+                      {
+                        id: null,
+                        name: "بدون عميل",
+                        phone: "01xxx",
+                        address: "****",
+                        type: "****",
+                      },
+                      {
+                        id: null,
+                        name: "عميل جديد",
+                        phone: "01xxx",
+                        address: "****",
+                        type: "****",
+                      },
+                    ] as Party[]
+                  }
+                  getOptionLabel={(option) =>
+                    option.name + " - " + option.phone + " - " + option.type
+                  }
+                  isOptionEqualToValue={(option, value) =>
+                    option.id === value.id && option.name === value.name
+                  }
+                  value={parties.find((party) => party.id === partyId) || null}
+                  onChange={(_, value) => {
+                    if (value && value.id) {
+                      setPartyId(value.id);
+                      setAddingParty(false);
+                    } else {
+                      setPartyId(null);
+                      if (value && value.name === "عميل جديد") {
+                        setAddingParty(true);
+                      } else {
+                        setAddingParty(false);
+                      }
+                    }
+                  }}
+                  filterOptions={(options, params) => {
+                    const filtered = options.filter(
+                      (option) =>
+                        option.name.toLowerCase().includes(params.inputValue) ||
+                        option.phone.includes(params.inputValue)
+                    );
+                    return filtered;
+                  }}
+                  renderInput={(params) => (
+                    <TextField {...params} label="اسم العميل" />
+                  )}
+                />
+              </Grid>
+              {addingParty && (
+                <Grid item container xs={12} gap={3}>
+                  <TextField
+                    label="اسم العميل"
+                    value={newParty.name}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, name: e.target.value })
+                    }
+                  />
+                  <TextField
+                    label="رقم الهاتف"
+                    value={newParty.phone}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, phone: e.target.value })
+                    }
+                  />
+                  <TextField
+                    label="العنوان"
+                    value={newParty.address}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, address: e.target.value })
+                    }
+                  />
+                  <FormControl>
+                    <InputLabel>النوع</InputLabel>
+                    <Select
+                      label="النوع"
+                      value={newParty.type}
+                      onChange={(e) =>
+                        setNewParty({ ...newParty, type: e.target.value })
+                      }
+                      sx={{
+                        width: 200,
+                      }}
+                    >
+                      <MenuItem value="عميل">عميل</MenuItem>
+                      <MenuItem value="مورد">مورد</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
             </Grid>
           </Card>
         </Grid>

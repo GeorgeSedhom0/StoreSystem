@@ -47,3 +47,12 @@ export interface Scope {
   name: string;
   pages: number[];
 }
+
+export interface Party {
+  id: number | null;
+  name: string;
+  phone: string;
+  address: string;
+  type: string;
+  extra_info: {[key: string]: string};
+}

@@ -30,4 +30,30 @@ VALUES
 cur.execute("""
 ALTER TABLE bills ADD COLUMN party_id BIGINT
 """)
+
+cur.execute("""
+ALTER TABLE cash_flow ADD COLUMN party_id BIGINT
+""")
+
+# Create the assosiated_parties table
+cur.execute("""
+CREATE TABLE assosiated_parties (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR,
+    phone VARCHAR,
+    address VARCHAR,
+    type VARCHAR, -- 'customer' or 'supplier'
+    extra_info JSONB
+)
+""")
+
+# Create reserverd products table
+cur.execute("""
+CREATE TABLE reserved_products (
+    id BIGSERIAL PRIMARY KEY,
+    product_id BIGINT REFERENCES products(id),
+    amount INT
+)
+""")
+
 conn.commit()

@@ -18,6 +18,7 @@ import subprocess
 import os
 from auth import router as auth_router
 from settings import router as setting_router
+from parties import router as party_router
 
 load_dotenv()
 
@@ -35,6 +36,7 @@ app = FastAPI()
 
 app.include_router(auth_router)
 app.include_router(setting_router)
+app.include_router(party_router)
 
 origins = [
     "http://localhost:5173",
@@ -138,8 +140,7 @@ def get_bar_code():
     """
     with Database(HOST, DATABASE, USER, PASS) as cur:
         # Find the first gap in the existing barcodes.
-        cur.execute(
-            """
+        cur.execute("""
             WITH OrderedBarcodes AS (
                 SELECT bar_code, CAST(bar_code AS BIGINT) AS numeric_barcode
                 FROM products
@@ -157,21 +158,18 @@ def get_bar_code():
             )
             SELECT MIN(gap_start) AS first_available_barcode
             FROM Gaps
-            """
-        )
+            """)
         result = cur.fetchone()
         first_available_barcode = result["first_available_barcode"]
         if first_available_barcode is None:
             # If no gaps were found, find the maximum barcode and add 1.
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT COALESCE(MAX(CAST(bar_code AS BIGINT)), 100000000000) + 1 AS first_available_barcode
                 FROM products
                 WHERE bar_code ~ '^[0-9]+$'
-                """
-            )
+                """)
             first_available_barcode = cur.fetchone()["first_available_barcode"]
-        
+
         return str(first_available_barcode)
 
 
@@ -406,8 +404,12 @@ def update_bill(bill: dbBill, store_id: int):
 
 
 @app.post("/bill")
-def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"],
-             store_id: int):
+def add_bill(
+    bill: Bill,
+    move_type: Literal["sell", "buy", "BNPL", "return"],
+    store_id: int,
+    party_id: Optional[int] = None,
+):
     """
     Add a bill to the database
 
@@ -424,11 +426,17 @@ def add_bill(bill: Bill, move_type: Literal["sell", "buy", "BNPL", "return"],
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                INSERT INTO bills (store_id, time, discount, total, type)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO bills (store_id, time, discount, total, type, party_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id
-                """,
-                (store_id, bill.time, bill.discount, bill_total, move_type))
+                """, (
+                    store_id,
+                    bill.time,
+                    bill.discount,
+                    bill_total,
+                    move_type,
+                    party_id,
+                ))
             result = cur.fetchone()
             if not result:
                 raise HTTPException(status_code=400,
@@ -521,8 +529,13 @@ def get_cash_flow(start_date: Optional[str] = None,
 
 
 @app.post("/cash-flow")
-def add_cash_flow(amount: float, move_type: Literal["in", "out"],
-                  description: str, store_id: int):
+def add_cash_flow(
+    amount: float,
+    move_type: Literal["in", "out"],
+    description: str,
+    store_id: int,
+    party_id: Optional[int] = None,
+):
     """
     Add a cash flow record to the database
 
@@ -539,15 +552,16 @@ def add_cash_flow(amount: float, move_type: Literal["in", "out"],
             cur.execute(
                 """
                 INSERT INTO cash_flow (
-                    store_id, time, amount, type, description
+                    store_id, time, amount, type, description, party_id
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """, (
                     store_id,
                     datetime.now().isoformat(),
                     amount,
                     move_type,
                     description,
+                    party_id,
                 ))
             return {"message": "Cash flow record added successfully"}
     except Exception as e:
