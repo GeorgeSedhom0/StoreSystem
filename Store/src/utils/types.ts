@@ -24,6 +24,7 @@ export interface Bill {
   discount: number;
   total: number;
   type: string;
+  party_name: string | null;
   products: {
     id: number;
     name: string;
@@ -40,6 +41,7 @@ export interface CashFlow {
   type: string;
   description: string;
   total: number;
+  party_name: string | null;
 }
 
 export interface Scope {

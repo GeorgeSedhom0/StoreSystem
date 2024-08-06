@@ -29,6 +29,7 @@ import { printBill } from "../../utils/functions";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useParties } from "../../utils/data/useParties";
+import PartyDetails from "../Shared/PartyDetails";
 
 const getProds = async () => {
   const { data } = await axios.get<Product[]>(
@@ -563,6 +564,7 @@ const Sell = () => {
                 )}
               />
             </Grid>
+
             {addingParty && (
               <Grid item container xs={12} gap={3}>
                 <TextField
@@ -586,6 +588,11 @@ const Sell = () => {
                     setNewParty({ ...newParty, address: e.target.value })
                   }
                 />
+              </Grid>
+            )}
+            {partyId && (
+              <Grid item container xs={12} gap={3}>
+                <PartyDetails partyId={partyId} />
               </Grid>
             )}
           </Grid>

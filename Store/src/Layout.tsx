@@ -39,7 +39,9 @@ const Layout = ({
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!profile.user.paths.includes(location.pathname)) {
+    if (
+      !profile.user.paths.some((path) => location.pathname.startsWith(path))
+    ) {
       navigate("/sell");
     }
   }, [location.pathname, profile, navigate]);

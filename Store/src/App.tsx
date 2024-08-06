@@ -81,17 +81,19 @@ const App = () => {
               <CssBaseline />
               <Layout themeMode={themeMode} setThemeMode={setThemeMode}>
                 <Routes>
-                  {/* if any route other than the defined go to /sell */}
-                  <Route path="*" element={<Navigate to="/sell" />} />
                   <Route path="/sell" element={<Sell />} />
                   <Route path="/add-to-storage" element={<Storage />} />
                   <Route path="/buy" element={<Buy />} />
                   <Route path="/products" element={<Products />} />
                   <Route path="/bills" element={<Bills />} />
+                  <Route path="/bills/:partyId" element={<Bills />} />
                   <Route path="/cash" element={<Cash />} />
+                  <Route path="/cash/:partyId" element={<Cash />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/login" element={<Login />} />
+                  {/* if any route other than the defined go to /sell */}
+                  <Route path="*" element={<Navigate to="/sell" />} />
                 </Routes>
               </Layout>
             </ThemeProvider>

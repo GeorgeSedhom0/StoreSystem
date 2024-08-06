@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
@@ -26,14 +26,20 @@ import { useQuery } from "@tanstack/react-query";
 import { DateTimePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { useParties } from "../../utils/data/useParties";
+import { useParams } from "react-router-dom";
 
-const getCashFlow = async (startDate: Dayjs, endDate: Dayjs) => {
+const getCashFlow = async (
+  startDate: Dayjs,
+  endDate: Dayjs,
+  partyId: number | null
+) => {
   const { data } = await axios.get<CashFlow[]>(
     import.meta.env.VITE_SERVER_URL + "/cash-flow",
     {
       params: {
         start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
         end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
+        party_id: partyId,
       },
     }
   );
@@ -47,7 +53,7 @@ const Cash = () => {
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
-  const [partyId, setPartyId] = useState<number | null>(null);
+  const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
   const [addingParty, setAddingParty] = useState<boolean>(false);
   const [newParty, setNewParty] = useState<Party>({
     id: null,
@@ -57,6 +63,12 @@ const Cash = () => {
     type: "",
     extra_info: {},
   });
+
+  const { partyId } = useParams();
+
+  useEffect(() => {
+    if (partyId) setSelectedPartyId(parseInt(partyId));
+  }, [partyId]);
 
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
@@ -75,8 +87,8 @@ const Cash = () => {
     isLoading: isCashFlowLoading,
     refetch: updateCashFlow,
   } = useQuery({
-    queryKey: ["cashFlow", startDate, endDate],
-    queryFn: () => getCashFlow(startDate, endDate),
+    queryKey: ["cashFlow", startDate, endDate, selectedPartyId],
+    queryFn: () => getCashFlow(startDate, endDate, selectedPartyId),
     initialData: [],
   });
 
@@ -112,7 +124,7 @@ const Cash = () => {
 
   const addCashFlow = async () => {
     try {
-      let newPartyId = partyId;
+      let newPartyId = selectedPartyId;
 
       if (addingParty) {
         newPartyId = await addPartyMutationAsync(newParty);
@@ -231,21 +243,21 @@ const Cash = () => {
                 <Autocomplete
                   options={
                     [
+                      {
+                        id: null,
+                        name: "بدون طرف ثانى",
+                        phone: "01xxx",
+                        address: "****",
+                        type: "****",
+                      },
+                      {
+                        id: null,
+                        name: "طرف ثانى جديد",
+                        phone: "01xxx",
+                        address: "****",
+                        type: "****",
+                      },
                       ...parties,
-                      {
-                        id: null,
-                        name: "بدون عميل",
-                        phone: "01xxx",
-                        address: "****",
-                        type: "****",
-                      },
-                      {
-                        id: null,
-                        name: "عميل جديد",
-                        phone: "01xxx",
-                        address: "****",
-                        type: "****",
-                      },
                     ] as Party[]
                   }
                   getOptionLabel={(option) =>
@@ -254,14 +266,17 @@ const Cash = () => {
                   isOptionEqualToValue={(option, value) =>
                     option.id === value.id && option.name === value.name
                   }
-                  value={parties.find((party) => party.id === partyId) || null}
+                  value={
+                    parties.find((party) => party.id === selectedPartyId) ||
+                    null
+                  }
                   onChange={(_, value) => {
                     if (value && value.id) {
-                      setPartyId(value.id);
+                      setSelectedPartyId(value.id);
                       setAddingParty(false);
                     } else {
-                      setPartyId(null);
-                      if (value && value.name === "عميل جديد") {
+                      setSelectedPartyId(null);
+                      if (value && value.name === "طرف ثانى جديد") {
                         setAddingParty(true);
                       } else {
                         setAddingParty(false);
@@ -277,14 +292,14 @@ const Cash = () => {
                     return filtered;
                   }}
                   renderInput={(params) => (
-                    <TextField {...params} label="اسم العميل" />
+                    <TextField {...params} label="اسم الطرف الثانى" />
                   )}
                 />
               </Grid>
               {addingParty && (
                 <Grid item container xs={12} gap={3}>
                   <TextField
-                    label="اسم العميل"
+                    label="اسم الطرف الثانى"
                     value={newParty.name}
                     onChange={(e) =>
                       setNewParty({ ...newParty, name: e.target.value })
@@ -352,6 +367,9 @@ const Cash = () => {
                   <TableCell>{row.type === "in" ? "دخول" : "خروج"}</TableCell>
                   <TableCell>{row.description}</TableCell>
                   <TableCell>{row.total}</TableCell>
+                  <TableCell>
+                    {row.party_name ? row.party_name : "بدون طرف ثانى"}
+                  </TableCell>
                 </>
               )}
             />

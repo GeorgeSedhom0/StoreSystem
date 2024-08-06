@@ -280,8 +280,11 @@ def update_product(products: list[Product], store_id: int):
 
 
 @app.get("/bills")
-def get_bills(start_date: Optional[str] = None,
-              end_date: Optional[str] = None):
+def get_bills(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    party_id: Optional[int] = None,
+):
     """
     Get all bills from the database
 
@@ -289,15 +292,28 @@ def get_bills(start_date: Optional[str] = None,
         List[Dict]: A list of dictionaries containing the bills
 
     """
+    extra_condition = ""
+    params: tuple = (
+        start_date if start_date else "1970-01-01",
+        end_date if end_date else datetime.now().isoformat(),
+    )
+    if party_id:
+        extra_condition = "AND party_id = %s"
+        params = (
+            start_date if start_date else "1970-01-01",
+            end_date if end_date else datetime.now().isoformat(),
+            party_id,
+        )
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
-                """SELECT
+                f"""SELECT
                     bills.ref_id AS id,
                     bills.time,
                     bills.discount,
                     bills.total,
                     bills.type,
+                    assosiated_parties.name AS party_name,
                     json_agg(
                         json_build_object(
                             'id', products_flow.product_id,
@@ -311,14 +327,14 @@ def get_bills(start_date: Optional[str] = None,
                 FROM bills
                 JOIN products_flow ON bills.ref_id = products_flow.bill_id
                 JOIN products ON products_flow.product_id = products.id
+                LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
                 WHERE bills.time >= %s
                 AND bills.time <= %s
+                {extra_condition}
                 GROUP BY bills.ref_id, bills.time, bills.discount,
-                    bills.total, bills.type
+                    bills.total, bills.type, bills.party_id, assosiated_parties.name
                 ORDER BY bills.time DESC
-                    """,
-                (start_date if start_date else "1970-01-01",
-                 end_date if end_date else datetime.now().isoformat()))
+                    """, params)
             bills = cur.fetchall()
             return bills
     except Exception as e:
@@ -496,8 +512,11 @@ def add_bill(
 
 
 @app.get("/cash-flow")
-def get_cash_flow(start_date: Optional[str] = None,
-                  end_date: Optional[str] = None):
+def get_cash_flow(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    party_id: Optional[int] = None,
+) -> JSONResponse:
     """
     Get all cash flow records from the database
 
@@ -505,24 +524,39 @@ def get_cash_flow(start_date: Optional[str] = None,
         List[Dict]: A list of dictionaries containing the cash flow records
 
     """
+
+    extra_condition = ""
+    params: tuple = (
+        start_date if start_date else "1970-01-01",
+        end_date if end_date else datetime.now().isoformat(),
+    )
+    if party_id:
+        extra_condition = "AND party_id = %s"
+        params = (
+            start_date if start_date else "1970-01-01",
+            end_date if end_date else datetime.now().isoformat(),
+            party_id,
+        )
+
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
-                """SELECT
+                f"""SELECT
                     TO_CHAR(time, 'YYYY-MM-DD HH24:MI:SS') AS time,
                     amount,
-                    type,
+                    cash_flow.type,
                     description,
-                    total
+                    total,
+                    assosiated_parties.name AS party_name
                 FROM cash_flow
+                LEFT JOIN assosiated_parties ON cash_flow.party_id = assosiated_parties.id
                 WHERE time >= %s
                 AND time <= %s
+                {extra_condition}
                 ORDER BY cash_flow.time DESC
-                    """,
-                (start_date if start_date else "1970-01-01",
-                 end_date if end_date else datetime.now().isoformat()))
+                """, params)
             cash_flow = cur.fetchall()
-            return cash_flow
+            return JSONResponse(content=cash_flow, status_code=200)
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e

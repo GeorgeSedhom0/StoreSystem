@@ -174,3 +174,53 @@ async def get_party_bills(
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/party/details")
+async def get_party_details(party_id: int) -> JSONResponse:
+    """
+    Get the details of a specific party, total bills, total amount, etc.
+    """
+
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT
+                    assosiated_parties.id,
+                    assosiated_parties.name
+                FROM assosiated_parties
+                WHERE assosiated_parties.id = %s
+                """, (party_id, ))
+            party = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT
+                    COUNT(bills.ref_id) AS total_bills,
+                    SUM(bills.total) AS total_amount
+                FROM bills
+                WHERE bills.party_id = %s
+                """, (party_id, ))
+            details = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT
+                    SUM(amount) AS total_cash
+                FROM cash_flow
+                WHERE cash_flow.party_id = %s
+                """, (party_id, ))
+            cash = cur.fetchone()
+
+            party["total_bills"] = details["total_bills"] if details[
+                "total_bills"] else 0
+            party["total_amount"] = details["total_amount"] if details[
+                "total_amount"] else 0
+            party[
+                "total_cash"] = cash["total_cash"] if cash["total_cash"] else 0
+
+            return JSONResponse(content=party, status_code=200)
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e

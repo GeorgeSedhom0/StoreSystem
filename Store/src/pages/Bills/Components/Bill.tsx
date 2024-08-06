@@ -76,11 +76,19 @@ const Bill = ({
       <TableCell>{Math.abs(bill.discount)}</TableCell>
       <TableCell>{Math.abs(bill.total)}</TableCell>
       <TableCell>
-        <ButtonGroup variant="outlined">
+        <ButtonGroup
+          variant="outlined"
+          sx={{
+            width: "100%",
+          }}
+        >
           <Button onClick={() => setEditing(true)}>تعديل</Button>
           <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
           <Button onClick={printWithPrinter}>طباعة</Button>
         </ButtonGroup>
+      </TableCell>
+      <TableCell>
+        {bill.party_name ? bill.party_name : "بدون طرف ثانى"}
       </TableCell>
     </>
   );

@@ -22,6 +22,7 @@ export const fixedHeaderContent = () => {
       <TableCell>الخصم</TableCell>
       <TableCell>الاجمالى</TableCell>
       <TableCell>معاينة او طباعة</TableCell>
+      <TableCell>الطرف الثانى</TableCell>
     </TableRow>
   );
 };

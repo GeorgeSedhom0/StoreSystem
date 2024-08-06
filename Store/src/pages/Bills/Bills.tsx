@@ -8,8 +8,10 @@ import {
   MenuItem,
   ButtonGroup,
   Button,
+  Autocomplete,
+  TextField,
 } from "@mui/material";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -26,14 +28,21 @@ import {
   VirtuosoTableComponents,
 } from "./Components/VirtualTableHelpers";
 import { useQuery } from "@tanstack/react-query";
+import { useParams } from "react-router-dom";
+import { useParties } from "../../utils/data/useParties";
 
-const getBills = async (startDate: Dayjs, endDate: Dayjs) => {
+const getBills = async (
+  startDate: Dayjs,
+  endDate: Dayjs,
+  partyId: number | null
+) => {
   const { data } = await axios.get<BillType[]>(
     import.meta.env.VITE_SERVER_URL + "/bills",
     {
       params: {
         start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
         end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
+        party_id: partyId,
       },
     }
   );
@@ -51,6 +60,13 @@ const Bills = () => {
   ]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [printer, setPrinter] = useState<any | null>(null);
+  const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
+
+  const { partyId } = useParams();
+
+  useEffect(() => {
+    if (partyId) setSelectedPartyId(parseInt(partyId));
+  }, [partyId]);
 
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
@@ -67,10 +83,12 @@ const Bills = () => {
     isLoading: isBillsLoading,
     refetch: refetchBills,
   } = useQuery({
-    queryKey: ["bills", startDate, endDate],
-    queryFn: () => getBills(startDate, endDate),
+    queryKey: ["bills", startDate, endDate, selectedPartyId || ""],
+    queryFn: () => getBills(startDate, endDate, selectedPartyId),
     initialData: [],
   });
+
+  const { parties } = useParties(setMsg);
 
   const setRange = useCallback(
     (range: "shift" | "day" | "week" | "month") => {
@@ -183,6 +201,39 @@ const Bills = () => {
                   <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
                   <Button onClick={() => setRange("month")}>هذا الشهر</Button>
                 </ButtonGroup>
+              </Grid>
+              <Grid item xs={12}>
+                <Autocomplete
+                  options={parties}
+                  onChange={(_, value) => {
+                    setSelectedPartyId(value?.id || null);
+                  }}
+                  getOptionLabel={(option) =>
+                    option.name + " - " + option.phone + " - " + option.type
+                  }
+                  isOptionEqualToValue={(option, value) =>
+                    option.id === value.id && option.name === value.name
+                  }
+                  value={
+                    parties.find((party) => party.id === selectedPartyId) ||
+                    null
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="الطرف الثانى"
+                      variant="outlined"
+                    />
+                  )}
+                  filterOptions={(options, params) => {
+                    const filtered = options.filter(
+                      (option) =>
+                        option.name.toLowerCase().includes(params.inputValue) ||
+                        option.phone.includes(params.inputValue)
+                    );
+                    return filtered;
+                  }}
+                />
               </Grid>
 
               <Grid item xs={12}>

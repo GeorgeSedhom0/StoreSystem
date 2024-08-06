@@ -21,6 +21,7 @@ export const fixedHeaderContent = () => {
       <TableCell>نوع الحركة</TableCell>
       <TableCell>الوصف</TableCell>
       <TableCell>المجموع</TableCell>
+      <TableCell>الطرف الثانى</TableCell>
     </TableRow>
   );
 };
