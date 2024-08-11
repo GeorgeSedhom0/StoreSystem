@@ -18,7 +18,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bill, Party, Product, SCProduct } from "../../utils/types";
+import { Bill, DBProducts, Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "./Components/ProductInCart";
@@ -32,7 +32,7 @@ import { useParties } from "../../utils/data/useParties";
 import PartyDetails from "../Shared/PartyDetails";
 
 const getProds = async () => {
-  const { data } = await axios.get<Product[]>(
+  const { data } = await axios.get<DBProducts>(
     import.meta.env.VITE_SERVER_URL + "/products"
   );
   return data;
@@ -58,9 +58,9 @@ const Sell = () => {
     text: "",
   });
   const [discount, setDiscount] = useState<number>(0);
-  const [billPayment, setBillPayment] = useState<"sell" | "BNPL" | "return">(
-    "sell"
-  );
+  const [billPayment, setBillPayment] = useState<
+    "sell" | "BNPL" | "return" | "reserve" | "installment"
+  >("sell");
   const [partyId, setPartyId] = useState<number | null>(null);
   const [addingParty, setAddingParty] = useState<boolean>(false);
   const [newParty, setNewParty] = useState<Party>({
@@ -75,6 +75,9 @@ const Sell = () => {
   const [lastBill, setLastBill] = useState<Bill | null>(null);
   const [lastBillOpen, setLastBillOpen] = useState<boolean>(false);
   const [printer, setPrinter] = useState<any | null>(null);
+  const [installments, setInstallments] = useState<number>(1);
+  const [installmentInterval, setInstallmentInterval] = useState<number>(30);
+  const [paid, setPaid] = useState<number>(0);
 
   const billRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef<boolean>(false);
@@ -88,7 +91,8 @@ const Sell = () => {
   } = useQuery({
     queryKey: ["products"],
     queryFn: getProds,
-    initialData: [],
+    initialData: { products: [], reserved_products: [] },
+    select: (data) => data.products,
   });
 
   const {
@@ -271,18 +275,16 @@ const Sell = () => {
         let newPartyId = partyId;
 
         if (addingParty) {
-          if (addingParty) {
-            newPartyId = await addPartyMutationAsync(newParty);
-            setAddingParty(false);
-            setNewParty({
-              id: null,
-              name: "",
-              phone: "",
-              address: "",
-              type: "مورد",
-              extra_info: {},
-            });
-          }
+          newPartyId = await addPartyMutationAsync(newParty);
+          setAddingParty(false);
+          setNewParty({
+            id: null,
+            name: "",
+            phone: "",
+            address: "",
+            type: "مورد",
+            extra_info: {},
+          });
         }
 
         const { data } = await axios.post(
@@ -293,6 +295,9 @@ const Sell = () => {
               move_type: billPayment,
               store_id: import.meta.env.VITE_STORE_ID,
               party_id: newPartyId,
+              paid: paid,
+              installments: installments,
+              installment_interval: installmentInterval,
             },
           }
         );
@@ -329,7 +334,16 @@ const Sell = () => {
       }
       savingRef.current = false;
     },
-    [billPayment, updateProducts, newParty, partyId, addingParty]
+    [
+      billPayment,
+      updateProducts,
+      newParty,
+      partyId,
+      addingParty,
+      installments,
+      installmentInterval,
+      paid,
+    ]
   );
 
   useEffect(() => {
@@ -418,6 +432,8 @@ const Sell = () => {
                   <MenuItem value="sell">نقدي</MenuItem>
                   <MenuItem value="BNPL">اجل</MenuItem>
                   <MenuItem value="return">مرتجع</MenuItem>
+                  <MenuItem value="reserve">حجز</MenuItem>
+                  <MenuItem value="installment">تقسيط</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -475,6 +491,35 @@ const Sell = () => {
                 جنيه
               </Typography>
             </Grid>
+            {billPayment === "installment" && (
+              <Grid item container xs={12} gap={3}>
+                <TextField
+                  label="عدد الاقساط"
+                  type="number"
+                  value={installments}
+                  onChange={(e) =>
+                    setInstallments(parseInt(e.target.value) || 1)
+                  }
+                  size="small"
+                />
+                <TextField
+                  label="الفترة بين الاقساط"
+                  type="number"
+                  value={installmentInterval}
+                  onChange={(e) =>
+                    setInstallmentInterval(parseInt(e.target.value) || 30)
+                  }
+                  size="small"
+                />
+                <TextField
+                  label="المقدم"
+                  type="number"
+                  value={paid}
+                  onChange={(e) => setPaid(parseInt(e.target.value) || 0)}
+                  size="small"
+                />
+              </Grid>
+            )}
 
             <Grid item xs={12}>
               <Autocomplete

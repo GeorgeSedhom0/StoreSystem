@@ -75,6 +75,8 @@ const BillView = forwardRef(
                     buy: "فاتورة شراء",
                     return: "فاتورة مرتجع",
                     BNPL: "فاتورة بيع اجل",
+                    reserve: "فاتورة حجز",
+                    installment: "فاتورة تقسيط",
                   }[bill.type]
                 }
               </Typography>

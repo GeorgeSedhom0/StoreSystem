@@ -191,7 +191,29 @@ def get_products():
                         ORDER BY name;
                         """)
             products = cur.fetchall()
-        return JSONResponse(content=products)
+
+            # Get reserved products
+            cur.execute("""
+                SELECT
+                    products.id,
+                    products.name,
+                    products.bar_code,
+                    SUM(reserved_products.amount) AS stock,
+                    products.wholesale_price,
+                    products.price,
+                    products.category
+                FROM reserved_products
+                JOIN products ON reserved_products.product_id = products.id
+                GROUP BY products.id, products.name, products.bar_code,
+                    products.wholesale_price, products.price, products.category
+                """)
+
+            reserved_products = cur.fetchall()
+
+        return JSONResponse(content={
+            "products": products,
+            "reserved_products": reserved_products
+        })
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -422,21 +444,37 @@ def update_bill(bill: dbBill, store_id: int):
 @app.post("/bill")
 def add_bill(
     bill: Bill,
-    move_type: Literal["sell", "buy", "BNPL", "return"],
+    move_type: Literal[
+        "sell",
+        "buy",
+        "BNPL",
+        "return",
+        "reserve",
+        "installment",
+    ],
     store_id: int,
     party_id: Optional[int] = None,
+    paid: Optional[float] = None,
+    installments: Optional[int] = None,
+    installment_interval: Optional[int] = None,
 ):
     """
     Add a bill to the database
 
     Args:
         bill (Bill): The bill to add
-        move_type (Literal["sell", "buy"]): The move_type of bill
+        move_type (Literal["sell", "buy", "BNPL", "return",
+                        "reserve", "installment"]): The type of the bill
+        store_id (int): The store ID
+        party_id (Optional[int]): The party ID
+        paid (Optional[float]): The amount paid
+        installments (Optional[int]): The number of installments
+        installment_interval (Optional[int]): The interval between installments
 
     Returns:
         Dict: A message indicating the result of the operation
     """
-    bill_total = (bill.total if move_type == "sell" else
+    bill_total = (bill.total if move_type in ["sell", "reserve"] else
                   -bill.total if move_type in ["buy", "return"] else 0)
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
@@ -461,8 +499,9 @@ def add_bill(
 
             # Create a list of tuples
             values = [(store_id, f"{store_id}_{bill_id}", product_flow.id,
-                       -product_flow.quantity if move_type in ["sell", "BNPL"]
-                       else product_flow.quantity,
+                       -product_flow.quantity if move_type in [
+                           "sell", "BNPL", "installment", "reserve"
+                       ] else product_flow.quantity,
                        product_flow.wholesale_price, product_flow.price)
                       for product_flow in bill.products_flow]
 
@@ -504,8 +543,25 @@ def add_bill(
                 GROUP BY bills.ref_id, bills.time, bills.discount, bills.total, bills.type
                     """, (bill_id, store_id))
 
-            bill = cur.fetchone()
-        return {"message": "Bill added successfully", "bill": bill}
+            ret_bill = cur.fetchone()
+
+            if move_type == "reserve":
+                cur.executemany(
+                    """
+                    INSERT INTO reserved_products (product_id, amount)
+                    VALUES (%s, %s)
+                    """, [(product_flow.id, product_flow.quantity)
+                          for product_flow in bill.products_flow])
+
+            if move_type == "installment":
+                cur.execute(
+                    """
+                    INSERT INTO installments (bill_id, store_id, paid, installments_count, installment_interval)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """, (bill_id, store_id, paid, installments,
+                          installment_interval))
+
+        return {"message": "Bill added successfully", "bill": ret_bill}
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e

@@ -21,6 +21,7 @@ export const fixedHeaderContent = () => {
       <TableCell>السعر</TableCell>
       <TableCell>سعر الشراء</TableCell>
       <TableCell>الكمية</TableCell>
+      <TableCell>المحجوز</TableCell>
       <TableCell>المجموعة</TableCell>
     </TableRow>
   );

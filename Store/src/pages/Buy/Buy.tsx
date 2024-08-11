@@ -13,7 +13,7 @@ import {
   TableBody,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { Party, Product, SCProduct } from "../../utils/types";
+import { DBProducts, Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "./Components/ProductInCart";
@@ -22,7 +22,7 @@ import LoadingScreen from "../Shared/LoadingScreen";
 import { useParties } from "../../utils/data/useParties";
 
 const getProducts = async () => {
-  const { data } = await axios.get<Product[]>(
+  const { data } = await axios.get<DBProducts>(
     import.meta.env.VITE_SERVER_URL + "/products"
   );
   return data;
@@ -54,7 +54,8 @@ const Buy = () => {
   } = useQuery({
     queryKey: ["products"],
     queryFn: getProducts,
-    initialData: [],
+    initialData: { products: [], reserved_products: [] },
+    select: (data) => data.products,
   });
 
   const { parties, addPartyMutationAsync } = useParties(setMsg, (data) =>

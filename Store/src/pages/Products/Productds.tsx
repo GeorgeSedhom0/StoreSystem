@@ -1,6 +1,6 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Product } from "../../utils/types";
+import { DBProducts, Product } from "../../utils/types";
 import { Button, Card, Grid, TextField, Typography } from "@mui/material";
 import { TableVirtuoso } from "react-virtuoso";
 import ProductCard from "./Components/ProductCard";
@@ -14,6 +14,9 @@ import { Link } from "react-router-dom";
 
 const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [reservedProducts, setReservedProducts] = useState<
+    Record<number, Product>
+  >({});
   const [editedProducts, setEditedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [msg, setMsg] = useState<AlertMsg>({
@@ -43,10 +46,25 @@ const Products = () => {
   const getProds = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get<Product[]>(
+      const {
+        data: { products, reserved_products },
+      } = await axios.get<DBProducts>(
         import.meta.env.VITE_SERVER_URL + "/products"
       );
-      setProducts(data);
+      console.log(
+        products,
+        reserved_products.reduce((acc, product) => {
+          acc[product.id!] = product;
+          return acc;
+        }, {} as Record<number, Product>)
+      );
+      setProducts(products);
+      setReservedProducts(
+        reserved_products.reduce((acc, product) => {
+          acc[product.id!] = product;
+          return acc;
+        }, {} as Record<number, Product>)
+      );
     } catch (error) {
       console.log(error);
     }
@@ -175,6 +193,7 @@ const Products = () => {
               itemContent={(_, product) => (
                 <ProductCard
                   product={product}
+                  reserved={reservedProducts[product.id!]?.stock || 0}
                   setEditedProducts={setEditedProducts}
                   editedProducts={editedProducts}
                   key={product.id || product.bar_code}

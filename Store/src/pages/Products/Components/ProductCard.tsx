@@ -5,12 +5,14 @@ import { printCode } from "../../../utils/functions";
 
 interface ProductCardProps {
   product: Product;
+  reserved: number;
   setEditedProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   editedProducts: Product[];
 }
 
 const ProductCard = ({
   product,
+  reserved,
   setEditedProducts,
   editedProducts,
 }: ProductCardProps) => {
@@ -162,6 +164,10 @@ const ProductCard = ({
             })
           }
         />
+      </TableCell>
+
+      <TableCell>
+        <TextField disabled={true} value={reserved} variant="standard" />
       </TableCell>
 
       <TableCell>

@@ -8,6 +8,11 @@ export interface Product {
   bar_code: string;
 }
 
+export interface DBProducts {
+  products: Product[];
+  reserved_products: Product[];
+}
+
 export interface SCProduct {
   id: number;
   name: string;

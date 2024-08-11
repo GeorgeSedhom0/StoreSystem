@@ -57,6 +57,8 @@ const Bills = () => {
     "BNPL",
     "buy",
     "return",
+    "reserve",
+    "installment",
   ]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [printer, setPrinter] = useState<any | null>(null);
@@ -191,6 +193,8 @@ const Bills = () => {
                     <MenuItem value="BNPL">آجل</MenuItem>
                     <MenuItem value="buy">شراء</MenuItem>
                     <MenuItem value="return">مرتجع</MenuItem>
+                    <MenuItem value="reserve">حجز</MenuItem>
+                    <MenuItem value="installment">تقسيط</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
