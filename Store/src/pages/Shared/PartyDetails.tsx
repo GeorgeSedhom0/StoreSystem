@@ -37,33 +37,29 @@ const PartyDetails = ({ partyId }: { partyId: number | null }) => {
       <Typography variant="h6">
         اسم العميل : {partyDetails.name} {" | "}
         عدد الفواتير السابقة : {partyDetails.total_bills} {" | "}
-        اجمالى المبلغ المستهلك : {partyDetails.total_bills} {" | "}
+        اجمالى المبلغ المستهلك : {partyDetails.total_amount} {" | "}
         اجمالى التعاملات المالية : {partyDetails.total_cash}
       </Typography>
-      <Button variant="contained">
-        <Link
-          to={"/bills/" + partyDetails.id.toString()}
-          style={{
-            textDecoration: "none",
-            color: "inherit",
-          }}
-          target="_blank"
-        >
-          الفواتير{" "}
-        </Link>
-      </Button>
-      <Button variant="contained">
-        <Link
-          to={"/cash/" + partyDetails.id.toString()}
-          style={{
-            textDecoration: "none",
-            color: "inherit",
-          }}
-          target="_blank"
-        >
-          التعاملات المالية{" "}
-        </Link>
-      </Button>
+      <Link
+        to={"/bills/" + partyDetails.id.toString()}
+        style={{
+          textDecoration: "none",
+          color: "inherit",
+        }}
+        target="_blank"
+      >
+        <Button variant="contained">الفواتير </Button>
+      </Link>
+      <Link
+        to={"/cash/" + partyDetails.id.toString()}
+        style={{
+          textDecoration: "none",
+          color: "inherit",
+        }}
+        target="_blank"
+      >
+        <Button variant="contained">التعاملات المالية </Button>
+      </Link>
     </>
   );
 };
