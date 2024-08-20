@@ -446,6 +446,7 @@ const Sell = () => {
                 onChange={(e) => setDiscount(parseInt(e.target.value) || 0)}
                 fullWidth
                 size="small"
+                disabled={["return", "installment"].includes(billPayment)}
               />
             </Grid>
 
@@ -492,33 +493,65 @@ const Sell = () => {
               </Typography>
             </Grid>
             {billPayment === "installment" && (
-              <Grid item container xs={12} gap={3}>
-                <TextField
-                  label="عدد الاقساط"
-                  type="number"
-                  value={installments}
-                  onChange={(e) =>
-                    setInstallments(parseInt(e.target.value) || 1)
-                  }
-                  size="small"
-                />
-                <TextField
-                  label="الفترة بين الاقساط"
-                  type="number"
-                  value={installmentInterval}
-                  onChange={(e) =>
-                    setInstallmentInterval(parseInt(e.target.value) || 30)
-                  }
-                  size="small"
-                />
-                <TextField
-                  label="المقدم"
-                  type="number"
-                  value={paid}
-                  onChange={(e) => setPaid(parseInt(e.target.value) || 0)}
-                  size="small"
-                />
-              </Grid>
+              <>
+                <Grid item container xs={12} gap={3}>
+                  <TextField
+                    label="عدد الاقساط"
+                    type="number"
+                    value={installments}
+                    onChange={(e) =>
+                      setInstallments(parseInt(e.target.value) || 1)
+                    }
+                    size="small"
+                  />
+                  <TextField
+                    label="الفترة بين الاقساط"
+                    type="number"
+                    value={installmentInterval}
+                    onChange={(e) =>
+                      setInstallmentInterval(parseInt(e.target.value) || 30)
+                    }
+                    size="small"
+                  />
+                  <TextField
+                    label="المقدم"
+                    type="number"
+                    value={paid}
+                    onChange={(e) => setPaid(parseInt(e.target.value) || 0)}
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="h6">
+                    المتبقي:{" "}
+                    {shoppingCart.reduce(
+                      (acc, item) => acc + item.price * item.quantity,
+                      0
+                    ) -
+                      discount -
+                      paid}{" "}
+                    جنيه
+                  </Typography>
+                  <Typography variant="h6">
+                    قيمة القسط:{" "}
+                    {shoppingCart.reduce(
+                      (acc, item) => acc + item.price * item.quantity,
+                      0
+                    ) -
+                      discount -
+                      paid}{" "}
+                    / {installments} ={" "}
+                    {(shoppingCart.reduce(
+                      (acc, item) => acc + item.price * item.quantity,
+                      0
+                    ) -
+                      discount -
+                      paid) /
+                      installments}{" "}
+                    جنيه
+                  </Typography>
+                </Grid>
+              </>
             )}
 
             <Grid item xs={12}>

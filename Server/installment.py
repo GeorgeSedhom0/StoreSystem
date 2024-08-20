@@ -50,35 +50,120 @@ class Database:
         self.conn.close()
 
 
-
 @router.get("/installments")
 def get_installments() -> JSONResponse:
-    query = """
-    SELECT
-        installments.id,
-        installments.paid,
-        COALESCE(assosiated_parties.name, '') AS party_name,
-        Json_agg(
-            Json_build_object(
-                'id', installments_flow.id,
-                'amount', installments_flow.amount,
-                'time', installments_flow.time
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Fetch installments data
+            cur.execute(
+                "SELECT id, paid, installments_count, installment_interval FROM installments"
             )
-        ) AS flow,
-        SUM(products_flow.price * products_flow.amount) AS total
-    FROM installments
-        JOIN bills ON installments.bill_id = bills.id
-        JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
-        JOIN installments_flow ON installments.id = installments_flow.installment_id
-        JOIN products_flow ON bills.ref_id = products_flow.bill_id
-    GROUP BY installments.id, assosiated_parties.name
+            installments = cur.fetchall()
+
+            # Fetch associated parties' names
+            cur.execute("""
+                SELECT installments.id, COALESCE(assosiated_parties.name, '') AS party_name
+                FROM installments
+                LEFT JOIN bills ON installments.bill_id = bills.id
+                LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
+                GROUP BY installments.id, assosiated_parties.name
+            """)
+            parties = cur.fetchall()
+
+            # Fetch installments flow
+            cur.execute("""
+                SELECT installments.id, Json_agg(
+                    Json_build_object(
+                        'id', installments_flow.id,
+                        'amount', installments_flow.amount,
+                        'time', installments_flow.time
+                    )
+                ) AS flow
+                FROM installments
+                LEFT JOIN installments_flow ON installments.id = installments_flow.installment_id
+                GROUP BY installments.id
+            """)
+            flows = cur.fetchall()
+
+            # Fetch products flow
+            cur.execute("""
+                SELECT
+                    installments.id,
+                    SUM(products_flow.price * products_flow.amount) AS total,
+                    Json_agg(
+                        Json_build_object(
+                            'name', products.name,
+                            'price', products_flow.price,
+                            'amount', products_flow.amount
+                        )
+                    ) AS products,
+                    bills.time AS time
+                FROM installments
+                LEFT JOIN bills ON installments.bill_id = bills.id
+                LEFT JOIN products_flow ON bills.ref_id = products_flow.bill_id
+                LEFT JOIN products ON products_flow.product_id = products.id
+                GROUP BY installments.id, bills.time
+            """)
+            products = cur.fetchall()
+
+            # Combine all the fetched data
+            result = []
+            for installment in installments:
+                installment_id = installment['id']
+                party = next((p for p in parties if p['id'] == installment_id),
+                             None)
+                flow = next((f for f in flows if f['id'] == installment_id),
+                            None)
+                product = next(
+                    (p for p in products if p['id'] == installment_id), None)
+
+                total_paid = sum(
+                    [f['amount'] if f["amount"] else 0
+                     for f in flow['flow']]) if flow else 0
+                total_paid += installment['paid']
+
+                print(total_paid, product["total"])
+
+                result.append({
+                    'id':
+                    installment_id,
+                    'paid':
+                    installment['paid'],
+                    "installment_interval":
+                    installment['installment_interval'] if product else '',
+                    'installments_count':
+                    installment['installments_count'],
+                    'time':
+                    str(product['time']) if product else '',
+                    'party_name':
+                    party['party_name'] if party else '',
+                    'flow':
+                    flow['flow'] if flow else [],
+                    'total':
+                    product['total'] if product else 0,
+                    'products':
+                    product['products'] if product else [],
+                    "ended":
+                    total_paid >= -product['total'] if product else False
+                })
+
+            return JSONResponse(content=result)
+    except psycopg2.Error as e:
+        logging.error(e)
+        raise HTTPException(status_code=500, detail="Database error") from e
+
+
+@router.post("/installments/pay/{installment_id}")
+def add_flow(installment_id: int, amount: float, time: str) -> JSONResponse:
+    query = """
+    INSERT INTO installments_flow (installment_id, amount, time)
+    VALUES (%s, %s, %s)
     """
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(query)
-            return JSONResponse(content=cur.fetchall())
+            cur.execute(query, (installment_id, amount, time))
+            return JSONResponse(content={"status": "success"})
     except psycopg2.Error as e:
         logging.error(e)
         raise HTTPException(status_code=500, detail="Database error") from e
-    
