@@ -38,7 +38,7 @@ const AlertsAnalytics = () => {
               <Typography variant="body1">لا يوجد اشعارات</Typography>
             )}
             {data.map((alert) => (
-              <Grid item xs={12} sm={6} md={4} lg={3}>
+              <Grid item xs={12}>
                 <Card
                   elevation={3}
                   sx={{

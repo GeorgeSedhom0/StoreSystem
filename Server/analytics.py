@@ -140,9 +140,9 @@ def alerts():
         with Database(HOST, DATABASE, USER, PASS) as cursor:
             # First get the selling entries for the last 30 days
             cursor.execute("""
-                SELECT product_id, amount, time
+                SELECT product_id, amount * -1 as amount, time
                 FROM products_flow JOIN bills ON products_flow.bill_id = bills.ref_id
-                WHERE time > (NOW() - INTERVAL '30 days')
+                WHERE time > (NOW() - INTERVAL '45 days')
                 AND amount < 0
             """)
             selling = cursor.fetchall()
@@ -157,14 +157,19 @@ def alerts():
         selling = pd.DataFrame(selling)
         products = pd.DataFrame(products)
 
-        # Converting the time to date to group by day of the week
-        selling["time"] = pd.to_datetime(selling["time"]).dt.dayofweek
+        # Converting the time to date wihtout the time for grouping
+        selling["time"] = selling["time"].dt.date
+
+        # Grouping the data by product and day of the week
         selling = selling.groupby(["product_id", "time"]).sum().reset_index()
 
+        # Converting the time to date to group by day of the week
+        selling["time"] = pd.to_datetime(selling["time"]).dt.dayofweek
+        
         # Calculating the mean and standard deviation for each product
-        selling["mean"] = selling.groupby("product_id")["amount"].transform(
+        selling["mean"] = selling.groupby(["product_id", "time"])["amount"].transform(
             "mean")
-        selling["std"] = selling.groupby("product_id")["amount"].transform(
+        selling["std"] = selling.groupby(["product_id", "time"])["amount"].transform(
             "std")
 
         # Calculating the z-score for each entry
@@ -196,21 +201,21 @@ def alerts():
 
         # Get the selling days for the next week
         today = datetime.now().date().weekday()
-        selling_days = [i % 7 for i in range(today, today + 7)]
+        selling_days = [i % 7 for i in range(today, today + 11)]
 
         data['days_left'] = data.apply(
             lambda row: calculate_days_left(row, selling_days), axis=1)
-
         # Get the alerts
-        alerts = data[data['days_left'] < 5]
+        alerts = data[data['days_left'] < 10]
         alerts_info = []
         for _, row in alerts.iterrows():
             alert_dict = {
                 'name': row['name'],
                 'stock': row['stock'],
-                'days_left': math.floor(row['days_left'])
+                'days_left': math.floor(row['days_left']),
+                "days_mean": row['days_mean']
             }
-            if row["days_left"] < 2:
+            if row["days_left"] < 2 or row["stock"] < 5:
                 alert_dict['urgent'] = True
             else:
                 alert_dict['urgent'] = False
