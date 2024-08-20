@@ -12,6 +12,10 @@ from os import getenv
 from fastapi import APIRouter
 from typing import Optional
 import json
+import pandas as pd
+from datetime import timedelta
+import random
+import math
 
 load_dotenv()
 
@@ -75,7 +79,8 @@ def top_products(
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT products.id
                 FROM products_flow JOIN products ON products_flow.product_id = products.id
                 JOIN bills ON products_flow.bill_id = bills.ref_id
@@ -88,10 +93,12 @@ def top_products(
 
             products = cursor.fetchall()
             if not products:
-                return JSONResponse(content={"message": "No data found"}, status_code=404)
+                return JSONResponse(content={"message": "No data found"},
+                                    status_code=404)
             products = [product["id"] for product in products]
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT products.name, DATE_TRUNC('day', bills.time) AS day, SUM(amount) * -1 AS total
                 FROM products_flow JOIN products ON products_flow.product_id = products.id
                 JOIN bills ON products_flow.bill_id = bills.ref_id
@@ -114,6 +121,105 @@ def top_products(
     except psycopg2.Error as e:
         logging.error(e)
         raise HTTPException(status_code=500, detail="Database error")
-    
-            
-                       
+
+
+def calculate_days_left(row, selling_days):
+    stock = row['stock']
+    for i, day in enumerate(selling_days):
+        if day in row['days_mean']:
+            stock -= row['days_mean'][day]
+            if stock <= 0:
+                return i
+    return len(selling_days)
+
+
+@router.get("/analytics/alerts")
+def alerts():
+    """Get the alerts for the products that are running low in stock"""
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cursor:
+            # First get the selling entries for the last 30 days
+            cursor.execute("""
+                SELECT product_id, amount, time
+                FROM products_flow JOIN bills ON products_flow.bill_id = bills.ref_id
+                WHERE time > (NOW() - INTERVAL '30 days')
+                AND amount < 0
+            """)
+            selling = cursor.fetchall()
+
+            # Then get the current stock for each product
+            cursor.execute("""
+                SELECT id, name, stock
+                FROM products
+            """)
+            products = cursor.fetchall()
+            # Initialize the dataframes
+        selling = pd.DataFrame(selling)
+        products = pd.DataFrame(products)
+
+        # Converting the time to date to group by day of the week
+        selling["time"] = pd.to_datetime(selling["time"]).dt.dayofweek
+        selling = selling.groupby(["product_id", "time"]).sum().reset_index()
+
+        # Calculating the mean and standard deviation for each product
+        selling["mean"] = selling.groupby("product_id")["amount"].transform(
+            "mean")
+        selling["std"] = selling.groupby("product_id")["amount"].transform(
+            "std")
+
+        # Calculating the z-score for each entry
+        selling["z"] = (selling["amount"] - selling["mean"]) / selling["std"]
+
+        # If the z-score is above 3, then it's an outlier
+        selling = selling[selling["z"] < 3]
+
+        # Drop the columns that are not needed
+        selling.drop(columns=["std", "z", "amount"], inplace=True)
+
+        # Merging the products and the selling data
+        data = pd.merge(products, selling, left_on="id", right_on="product_id")
+
+        # Aggregating the means with their respective days
+        data = data.groupby("id").agg({
+            "mean": list,
+            "time": list,
+            "name": "first",
+            "stock": "first"
+        })
+
+        # Create a dictionary where 'time' is the key and 'mean' is the value for each group
+        data['days_mean'] = data.apply(
+            lambda row: dict(zip(row['time'], row['mean'])), axis=1)
+
+        # Drop the columns that are not needed
+        data = data.drop(columns=['mean', 'time'])
+
+        # Get the selling days for the next week
+        today = datetime.now().date().weekday()
+        selling_days = [i % 7 for i in range(today, today + 7)]
+
+        data['days_left'] = data.apply(
+            lambda row: calculate_days_left(row, selling_days), axis=1)
+
+        # Get the alerts
+        alerts = data[data['days_left'] < 5]
+        alerts_info = []
+        for _, row in alerts.iterrows():
+            alert_dict = {
+                'name': row['name'],
+                'stock': row['stock'],
+                'days_left': math.floor(row['days_left'])
+            }
+            if row["days_left"] < 2:
+                alert_dict['urgent'] = True
+            else:
+                alert_dict['urgent'] = False
+                alert_dict['restock_date'] = (datetime.now() + timedelta(
+                    days=alert_dict['days_left'])).strftime("%Y-%m-%d")
+            alerts_info.append(alert_dict)
+
+        return JSONResponse(content=alerts_info)
+
+    except Exception as e:
+        logging.error(e)
+        raise HTTPException(status_code=500, detail="An error occurred")

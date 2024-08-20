@@ -2,6 +2,7 @@ import { Card, Grid, Typography } from "@mui/material";
 import { ViewContainer } from "../Shared/Utils";
 import ShiftsAnalytics from "./Components/ShiftsAnalytics";
 import TopProductsAnalytics from "./Components/TopProductsAnalytics";
+import AlertsAnalytics from "./Components/AlertsAnalytics";
 
 const Analytics = () => {
   return (
@@ -17,6 +18,7 @@ const Analytics = () => {
         </Grid>
         <ShiftsAnalytics />
         <TopProductsAnalytics />
+        <AlertsAnalytics />
       </Grid>
     </ViewContainer>
   );
