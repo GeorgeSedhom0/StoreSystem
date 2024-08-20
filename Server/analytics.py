@@ -121,6 +121,50 @@ def top_products(
     except psycopg2.Error as e:
         logging.error(e)
         raise HTTPException(status_code=500, detail="Database error")
+    
+
+@router.post("/analytics/products")
+def products(
+    products_ids: list[int],
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    "Get the daily selling series of the products"
+    if start_date is None:
+        start_date = "2021-01-01"
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+    
+    if not products_ids:
+        return JSONResponse(content={"message": "No products selected"},
+                            status_code=400)
+
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cursor:
+            cursor.execute(
+                """
+                SELECT products.name, DATE_TRUNC('day', bills.time) AS day, SUM(amount) * -1 AS total
+                FROM products_flow JOIN products ON products_flow.product_id = products.id
+                JOIN bills ON products_flow.bill_id = bills.ref_id
+                WHERE products.id IN %s
+                AND amount < 0
+                AND bills.time > %s AND bills.time <= %s
+                GROUP BY products.name, day
+                ORDER BY day, total ASC
+            """, (tuple(products_ids), start_date, end_date))
+
+            data = cursor.fetchall()
+            ret = {}
+            for row in data:
+                if row["name"] not in ret:
+                    ret[row["name"]] = [[row["day"], row["total"]]]
+                else:
+                    ret[row["name"]].append([row["day"], row["total"]])
+            return ret
+
+    except psycopg2.Error as e:
+        logging.error(e)
+        raise HTTPException(status_code=500, detail="Database error")
 
 
 def calculate_days_left(row, selling_days):

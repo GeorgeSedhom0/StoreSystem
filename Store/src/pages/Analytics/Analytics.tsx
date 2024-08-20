@@ -3,6 +3,7 @@ import { ViewContainer } from "../Shared/Utils";
 import ShiftsAnalytics from "./Components/ShiftsAnalytics";
 import TopProductsAnalytics from "./Components/TopProductsAnalytics";
 import AlertsAnalytics from "./Components/AlertsAnalytics";
+import ProductsAnalytics from "./Components/ProductsAnalytics";
 
 const Analytics = () => {
   return (
@@ -18,6 +19,7 @@ const Analytics = () => {
         </Grid>
         <ShiftsAnalytics />
         <TopProductsAnalytics />
+        <ProductsAnalytics />
         <AlertsAnalytics />
       </Grid>
     </ViewContainer>
