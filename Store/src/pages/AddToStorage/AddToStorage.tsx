@@ -10,6 +10,7 @@ import { useCallback, useState } from "react";
 import { Product } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
+import { printCode } from "../../utils/functions";
 
 const Storage = () => {
   const [product, setProduct] = useState<Product>({
@@ -101,6 +102,19 @@ const Storage = () => {
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
+                    <Button
+                      onClick={() => {
+                        printCode(
+                          product.bar_code,
+                          `فحم المهندس \n ${product.name}`,
+                          product.price.toString() + " " + "جنية ",
+                          "ar"
+                        );
+                      }}
+                      disabled={product.bar_code === ""}
+                    >
+                      طباعة باركود
+                    </Button>
                     <Button onClick={getBarcode}>احصل على باركود</Button>
                   </InputAdornment>
                 ),
