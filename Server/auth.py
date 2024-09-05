@@ -129,8 +129,8 @@ def auth_user(
                     key="access_token",
                     value=access_token,
                     httponly=True,
-                    samesite="strict",
-                    secure=False,
+                    samesite="none",
+                    secure=True,
                 )
 
                 # Start a new shift

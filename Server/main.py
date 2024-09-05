@@ -44,6 +44,7 @@ app.include_router(analytics_router)
 
 origins = [
     "http://localhost:5173",
+    OTHER_STORE,
 ]
 
 app.add_middleware(
