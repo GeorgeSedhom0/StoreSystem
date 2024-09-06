@@ -4,10 +4,12 @@ import {
   ButtonGroup,
   Card,
   FormControl,
+  FormControlLabel,
   Grid,
   InputLabel,
   MenuItem,
   Select,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -30,6 +32,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useParties } from "../../utils/data/useParties";
 import PartyDetails from "../Shared/PartyDetails";
+import { CheckBox } from "@mui/icons-material";
 
 const getProds = async () => {
   const { data } = await axios.get<DBProducts>(
@@ -78,6 +81,7 @@ const Sell = () => {
   const [installments, setInstallments] = useState<number>(1);
   const [installmentInterval, setInstallmentInterval] = useState<number>(30);
   const [paid, setPaid] = useState<number>(0);
+  const [usingThirdParties, setUsingThirdParties] = useState<boolean>(false);
 
   const billRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef<boolean>(false);
@@ -109,6 +113,13 @@ const Sell = () => {
   const { parties, addPartyMutationAsync } = useParties(setMsg, (parties) =>
     parties.filter((party) => party.type === "عميل")
   );
+
+  useEffect(() => {
+    const usingThirdParties = localStorage.getItem("usingThirdParties");
+    if (usingThirdParties) {
+      setUsingThirdParties(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (isShiftError) {
@@ -412,10 +423,22 @@ const Sell = () => {
       <Grid item xs={12}>
         <Card elevation={3} sx={{ p: 3 }}>
           <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12}>
+            <Grid item container xs={12} justifyContent="space-between">
               <Button variant="contained" onClick={() => setShiftDialog(true)}>
                 الشيفتات
               </Button>
+              <FormControlLabel
+                control={<Switch />}
+                checked={usingThirdParties}
+                onChange={() => {
+                  localStorage.setItem(
+                    "usingThirdParties",
+                    usingThirdParties ? "" : "true"
+                  );
+                  setUsingThirdParties((prev) => !prev);
+                }}
+                label="اظهار العملاء"
+              />
             </Grid>
 
             <Grid item xs={12} sm={3}>
@@ -600,48 +623,50 @@ const Sell = () => {
                 )}
               />
             </Grid>
-            <Grid item xs={12}>
-              <Autocomplete
-                options={
-                  [
-                    { id: null, name: "بدون عميل", phone: "", address: "" },
-                    { id: null, name: "عميل جديد", phone: "", address: "" },
-                    ...parties,
-                  ] as Party[]
-                }
-                getOptionLabel={(option) =>
-                  option.name + " - " + (option.phone || "")
-                }
-                isOptionEqualToValue={(option, value) =>
-                  option.id === value.id && option.name === value.name
-                }
-                value={parties.find((party) => party.id === partyId) || null}
-                onChange={(_, value) => {
-                  if (value && value.id) {
-                    setPartyId(value.id);
-                    setAddingParty(false);
-                  } else {
-                    setPartyId(null);
-                    if (value && value.name === "عميل جديد") {
-                      setAddingParty(true);
-                    } else {
-                      setAddingParty(false);
-                    }
+            {usingThirdParties && (
+              <Grid item xs={12}>
+                <Autocomplete
+                  options={
+                    [
+                      { id: null, name: "بدون عميل", phone: "", address: "" },
+                      { id: null, name: "عميل جديد", phone: "", address: "" },
+                      ...parties,
+                    ] as Party[]
                   }
-                }}
-                filterOptions={(options, params) => {
-                  const filtered = options.filter(
-                    (option) =>
-                      option.name.toLowerCase().includes(params.inputValue) ||
-                      option.phone.includes(params.inputValue)
-                  );
-                  return filtered;
-                }}
-                renderInput={(params) => (
-                  <TextField {...params} label="اسم العميل" />
-                )}
-              />
-            </Grid>
+                  getOptionLabel={(option) =>
+                    option.name + " - " + (option.phone || "")
+                  }
+                  isOptionEqualToValue={(option, value) =>
+                    option.id === value.id && option.name === value.name
+                  }
+                  value={parties.find((party) => party.id === partyId) || null}
+                  onChange={(_, value) => {
+                    if (value && value.id) {
+                      setPartyId(value.id);
+                      setAddingParty(false);
+                    } else {
+                      setPartyId(null);
+                      if (value && value.name === "عميل جديد") {
+                        setAddingParty(true);
+                      } else {
+                        setAddingParty(false);
+                      }
+                    }
+                  }}
+                  filterOptions={(options, params) => {
+                    const filtered = options.filter(
+                      (option) =>
+                        option.name.toLowerCase().includes(params.inputValue) ||
+                        option.phone.includes(params.inputValue)
+                    );
+                    return filtered;
+                  }}
+                  renderInput={(params) => (
+                    <TextField {...params} label="اسم العميل" />
+                  )}
+                />
+              </Grid>
+            )}
 
             {addingParty && (
               <Grid item container xs={12} gap={3}>
@@ -681,7 +706,7 @@ const Sell = () => {
         <Card elevation={3}>
           <TableContainer
             sx={{
-              height: 580,
+              height: 650,
               overflowY: "auto",
             }}
           >
