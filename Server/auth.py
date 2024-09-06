@@ -184,7 +184,7 @@ def logout_user(access_token=Cookie()) -> JSONResponse:
                 """
                 UPDATE shifts
                 SET end_date_time = %s, current = False
-                WHERE current = True AND "user" = %s
+                WHERE current = True
                 """, (datetime.now(), user['id']))
             response = JSONResponse(
                 content={"message": "Logged out successfully"})
