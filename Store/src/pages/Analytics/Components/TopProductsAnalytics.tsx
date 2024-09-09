@@ -6,6 +6,8 @@ import { Button, ButtonGroup, Card, Grid, Typography } from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import EChartsReact from "echarts-for-react";
+import tableIcon from "/table.png";
+import { exportToExcel } from "../utils";
 
 export interface ProductsAnalyticsType {
   [key: string]: [string, number][];
@@ -66,6 +68,55 @@ const TopProductsAnalytics = () => {
             type: ["line", "bar"],
           },
           saveAsImage: {},
+          myTool: {
+            show: true,
+            title: "Export to Excel",
+            icon: `image://${tableIcon}`,
+            onclick: () => {
+              const groupedByDate = new Map<string, Map<string, number>>();
+              const allDates = new Set<string>();
+              const allProducts = new Set<string>();
+
+              // Collect all unique dates and products
+              Object.entries(data).forEach(([name, values]) => {
+                allProducts.add(name);
+                values.forEach(([date, value]) => {
+                  allDates.add(date);
+                });
+              });
+
+              // Initialize each product's data for all dates with 0
+              allDates.forEach((date) => {
+                if (!groupedByDate.has(date)) {
+                  groupedByDate.set(date, new Map<string, number>());
+                }
+                allProducts.forEach((product) => {
+                  groupedByDate.get(date)!.set(product, 0);
+                });
+              });
+
+              // Populate the actual values
+              Object.entries(data).forEach(([name, values]) => {
+                values.forEach(([date, value]) => {
+                  groupedByDate.get(date)!.set(name, value);
+                });
+              });
+
+              const exportData = [
+                ["التاريخ", "المنتج", "الكمية المباعة"],
+                ...Array.from(groupedByDate.entries()).flatMap(
+                  ([date, products]) =>
+                    Array.from(products.entries()).map(([name, value]) => [
+                      date,
+                      name,
+                      value,
+                    ])
+                ),
+              ];
+
+              exportToExcel(exportData);
+            },
+          },
         },
         show: true,
       },
@@ -140,6 +191,7 @@ const TopProductsAnalytics = () => {
               option={options}
               style={{ height: 500 }}
               theme="dark"
+              notMerge={true}
             />
           </Grid>
         </Grid>

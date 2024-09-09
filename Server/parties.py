@@ -224,3 +224,45 @@ async def get_party_details(party_id: int) -> JSONResponse:
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/parties/long-missed")
+async def get_long_missed_parties() -> JSONResponse:
+    """
+    Get all parties that have not made any purchases in the last 1 month
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # First query to get recent party_ids
+            recent_bills_query = """
+                SELECT DISTINCT ON (party_id) party_id
+                FROM bills
+                WHERE time >= NOW() - INTERVAL '10 month'
+            """
+            cur.execute(recent_bills_query)
+            recent_party_ids = [row["party_id"] for row in cur.fetchall()]
+
+            # Second query to get all parties
+            all_parties_query = """
+                SELECT
+                    id,
+                    name,
+                    phone,
+                    address,
+                    type,
+                    extra_info
+                FROM assosiated_parties
+            """
+
+            cur.execute(all_parties_query)
+            all_parties = cur.fetchall()
+
+            # Filter out parties that are in the recent_party_ids list
+            long_missed_parties = [
+                party for party in all_parties if party["id"] not in recent_party_ids
+            ]
+
+            return JSONResponse(content=long_missed_parties, status_code=200)
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e

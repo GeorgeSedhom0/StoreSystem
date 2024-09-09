@@ -3,30 +3,31 @@ import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import { useCallback, useMemo, useState } from "react";
 import {
-  Autocomplete,
   Button,
   ButtonGroup,
   Card,
+  FormControl,
   Grid,
-  TextField,
+  InputLabel,
+  MenuItem,
+  Select,
   Typography,
 } from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import EChartsReact from "echarts-for-react";
-import { ProductsAnalyticsType } from "./TopProductsAnalytics";
-import { DBProducts } from "../../../utils/types";
-import { exportToExcel } from "../utils";
 import tableIcon from "/table.png";
+import { exportToExcel } from "../utils";
 
+type SalesAnalyticsType = [string, number][];
 const getAnalytics = async (
   startDate: string,
   endDate: string,
-  selectedProducts: number[]
+  types: string[]
 ) => {
-  const { data } = await axios.post<ProductsAnalyticsType>(
-    import.meta.env.VITE_SERVER_URL + "/analytics/products",
-    selectedProducts,
+  const { data } = await axios.post<SalesAnalyticsType>(
+    import.meta.env.VITE_SERVER_URL + "/analytics/sales",
+    types,
     {
       params: {
         start_date: startDate,
@@ -37,39 +38,18 @@ const getAnalytics = async (
   return data;
 };
 
-const getProds = async () => {
-  const { data } = await axios.get<DBProducts>(
-    import.meta.env.VITE_SERVER_URL + "/products"
-  );
-  return data;
-};
-
-const ProductsAnalytics = () => {
+const SalesAnalytics = () => {
   const [startDate, setStartDate] = useState<Dayjs>(
     dayjs().subtract(1, "month")
   );
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
-  const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
+  const [types, setTypes] = useState<string[]>(["sell", "return"]);
 
   const { data, isFetching } = useQuery({
-    queryKey: ["analytics", selectedProducts, startDate, endDate],
+    queryKey: ["analytics", "sales", startDate, endDate, types],
     queryFn: () =>
-      getAnalytics(
-        startDate.toISOString(),
-        endDate.toISOString(),
-        selectedProducts
-      ),
-    initialData: {},
-    enabled: selectedProducts.length > 0,
-  });
-
-  const { data: products } = useQuery({
-    queryKey: ["products"],
-    queryFn: getProds,
-    initialData: {
-      products: [],
-      reserved_products: [],
-    },
+      getAnalytics(startDate.toISOString(), endDate.toISOString(), types),
+    initialData: [],
   });
 
   const setRange = useCallback((range: "day" | "week" | "month") => {
@@ -108,46 +88,7 @@ const ProductsAnalytics = () => {
             title: "Export to Excel",
             icon: `image://${tableIcon}`,
             onclick: () => {
-              const groupedByDate = new Map<string, Map<string, number>>();
-              const allDates = new Set<string>();
-              const allProducts = new Set<string>();
-
-              // Collect all unique dates and products
-              Object.entries(data).forEach(([name, values]) => {
-                allProducts.add(name);
-                values.forEach(([date, value]) => {
-                  allDates.add(date);
-                });
-              });
-
-              // Initialize each product's data for all dates with 0
-              allDates.forEach((date) => {
-                if (!groupedByDate.has(date)) {
-                  groupedByDate.set(date, new Map<string, number>());
-                }
-                allProducts.forEach((product) => {
-                  groupedByDate.get(date)!.set(product, 0);
-                });
-              });
-
-              // Populate the actual values
-              Object.entries(data).forEach(([name, values]) => {
-                values.forEach(([date, value]) => {
-                  groupedByDate.get(date)!.set(name, value);
-                });
-              });
-
-              const exportData = [
-                ["التاريخ", "المنتج", "الكمية المباعة"],
-                ...Array.from(groupedByDate.entries()).flatMap(
-                  ([date, products]) =>
-                    Array.from(products.entries()).map(([name, value]) => [
-                      date,
-                      name,
-                      value,
-                    ])
-                ),
-              ];
+              const exportData = [["التاريخ", "الاجمالى"], ...data];
 
               exportToExcel(exportData);
             },
@@ -161,12 +102,14 @@ const ProductsAnalytics = () => {
       yAxis: {
         type: "value",
       },
-      series: Object.entries(data).map(([name, values]) => ({
-        name,
-        type: "line",
-        smooth: true,
-        data: values,
-      })),
+      series: [
+        {
+          name: "الاجمالى",
+          type: "bar",
+          smooth: true,
+          data: data,
+        },
+      ],
     }),
     [data]
   );
@@ -176,11 +119,10 @@ const ProductsAnalytics = () => {
       <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <Typography variant="h4">احصائيات المنتجات المحددة</Typography>
+            <Typography variant="h4">احصائيات المبيعات</Typography>
             <Typography variant="body1">
-              قم بتحديد الفترة و المنتجات لعرض الاحصائيات
+              قم بتحديد الفترة لعرض الاحصائيات
             </Typography>
-            <Typography variant="body1">يمكن اختيار اكثر من منتج</Typography>
           </Grid>
 
           <Grid item container gap={3} xs={12}>
@@ -214,6 +156,24 @@ const ProductsAnalytics = () => {
                 disabled={isFetching}
               />
             </LocalizationProvider>
+
+            <FormControl>
+              <InputLabel>نوع الفاتورة</InputLabel>
+              <Select
+                multiple
+                label="نوع الفاتورة"
+                value={types}
+                onChange={(e) => setTypes(e.target.value as string[])}
+                sx={{
+                  width: 200,
+                }}
+              >
+                <MenuItem value="sell">نقدي</MenuItem>
+                <MenuItem value="BNPL">آجل</MenuItem>
+                <MenuItem value="buy">شراء</MenuItem>
+                <MenuItem value="return">مرتجع</MenuItem>
+              </Select>
+            </FormControl>
           </Grid>
           <Grid item xs={12}>
             <ButtonGroup>
@@ -223,20 +183,7 @@ const ProductsAnalytics = () => {
             </ButtonGroup>
           </Grid>
           <Grid item xs={12}>
-            <Autocomplete
-              multiple
-              options={products.products}
-              getOptionLabel={(option) => option.name}
-              value={products.products.filter((prod) =>
-                selectedProducts.includes(prod.id!)
-              )}
-              onChange={(_, newValue) =>
-                setSelectedProducts(newValue.map((prod) => prod.id!))
-              }
-              renderInput={(params) => (
-                <TextField {...params} label="المنتجات" />
-              )}
-            />
+            الاجمالى: {data.reduce((acc, [_, v]) => acc + v, 0)}
           </Grid>
           <Grid item xs={12}>
             <EChartsReact
@@ -252,4 +199,4 @@ const ProductsAnalytics = () => {
   );
 };
 
-export default ProductsAnalytics;
+export default SalesAnalytics;

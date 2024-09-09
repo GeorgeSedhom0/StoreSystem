@@ -4,6 +4,7 @@ import ShiftsAnalytics from "./Components/ShiftsAnalytics";
 import TopProductsAnalytics from "./Components/TopProductsAnalytics";
 import AlertsAnalytics from "./Components/AlertsAnalytics";
 import ProductsAnalytics from "./Components/ProductsAnalytics";
+import SalesAnalytics from "./Components/SalesAnalytics";
 
 const Analytics = () => {
   return (
@@ -18,6 +19,7 @@ const Analytics = () => {
           </Card>
         </Grid>
         <ShiftsAnalytics />
+        <SalesAnalytics />
         <TopProductsAnalytics />
         <ProductsAnalytics />
         <AlertsAnalytics />

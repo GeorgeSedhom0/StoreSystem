@@ -272,3 +272,42 @@ def alerts():
     except Exception as e:
         logging.error(e)
         raise HTTPException(status_code=500, detail="An error occurred")
+
+
+@router.post("/analytics/sales")
+def sales(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    types: Optional[list[str]] = None
+):
+    "Get the daily sales"
+    if start_date is None:
+        start_date = "2021-01-01"
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+    if types is None:
+        types = ["sell", "return"]
+
+    try:
+        with Database(HOST, DATABASE, USER, PASS, real_dict_cursor=False) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    DATE_TRUNC('day', bills.time) AS day,
+                    SUM(total) as total
+                FROM bills
+                WHERE bills.time > %s AND bills.time <= %s
+                AND bills.type IN %s
+                GROUP BY day
+                ORDER BY day
+            """, (start_date, end_date, tuple(types)))
+
+            data = cursor.fetchall()
+            return data
+        
+    except psycopg2.Error as e:
+        logging.error(e)
+        raise HTTPException(status_code=500, detail="Database error")
+
+    
+

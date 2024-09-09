@@ -16,6 +16,8 @@ import {
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import EChartsReact from "echarts-for-react";
+import { exportToExcel } from "../utils";
+import tableIcon from "/table.png";
 
 interface ShiftsAnalytics {
   start_date_time: string;
@@ -91,6 +93,33 @@ const ShiftsAnalytics = () => {
             type: ["line", "bar"],
           },
           saveAsImage: {},
+          myTool1: {
+            show: true,
+            title: "Export to Excel",
+            icon: `image://${tableIcon}`,
+            onclick: () => {
+              exportToExcel([
+                ["بداية الشفت", "نهاية الشفت", "الاجمالى"],
+                ...data.map(({ start_date_time, end_date_time, total }) => [
+                  new Date(start_date_time).toLocaleString("ar-eg", {
+                    year: "numeric",
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "numeric",
+                  }),
+                  new Date(end_date_time).toLocaleString("ar-eg", {
+                    year: "numeric",
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "numeric",
+                  }),
+                  total,
+                ]),
+              ]);
+            },
+          },
         },
         show: true,
       },
@@ -214,6 +243,7 @@ const ShiftsAnalytics = () => {
               option={options}
               style={{ height: 500 }}
               theme="dark"
+              notMerge={true}
             />
           </Grid>
         </Grid>
