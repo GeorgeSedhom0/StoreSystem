@@ -5,6 +5,14 @@ import BillView from "../../../utils/BillView";
 import { printBill } from "../../../utils/functions";
 import { AlertMsg } from "../../Shared/AlertMessage";
 import EditableBill from "./EditableBill";
+import axios from "axios";
+import { useMutation } from "@tanstack/react-query";
+
+const endReservation = async (id: string) => {
+  await axios.get(import.meta.env.VITE_SERVER_URL + "/end-reservation", {
+    params: { bill_id: id },
+  });
+};
 
 const Bill = ({
   bill,
@@ -22,6 +30,18 @@ const Bill = ({
   const [billPreviewOpen, setBillPreviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
+
+  const { mutate: endReservationMutation } = useMutation({
+    mutationKey: ["endReservation"],
+    mutationFn: endReservation,
+    onSuccess: () => {
+      setMsg({ type: "success", text: "تم تسليم الحجز" });
+      getBills();
+    },
+    onError: () => {
+      setMsg({ type: "error", text: "حدث خطأ أثناء تسليم الحجز" });
+    },
+  });
 
   const printWithPrinter = useCallback(async () => {
     setBillPreviewOpen(true);
@@ -70,6 +90,10 @@ const Bill = ({
           ? "مرتجع"
           : bill.type === "BNPL"
           ? "بيع اجل"
+          : bill.type === "reserve"
+          ? "حجز"
+          : bill.type === "installment"
+          ? "قسط"
           : ""}
       </TableCell>
       <TableCell>{new Date(bill.time).toLocaleString("ar-EG")}</TableCell>
@@ -85,6 +109,11 @@ const Bill = ({
           <Button onClick={() => setEditing(true)}>تعديل</Button>
           <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
           <Button onClick={printWithPrinter}>طباعة</Button>
+          {bill.type === "reserve" && (
+            <Button onClick={() => endReservationMutation(bill.id)}>
+              تسليم
+            </Button>
+          )}
         </ButtonGroup>
       </TableCell>
       <TableCell>

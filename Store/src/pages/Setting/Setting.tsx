@@ -1,11 +1,11 @@
 import { TabContext, TabList, TabPanel } from "@mui/lab";
 import { Card, Divider, Tab } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
-import Users from "./Components/Users";
 import Basics from "./Components/Basics";
 import Scopes from "./Components/Scopes";
 import Parties from "./Components/Parties";
 import autoAnimate from "@formkit/auto-animate";
+import Users from "./Components/Users";
 
 const Settings = () => {
   const [tab, setTab] = useState("1");

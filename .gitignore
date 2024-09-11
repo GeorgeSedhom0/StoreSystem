@@ -1,5 +1,6 @@
 /.mypy_cache
 package-lock.json
+pnpm-lock.yaml
 Server/env
 .env
 __pycache__
