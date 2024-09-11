@@ -228,7 +228,7 @@ const Sell = () => {
       }
 
       if (e.key === "Enter") {
-        if (code.length >= 8) {
+        if (code.length >= 7) {
           const product = products.find((prod) => prod.bar_code === code);
           if (product) {
             addToCart(product);
@@ -603,7 +603,7 @@ const Sell = () => {
                       if (e.key === "Enter") {
                         // if an enter is pressed, and the query is more than or equal to 8 numbers
                         // then search for the product with the barcode and add it to the cart
-                        if (query.length >= 8 && !isNaN(parseInt(query))) {
+                        if (query.length >= 7 && !isNaN(parseInt(query))) {
                           const product = products.find(
                             (prod) => prod.bar_code === query
                           );
