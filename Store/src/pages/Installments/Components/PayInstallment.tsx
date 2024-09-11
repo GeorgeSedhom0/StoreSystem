@@ -72,10 +72,12 @@ const PayInstallment = ({
     onSuccess: () => {
       setMsg({ type: "success", text: "تم الدفع" });
       refetchInstallments();
+      setSelectedInstallment(null);
     },
     onError: () => {
       setMsg({ type: "error", text: "حدث خطأ" });
       refetchInstallments();
+      setSelectedInstallment(null);
     },
   });
 

@@ -154,15 +154,15 @@ def get_installments() -> JSONResponse:
 
 
 @router.post("/installments/pay/{installment_id}")
-def add_flow(installment_id: int, amount: float, time: str) -> JSONResponse:
+def add_flow(installment_id: int, amount: float) -> JSONResponse:
     query = """
     INSERT INTO installments_flow (installment_id, amount, time)
-    VALUES (%s, %s, %s)
+    VALUES (%s, %s, now())
     """
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(query, (installment_id, amount, time))
+            cur.execute(query, (installment_id, amount))
             return JSONResponse(content={"status": "success"})
     except psycopg2.Error as e:
         logging.error(e)

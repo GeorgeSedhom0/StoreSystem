@@ -572,6 +572,42 @@ def add_bill(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.get("/end-reservation")
+def end_reservation(bill_id: str, ):
+    """
+    End a reservation for all products in a reservation bill
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT product_id, amount
+                FROM products_flow
+                WHERE bill_id = %s
+                """, (bill_id, ))
+            products = cur.fetchall()
+
+            cur.execute(
+                """
+                UPDATE bills
+                SET type = 'sell'
+                WHERE ref_id = %s
+                """, (bill_id, ))
+
+            cur.executemany(
+                """
+                DELETE FROM reserved_products
+                WHERE product_id = %s
+                AND amount = %s
+                """, [(product["product_id"], product["amount"])
+                      for product in products])
+
+            return {"message": "Reservation ended successfully"}
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.get("/cash-flow")
 def get_cash_flow(
     start_date: Optional[str] = None,

@@ -255,3 +255,59 @@ def add_user(
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/users")
+def get_users() -> JSONResponse:
+    """
+    Get all users
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute("SELECT * FROM users")
+            users = cur.fetchall()
+            for user in users:
+                del user["password"]
+            return JSONResponse(content=users)
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.put("/user")
+def update_user(
+        username: str = Form(...),
+        password: str = Form(...),
+        email: str = Form(...),
+        phone: str = Form(...),
+        scope_id: int = Form(...),
+) -> JSONResponse:
+    """
+    Update a user
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            hashed_password = bcrypt.hashpw(
+                password.encode('utf-8'),
+                bcrypt.gensalt(),
+            ).decode('utf-8')
+            cur.execute(
+                """
+                UPDATE users
+                SET password = %s, email = %s, phone = %s, scope_id = %s
+                WHERE username = %s
+                RETURNING *
+                """, (hashed_password, email, phone, scope_id, username))
+            user = cur.fetchone()
+
+            cur.execute(
+                """
+                UPDATE users
+                SET username = %s
+                WHERE id = %s
+                """, (username, user['id']))
+
+            return JSONResponse(content=user)
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
