@@ -597,9 +597,14 @@ def end_reservation(bill_id: str, ):
             cur.executemany(
                 """
                 DELETE FROM reserved_products
-                WHERE product_id = %s
-                AND amount = %s
-                """, [(product["product_id"], product["amount"])
+                WHERE id IN (
+                    SELECT id
+                    FROM reserved_products
+                    WHERE product_id = %s
+                    AND amount = %s
+                    LIMIT 1
+                )
+                """, [(product["product_id"], product["amount"] * -1)
                       for product in products])
 
             return {"message": "Reservation ended successfully"}

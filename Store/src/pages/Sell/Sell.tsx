@@ -32,7 +32,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useParties } from "../../utils/data/useParties";
 import PartyDetails from "../Shared/PartyDetails";
-import { CheckBox } from "@mui/icons-material";
 
 const getProds = async () => {
   const { data } = await axios.get<DBProducts>(
