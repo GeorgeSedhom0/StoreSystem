@@ -21,6 +21,7 @@ import Analytics from "./pages/Analytics/Analytics";
 import { StoreDataProvider } from "./StoreDataProvider";
 import axios from "axios";
 import Installments from "./pages/Installments/Installments";
+import { SettingsDataProvider } from "./SettingsDataProvider";
 
 axios.defaults.withCredentials = true;
 
@@ -79,30 +80,32 @@ const App = () => {
         <Router>
           <StoreDataProvider>
             <ThemeProvider theme={theme}>
-              <CssBaseline />
-              <Layout themeMode={themeMode} setThemeMode={setThemeMode}>
-                <Routes>
-                  <Route path="/sell" element={<Sell />} />
-                  <Route path="/add-to-storage" element={<Storage />} />
-                  <Route path="/buy" element={<Buy />} />
-                  <Route path="/products" element={<Products />} />
-                  <Route path="/bills" element={<Bills />} />
-                  <Route path="/bills/:partyId" element={<Bills />} />
-                  <Route path="/cash" element={<Cash />} />
-                  <Route path="/cash/:partyId" element={<Cash />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/installments" element={<Installments />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/login" element={<Login />} />
-                  {/* if any route other than the defined go to /sell */}
-                  <Route path="*" element={<Navigate to="/sell" />} />
-                </Routes>
-              </Layout>
+              <SettingsDataProvider>
+                <CssBaseline />
+                <Layout themeMode={themeMode} setThemeMode={setThemeMode}>
+                  <Routes>
+                    <Route path="/sell" element={<Sell />} />
+                    <Route path="/add-to-storage" element={<Storage />} />
+                    <Route path="/buy" element={<Buy />} />
+                    <Route path="/products" element={<Products />} />
+                    <Route path="/bills" element={<Bills />} />
+                    <Route path="/bills/:partyId" element={<Bills />} />
+                    <Route path="/cash" element={<Cash />} />
+                    <Route path="/cash/:partyId" element={<Cash />} />
+                    <Route path="/analytics" element={<Analytics />} />
+                    <Route path="/installments" element={<Installments />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/login" element={<Login />} />
+                    {/* if any route other than the defined go to /sell */}
+                    <Route path="*" element={<Navigate to="/sell" />} />
+                  </Routes>
+                </Layout>
+              </SettingsDataProvider>
             </ThemeProvider>
           </StoreDataProvider>
         </Router>
       </QueryClientProvider>
-    </Rtl>
+    </Rtl >
   );
 };
 
