@@ -10,8 +10,10 @@ import {
   Button,
   Autocomplete,
   TextField,
+  FormControlLabel,
+  Switch
 } from "@mui/material";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -19,7 +21,7 @@ import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ar-sa";
 import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { Bill as BillType } from "../../utils/types";
+import { Bill as BillType, DBProducts, Product } from "../../utils/types";
 import { TableVirtuoso } from "react-virtuoso";
 import Bill from "./Components/Bill";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -30,6 +32,14 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { useParties } from "../../utils/data/useParties";
+import { SettingsContext } from "../../SettingsDataProvider";
+
+const getProds = async () => {
+  const { data } = await axios.get<DBProducts>(
+    import.meta.env.VITE_SERVER_URL + "/products"
+  );
+  return data;
+};
 
 const getBills = async (
   startDate: Dayjs,
@@ -50,6 +60,7 @@ const getBills = async (
 };
 
 const Bills = () => {
+  const { settingsData, updateSetting } = useContext(SettingsContext);
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [filters, setFilters] = useState<string[]>([
@@ -60,9 +71,21 @@ const Bills = () => {
     "reserve",
     "installment",
   ]);
+  const [selectedProduct, setSelectedProduct] = useState<Product[]>([]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [printer, setPrinter] = useState<any | null>(null);
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
+
+  const {
+    data: products,
+    isLoading: isProductsLoading,
+    refetch: updateProducts,
+  } = useQuery({
+    queryKey: ["products"],
+    queryFn: getProds,
+    initialData: { products: [], reserved_products: [] },
+    select: (data) => data.products,
+  });
 
   const { partyId } = useParams();
 
@@ -120,14 +143,25 @@ const Bills = () => {
     [lastShift]
   );
 
-  const filteredBills = useMemo(
-    () => bills?.filter((bill) => filters.includes(bill.type)),
-    [bills, filters]
-  );
+  const filteredBills = useMemo(() => {
+    let newBill = bills?.filter((bill) => filters.includes(bill.type));
+
+    console.log(bills)
+    if (selectedProduct.length === 0) return newBill;
+
+    newBill = newBill.filter(bill =>
+      bill.products.some(product =>
+        selectedProduct.some(selectedProduct => selectedProduct.name === product.name)
+      )
+    );
+
+    return newBill;
+  }, [bills, filters, selectedProduct]);
 
   const total = filteredBills?.reduce((acc, bill) => acc + bill.total, 0);
 
   const loading = isShiftLoading || isBillsLoading;
+
 
   return (
     <>
@@ -137,7 +171,23 @@ const Bills = () => {
           <Card elevation={3} sx={{ p: 2 }}>
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h4">الفواتير</Typography>
+                <Grid container xs={12} justifyContent="space-between">
+                  <Grid item>
+                    <Typography variant="h4">الفواتير</Typography>
+                  </Grid>
+                  <Grid item>
+                    <FormControlLabel
+                      control={<Switch />}
+                      checked={settingsData.showExpandedBills}
+                      label="Expand Bills"
+                      onChange={() => {
+                        // Don't turn this of while some product filter is applied
+                        if (selectedProduct.length !== 0) return;
+                        updateSetting({ ...settingsData, showExpandedBills: !settingsData.showExpandedBills })
+                      }}
+                    />
+                  </Grid>
+                </Grid>
                 <Typography variant="body1">
                   قم بتحديد الفترة لعرض الفواتير
                 </Typography>
@@ -197,6 +247,28 @@ const Bills = () => {
                     <MenuItem value="installment">تقسيط</MenuItem>
                   </Select>
                 </FormControl>
+
+                <Autocomplete
+                  multiple
+                  options={products}
+                  getOptionLabel={(option) => option.name}
+                  value={selectedProduct}
+                  sx={{ minWidth: 300 }}
+                  onChange={(_, newValue) => {
+                    setSelectedProduct(newValue);
+                    
+                    // Turn show product on if filter is selected
+                    if (newValue.length !== 0 && !settingsData.showExpandedBills) {
+                      updateSetting({ ...settingsData, showExpandedBills: true });
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Products"
+                    />
+                  )}
+                />
               </Grid>
               <Grid item xs={12}>
                 <ButtonGroup>
