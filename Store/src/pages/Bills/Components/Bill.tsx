@@ -1,6 +1,6 @@
-import { Button, ButtonGroup, TableCell, TableRow, Table, TableContainer, TableBody } from "@mui/material";
+import { Button, ButtonGroup, TableCell, TableRow } from "@mui/material";
 import { Bill as BillType } from "../../../utils/types";
-import { useCallback, useContext, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import BillView from "../../../utils/BillView";
 import { printBill } from "../../../utils/functions";
 import { AlertMsg } from "../../Shared/AlertMessage";
@@ -8,7 +8,6 @@ import EditableBill from "./EditableBill";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import ProductView from "../../../utils/ProductView";
-import { SettingsContext } from "../../../SettingsDataProvider";
 
 const endReservation = async (id: string) => {
   await axios.get(import.meta.env.VITE_SERVER_URL + "/end-reservation", {
@@ -22,14 +21,15 @@ const Bill = ({
   printer,
   setPrinter,
   getBills,
+  showExpandedBill
 }: {
   bill: BillType;
   setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>;
   printer: any;
   setPrinter: React.Dispatch<React.SetStateAction<any>>;
   getBills: () => void;
+  showExpandedBill: boolean;
 }) => {
-  const { settingsData } = useContext(SettingsContext);
   const [billPreviewOpen, setBillPreviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
@@ -126,7 +126,7 @@ const Bill = ({
       </TableRow>
       <TableRow>
         {
-          settingsData.showExpandedBills ? (
+          showExpandedBill ? (
             <TableCell colSpan={7} sx={{ padding: 0 }}>
               <ProductView bill={bill} />
             </TableCell>

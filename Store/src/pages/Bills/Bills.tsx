@@ -32,7 +32,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { useParties } from "../../utils/data/useParties";
-import { SettingsContext } from "../../SettingsDataProvider";
 
 const getProds = async () => {
   const { data } = await axios.get<DBProducts>(
@@ -60,7 +59,11 @@ const getBills = async (
 };
 
 const Bills = () => {
-  const { settingsData, updateSetting } = useContext(SettingsContext);
+  const [showExpandedBill, setShowExpandedBill] = useState<boolean>(() => {
+    const prevSetting = localStorage.getItem("showExpandedBill");
+    if (!prevSetting) return false;
+    return JSON.parse(prevSetting);
+  })
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [filters, setFilters] = useState<string[]>([
@@ -158,6 +161,10 @@ const Bills = () => {
     return newBill;
   }, [bills, filters, selectedProduct]);
 
+  useEffect(() => {
+    localStorage.setItem("showExpandedBill", showExpandedBill ? "true" : "false")
+  }, [showExpandedBill])
+
   const total = filteredBills?.reduce((acc, bill) => acc + bill.total, 0);
 
   const loading = isShiftLoading || isBillsLoading;
@@ -178,12 +185,12 @@ const Bills = () => {
                   <Grid item>
                     <FormControlLabel
                       control={<Switch id="showExpandedBillSwitch" />}
-                      checked={settingsData.showExpandedBills}
+                      checked={showExpandedBill}
                       label="Expand Bills"
-                      onChange={() => {
+                      onChange={(_, isChecked: boolean) => {
                         // Don't turn this of while some product filter is applied
                         if (selectedProduct.length !== 0) return;
-                        updateSetting({ ...settingsData, showExpandedBills: !settingsData.showExpandedBills })
+                        setShowExpandedBill(isChecked)
                       }}
                     />
                   </Grid>
@@ -257,10 +264,10 @@ const Bills = () => {
                   sx={{ minWidth: 300 }}
                   onChange={(_, newValue) => {
                     setSelectedProduct(newValue);
-                    
+
                     // Turn show product on if filter is selected
-                    if (newValue.length !== 0 && !settingsData.showExpandedBills) {
-                      updateSetting({ ...settingsData, showExpandedBills: true });
+                    if (newValue.length !== 0 && !showExpandedBill) {
+                      setShowExpandedBill(true);
                     }
                   }}
                   renderInput={(params) => (
@@ -339,6 +346,7 @@ const Bills = () => {
                   printer={printer}
                   setPrinter={setPrinter}
                   getBills={refetchBills}
+                  showExpandedBill={showExpandedBill}
                 />
               )}
             />
