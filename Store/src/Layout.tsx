@@ -40,7 +40,7 @@ const Layout = ({
 
   useEffect(() => {
     if (
-      !profile.user.paths.some((path) => location.pathname.startsWith(path))
+      profile && !profile.user.paths.some((path) => location.pathname.startsWith(path))
     ) {
       navigate("/sell");
     }
@@ -83,7 +83,7 @@ const Layout = ({
                 width: "fit-content",
               }}
             >
-              {profile.user.pages.map((page, index) => (
+              {profile && profile.user.pages.map((page, index) => (
                 <NavLink key={index} to={profile.user.paths[index]}>
                   <Button>{page}</Button>
                 </NavLink>

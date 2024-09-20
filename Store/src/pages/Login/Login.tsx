@@ -47,12 +47,14 @@ const Login = () => {
             </Grid>
             <Grid item container gap={3}>
               <TextField
+                id="loginUserName"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 label="اسم المستخدم"
                 fullWidth
               />
               <TextField
+                id="loginPassword"
                 value={password}
                 type="password"
                 onChange={(e) => setPassword(e.target.value)}
@@ -61,7 +63,7 @@ const Login = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <Button onClick={login} variant="contained">
+              <Button onClick={login} variant="contained" id="loginBtn">
                 تسجيل الدخول
               </Button>
             </Grid>
