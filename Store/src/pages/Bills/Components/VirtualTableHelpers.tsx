@@ -37,7 +37,7 @@ export const VirtuosoTableComponents: TableComponents<Bill> = {
       sx={{ borderCollapse: "separate", tableLayout: "fixed" }}
     />
   ),
-  TableRow: ({ item: _item, ...props }) => <TableRow {...props} />,
+  TableRow: ({ item: _item, ...props }) => <>{props.children}</>,
   TableBody: React.forwardRef<HTMLTableSectionElement>((props, ref) => (
     <TableBody {...props} ref={ref} />
   )),

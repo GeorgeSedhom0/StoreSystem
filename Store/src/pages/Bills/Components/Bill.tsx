@@ -72,74 +72,68 @@ const Bill = ({
   }, [printer]);
 
   return (
-    <TableCell colSpan={7} sx={{ borderBottom: "none", padding: 0 }}>
-      <TableContainer>
-        <Table>
-          <TableBody>
-            <TableRow>
-              <BillView
-                bill={bill}
-                open={billPreviewOpen}
-                setOpen={setBillPreviewOpen}
-                ref={billRef}
-              />
-              {editing ? (
-                <EditableBill bill={bill} setEditing={setEditing} getBills={getBills} />
-              ) : null}
-              <TableCell>{bill.id}</TableCell>
-              <TableCell>
-                فاتورة{" "}
-                {bill.type === "sell"
-                  ? "بيع"
-                  : bill.type === "buy"
-                    ? "شراء"
-                    : bill.type === "return"
-                      ? "مرتجع"
-                      : bill.type === "BNPL"
-                        ? "بيع اجل"
-                        : bill.type === "reserve"
-                          ? "حجز"
-                          : bill.type === "installment"
-                            ? "قسط"
-                            : ""}
-              </TableCell>
-              <TableCell>{new Date(bill.time).toLocaleString("ar-EG")}</TableCell>
-              <TableCell>{Math.abs(bill.discount)}</TableCell>
-              <TableCell>{Math.abs(bill.total)}</TableCell>
-              <TableCell>
-                <ButtonGroup
-                  variant="outlined"
-                  sx={{
-                    width: "100%",
-                  }}
-                >
-                  <Button onClick={() => setEditing(true)}>تعديل</Button>
-                  <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
-                  <Button onClick={printWithPrinter}>طباعة</Button>
-                  {bill.type === "reserve" && (
-                    <Button onClick={() => endReservationMutation(bill.id)}>
-                      تسليم
-                    </Button>
-                  )}
-                </ButtonGroup>
-              </TableCell>
-              <TableCell>
-                {bill.party_name ? bill.party_name : "بدون طرف ثانى"}
-              </TableCell>
-            </TableRow>
-            {
-              settingsData.showExpandedBills ? (
-                <TableRow>
-                  <TableCell colSpan={7} sx={{ padding: 0 }}>
-                    <ProductView bill={bill} />
-                  </TableCell>
-                </TableRow>
-              ) : <></>
-            }
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </TableCell>
+    <>
+      <TableRow>
+        <BillView
+          bill={bill}
+          open={billPreviewOpen}
+          setOpen={setBillPreviewOpen}
+          ref={billRef}
+        />
+        {editing ? (
+          <EditableBill bill={bill} setEditing={setEditing} getBills={getBills} />
+        ) : null}
+        <TableCell>{bill.id}</TableCell>
+        <TableCell>
+          فاتورة{" "}
+          {bill.type === "sell"
+            ? "بيع"
+            : bill.type === "buy"
+              ? "شراء"
+              : bill.type === "return"
+                ? "مرتجع"
+                : bill.type === "BNPL"
+                  ? "بيع اجل"
+                  : bill.type === "reserve"
+                    ? "حجز"
+                    : bill.type === "installment"
+                      ? "قسط"
+                      : ""}
+        </TableCell>
+        <TableCell>{new Date(bill.time).toLocaleString("ar-EG")}</TableCell>
+        <TableCell>{Math.abs(bill.discount)}</TableCell>
+        <TableCell>{Math.abs(bill.total)}</TableCell>
+        <TableCell>
+          <ButtonGroup
+            variant="outlined"
+            sx={{
+              width: "100%",
+            }}
+          >
+            <Button onClick={() => setEditing(true)}>تعديل</Button>
+            <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
+            <Button onClick={printWithPrinter}>طباعة</Button>
+            {bill.type === "reserve" && (
+              <Button onClick={() => endReservationMutation(bill.id)}>
+                تسليم
+              </Button>
+            )}
+          </ButtonGroup>
+        </TableCell>
+        <TableCell>
+          {bill.party_name ? bill.party_name : "بدون طرف ثانى"}
+        </TableCell>
+      </TableRow>
+      <TableRow>
+        {
+          settingsData.showExpandedBills ? (
+            <TableCell colSpan={7} sx={{ padding: 0 }}>
+              <ProductView bill={bill} />
+            </TableCell>
+          ) : <></>
+        }
+      </TableRow>
+    </>
   );
 };
 
