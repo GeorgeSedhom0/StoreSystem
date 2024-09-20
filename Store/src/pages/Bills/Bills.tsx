@@ -177,7 +177,7 @@ const Bills = () => {
                   </Grid>
                   <Grid item>
                     <FormControlLabel
-                      control={<Switch />}
+                      control={<Switch id="showExpandedBillSwitch" />}
                       checked={settingsData.showExpandedBills}
                       label="Expand Bills"
                       onChange={() => {
@@ -251,6 +251,7 @@ const Bills = () => {
                 <Autocomplete
                   multiple
                   options={products}
+                  id="selectProductDropdown"
                   getOptionLabel={(option) => option.name}
                   value={selectedProduct}
                   sx={{ minWidth: 300 }}

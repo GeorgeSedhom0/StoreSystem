@@ -1,0 +1,4 @@
+selenium==4.24.0
+webdriver-manager==4.0.2
+html-testRunner==1.2.1
+
