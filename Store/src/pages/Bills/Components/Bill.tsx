@@ -18,7 +18,6 @@ const Bill = ({ context, item: bill, ...props }: any) => {
   const [billPreviewOpen, setBillPreviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
-  console.log(bill);
 
   const { mutate: endReservationMutation } = useMutation({
     mutationKey: ["endReservation"],
