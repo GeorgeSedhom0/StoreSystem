@@ -11,9 +11,9 @@ import {
   Autocomplete,
   TextField,
   FormControlLabel,
-  Switch
+  Switch,
 } from "@mui/material";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -23,7 +23,6 @@ import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { Bill as BillType, DBProducts, Product } from "../../utils/types";
 import { TableVirtuoso } from "react-virtuoso";
-import Bill from "./Components/Bill";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
   fixedHeaderContent,
@@ -60,10 +59,10 @@ const getBills = async (
 
 const Bills = () => {
   const [showExpandedBill, setShowExpandedBill] = useState<boolean>(() => {
-    const prevSetting = localStorage.getItem("showExpandedBill");
-    if (!prevSetting) return false;
-    return JSON.parse(prevSetting);
-  })
+    const showExpandedBill = localStorage.getItem("showExpandedBill");
+    if (showExpandedBill === "true") return true;
+    return false;
+  });
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [filters, setFilters] = useState<string[]>([
@@ -79,11 +78,7 @@ const Bills = () => {
   const [printer, setPrinter] = useState<any | null>(null);
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
 
-  const {
-    data: products,
-    isLoading: isProductsLoading,
-    refetch: updateProducts,
-  } = useQuery({
+  const { data: products } = useQuery({
     queryKey: ["products"],
     queryFn: getProds,
     initialData: { products: [], reserved_products: [] },
@@ -147,28 +142,40 @@ const Bills = () => {
   );
 
   const filteredBills = useMemo(() => {
-    let newBill = bills?.filter((bill) => filters.includes(bill.type));
+    let filteredBills = bills.filter((bill) => filters.includes(bill.type));
 
-    console.log(bills)
-    if (selectedProduct.length === 0) return newBill;
+    if (selectedProduct.length > 0) {
+      filteredBills = filteredBills.filter((bill) =>
+        bill.products.some((product) =>
+          selectedProduct.some(
+            (selectedProduct) => selectedProduct.name === product.name
+          )
+        )
+      );
+    }
 
-    newBill = newBill.filter(bill =>
-      bill.products.some(product =>
-        selectedProduct.some(selectedProduct => selectedProduct.name === product.name)
-      )
-    );
+    if (showExpandedBill) {
+      const expandedFilteredBills: BillType[] = [];
+      filteredBills.forEach((bill) => {
+        expandedFilteredBills.push(bill);
+        expandedFilteredBills.push({ ...bill, isExpanded: true });
+      });
+      return expandedFilteredBills;
+    }
 
-    return newBill;
-  }, [bills, filters, selectedProduct]);
+    return filteredBills;
+  }, [bills, filters, selectedProduct, showExpandedBill]);
 
   useEffect(() => {
-    localStorage.setItem("showExpandedBill", showExpandedBill ? "true" : "false")
-  }, [showExpandedBill])
+    localStorage.setItem(
+      "showExpandedBill",
+      showExpandedBill ? "true" : "false"
+    );
+  }, [showExpandedBill]);
 
-  const total = filteredBills?.reduce((acc, bill) => acc + bill.total, 0);
+  const total = filteredBills.reduce((acc, bill) => acc + bill.total, 0);
 
   const loading = isShiftLoading || isBillsLoading;
-
 
   return (
     <>
@@ -186,11 +193,11 @@ const Bills = () => {
                     <FormControlLabel
                       control={<Switch id="showExpandedBillSwitch" />}
                       checked={showExpandedBill}
-                      label="Expand Bills"
+                      label="عرض الفواتير المفصلة"
                       onChange={(_, isChecked: boolean) => {
                         // Don't turn this of while some product filter is applied
                         if (selectedProduct.length !== 0) return;
-                        setShowExpandedBill(isChecked)
+                        setShowExpandedBill(isChecked);
                       }}
                     />
                   </Grid>
@@ -271,10 +278,7 @@ const Bills = () => {
                     }
                   }}
                   renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Products"
-                    />
+                    <TextField {...params} label="بحث بالمنتج" />
                   )}
                 />
               </Grid>
@@ -339,16 +343,12 @@ const Bills = () => {
               fixedHeaderContent={fixedHeaderContent}
               components={VirtuosoTableComponents}
               data={filteredBills}
-              itemContent={(_, bill) => (
-                <Bill
-                  bill={bill}
-                  setMsg={setMsg}
-                  printer={printer}
-                  setPrinter={setPrinter}
-                  getBills={refetchBills}
-                  showExpandedBill={showExpandedBill}
-                />
-              )}
+              context={{
+                setMsg: setMsg,
+                printer: printer,
+                setPrinter: setPrinter,
+                getBills: refetchBills,
+              }}
             />
           </Card>
         </Grid>
