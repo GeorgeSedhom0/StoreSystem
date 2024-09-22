@@ -2,6 +2,7 @@ import psycopg2  # type: ignore
 from dotenv import load_dotenv  # type: ignore
 from os import getenv
 import bcrypt  # type: ignore
+from datetime import datetime
 
 load_dotenv()
 
@@ -482,6 +483,26 @@ AFTER UPDATE ON bills
 FOR EACH ROW
 EXECUTE FUNCTION update_cash_flow_after_update();
 """)
+
+# Insert initial products
+cur.execute("""
+INSERT INTO products (name, bar_code, wholesale_price, price, stock, category)
+VALUES
+('Product A', '1234567890123', 10, 15, 100, 'General'),
+('Product B', '1234567890124', 20, 25, 50, 'General')
+""")
+
+# Insert a bill with associated product flows
+current_time = datetime.now().isoformat()
+cur.execute("""
+INSERT INTO bills (store_id, ref_id, time, discount, total, type, party_id)
+VALUES (%s, %s, %s, %s, %s, %s, NULL) RETURNING id
+""", (1, '1_1', current_time, 0, 15, 'sell'))
+
+cur.execute("""
+INSERT INTO products_flow (store_id, bill_id, product_id, wholesale_price, price, amount)
+VALUES (%s, %s, (SELECT id FROM products WHERE name = %s), %s, %s, %s)
+""", (1, '1_1', 'Product A', 10, 15, -1))
 
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------
