@@ -33,7 +33,7 @@ class StoreSystemTest(unittest.TestCase):
         time.sleep(2)
         driver.find_element(By.ID, "showExpandedBillSwitch").click()
         time.sleep(2)
-        driver.find_element("xpath", "//td[contains(text(), 'Meds')]")
+        driver.find_element("xpath", "//td[contains(text(), 'Product A')]")
 
         time.sleep(2)
         product_dropdown = driver.find_element(By.ID,"selectProductDropdown")
@@ -50,7 +50,7 @@ class StoreSystemTest(unittest.TestCase):
 
 
         try:
-            driver.find_element("xpath", "//td[contains(text(), 'Meds')]")
+            driver.find_element("xpath", "//td[contains(text(), 'Product A')]")
             assert False, "Bill with product meds should not be present"
         except:
             pass
@@ -61,7 +61,7 @@ class StoreSystemTest(unittest.TestCase):
         time.sleep(2)
         product_dropdown.send_keys(Keys.ENTER)
         time.sleep(2)
-        driver.find_element("xpath", "//td[contains(text(), 'Meds')]")
+        driver.find_element("xpath", "//td[contains(text(), 'Product A')]")
 
         time.sleep(2)
 
