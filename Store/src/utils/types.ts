@@ -64,3 +64,13 @@ export interface Party {
   type: string;
   extra_info: { [key: string]: string };
 }
+
+export interface Employee {
+  id: number;
+  name: string;
+  phone: string;
+  address: string;
+  salary: number;
+  started_on: string;
+  stopped_on: string;
+}

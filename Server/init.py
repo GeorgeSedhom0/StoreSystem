@@ -32,6 +32,7 @@ cur.execute("DROP TABLE IF EXISTS assosiated_parties CASCADE")
 cur.execute("DROP TABLE IF EXISTS reserved_products CASCADE")
 cur.execute("DROP TABLE IF EXISTS installments CASCADE")
 cur.execute("DROP TABLE IF EXISTS installments_flow CASCADE")
+cur.execute("DROP TABLE IF EXISTS employee CASCADE")
 
 cur.execute("SET TIME ZONE 'Africa/Cairo'")
 
@@ -66,7 +67,8 @@ VALUES
 ('المنتجات', '/products'),
 ('الحركات المالية', '/cash'),
 ('التقارير', '/analytics'),
-('الاعدادات', '/settings')
+('الاعدادات', '/settings'),
+('موظف', '/employee')
 """)
 
 # Create the users table
@@ -220,6 +222,19 @@ CREATE TABLE shifts (
   end_date_time TIMESTAMP,
   current BOOLEAN,
   "user" INT REFERENCES users(id)
+)
+""")
+
+# Create the employee table
+cur.execute("""
+CREATE TABLE employee (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    phone VARCHAR,
+    address VARCHAR,
+    salary FLOAT,
+    started_on TIMESTAMP,
+    stopped_on TIMESTAMP
 )
 """)
 
@@ -503,6 +518,17 @@ cur.execute("""
 INSERT INTO products_flow (store_id, bill_id, product_id, wholesale_price, price, amount)
 VALUES (%s, %s, (SELECT id FROM products WHERE name = %s), %s, %s, %s)
 """, (1, '1_1', 'Product A', 10, 15, -1))
+
+# Entries for employee table
+cur.execute("""
+INSERT INTO employee (name, phone, address, salary, started_on)
+VALUES
+(%s, %s, %s, %s, %s),
+(%s, %s, %s, %s, %s)
+""", (
+    'John Doe', '01011111111', '123 Street, City', 5000, current_time,
+    'Jane Smith', '01022222222', '456 Avenue, Town', 5500, current_time
+))
 
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------
