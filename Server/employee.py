@@ -49,7 +49,6 @@ class Database:
             self.conn.commit()
         self.conn.close()
 
-
 class EmployeeBase(BaseModel):
     name: str
     phone: Optional[str] = None
@@ -102,7 +101,6 @@ def add_employee(employee: EmployeeBase, store_id: int) -> JSONResponse:
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
-
 
 @router.get("/employees")
 def get_employees() -> JSONResponse:
