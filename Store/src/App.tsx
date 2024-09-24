@@ -94,7 +94,7 @@ const App = () => {
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/installments" element={<Installments />} />
                   <Route path="/settings" element={<Settings />} />
-                  <Route path="/employee" element={<Employee />} />
+                  <Route path="/employees" element={<Employee />} />
                   <Route path="/login" element={<Login />} />
                   {/* if any route other than the defined go to /sell */}
                   <Route path="*" element={<Navigate to="/sell" />} />
@@ -104,7 +104,7 @@ const App = () => {
           </StoreDataProvider>
         </Router>
       </QueryClientProvider>
-    </Rtl >
+    </Rtl>
   );
 };
 

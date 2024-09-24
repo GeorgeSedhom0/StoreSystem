@@ -33,6 +33,7 @@ cur.execute("DROP TABLE IF EXISTS reserved_products CASCADE")
 cur.execute("DROP TABLE IF EXISTS installments CASCADE")
 cur.execute("DROP TABLE IF EXISTS installments_flow CASCADE")
 cur.execute("DROP TABLE IF EXISTS employee CASCADE")
+cur.execute("DROP TABLE IF EXISTS salaries CASCADE")
 
 cur.execute("SET TIME ZONE 'Africa/Cairo'")
 
@@ -46,7 +47,7 @@ CREATE TABLE scopes (
 cur.execute("""
 INSERT INTO scopes (name, pages)
 VALUES
-('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8])
+('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9])
 """)
 
 # Create pages table
@@ -68,7 +69,7 @@ VALUES
 ('الحركات المالية', '/cash'),
 ('التقارير', '/analytics'),
 ('الاعدادات', '/settings'),
-('موظف', '/employee')
+('الموظفين', '/employees')
 """)
 
 # Create the users table
@@ -238,6 +239,18 @@ CREATE TABLE employee (
 )
 """)
 
+# Create salaries table
+cur.execute("""
+CREATE TABLE salaries (
+    id BIGSERIAL PRIMARY KEY,
+    employee_id BIGINT REFERENCES employee(id),
+    amount FLOAT,
+    bonus FLOAT,
+    deductions FLOAT,
+    time TIMESTAMP
+)
+""")
+
 # --------------------------------------------------------------------
 # ----------------------------triggers--------------------------------
 # --------------------------------------------------------------------
@@ -305,6 +318,43 @@ CREATE TRIGGER trigger_insert_cash_flow_after_insert
 AFTER INSERT ON bills
 FOR EACH ROW
 EXECUTE FUNCTION insert_cash_flow_after_insert();
+""")
+
+# Create the trigger to insert into cash_flow after inserting a salary
+cur.execute("""
+-- Trigger to insert into cash_flow after inserting a salary
+CREATE OR REPLACE FUNCTION insert_cash_flow_after_insert_salary()
+RETURNS TRIGGER AS $$
+DECLARE
+    employee_name VARCHAR;
+BEGIN
+    SELECT name INTO employee_name FROM employee WHERE id = NEW.employee_id;
+
+    INSERT INTO cash_flow (
+        store_id,
+        time,
+        amount,
+        type,
+        bill_id,
+        description,
+        party_id
+    ) VALUES (
+        NEW.store_id,
+        NEW.time,
+        NEW.amount,
+        'out',
+        NEW.store_id || '_' || NEW.id,
+        'راتب ' || employee_name,
+        NEW.employee_id
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_insert_cash_flow_after_insert_salary
+AFTER INSERT ON salaries
+FOR EACH ROW
+EXECUTE FUNCTION insert_cash_flow_after_insert_salary();
 """)
 
 # Create the trigger to insert into cash_flow after inserting a installment
@@ -509,26 +559,27 @@ VALUES
 
 # Insert a bill with associated product flows
 current_time = datetime.now().isoformat()
-cur.execute("""
+cur.execute(
+    """
 INSERT INTO bills (store_id, ref_id, time, discount, total, type, party_id)
 VALUES (%s, %s, %s, %s, %s, %s, NULL) RETURNING id
 """, (1, '1_1', current_time, 0, 15, 'sell'))
 
-cur.execute("""
+cur.execute(
+    """
 INSERT INTO products_flow (store_id, bill_id, product_id, wholesale_price, price, amount)
 VALUES (%s, %s, (SELECT id FROM products WHERE name = %s), %s, %s, %s)
 """, (1, '1_1', 'Product A', 10, 15, -1))
 
 # Entries for employee table
-cur.execute("""
+cur.execute(
+    """
 INSERT INTO employee (name, phone, address, salary, started_on)
 VALUES
 (%s, %s, %s, %s, %s),
 (%s, %s, %s, %s, %s)
-""", (
-    'John Doe', '01011111111', '123 Street, City', 5000, current_time,
-    'Jane Smith', '01022222222', '456 Avenue, Town', 5500, current_time
-))
+""", ('John Doe', '01011111111', '123 Street, City', 5000, current_time,
+      'Jane Smith', '01022222222', '456 Avenue, Town', 5500, current_time))
 
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------
