@@ -51,6 +51,7 @@ export default function EmployeeForm(props: PropsType) {
                             value={name}
                             label="Name"
                             variant="outlined"
+                            id="employeeNameField"
                             onChange={(e) => setName(e.target.value)}
                         />
                     </FormControl>
@@ -61,6 +62,7 @@ export default function EmployeeForm(props: PropsType) {
                             value={phone}
                             label="Phone"
                             variant="outlined"
+                            id="employeNumberField"
                             onChange={(e) => setPhone(e.target.value)}
                         />
                     </FormControl>
@@ -71,6 +73,7 @@ export default function EmployeeForm(props: PropsType) {
                             value={address}
                             label="Address"
                             variant="outlined"
+                            id="employeeAddressField"
                             onChange={(e) => setAddress(e.target.value)}
                         />
                     </FormControl>
@@ -81,6 +84,7 @@ export default function EmployeeForm(props: PropsType) {
                             value={salary}
                             label="Salary"
                             variant="outlined"
+                            id="employeeSalaryField"
                             onChange={(e) => setSalary(parseFloat(e.target.value))}
                         />
                     </FormControl>
@@ -106,6 +110,7 @@ export default function EmployeeForm(props: PropsType) {
                     color="success"
                     variant="contained"
                     type="submit"
+                    id="employeeAddSubmitBtn"
                 >
                     Confirm
                 </Button>

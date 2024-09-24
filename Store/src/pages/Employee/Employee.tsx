@@ -119,6 +119,7 @@ export default function Employee() {
         <>
             <Button
                 color="info"
+                id="addEmployeeBtn"
                 variant="contained"
                 onClick={() => handleSelectEmployee(null, true)}
             >
@@ -171,9 +172,10 @@ export default function Employee() {
                     <Typography>Are you sure you wan to delete selected employee?</Typography>
                     <Grid container columnGap={2} sx={{ marginTop: "20px" }}>
                         <Button
+                            type="submit"
                             color="error"
                             variant="contained"
-                            type="submit"
+                            id="employeeDelConfirmBtn"
                             onClick={handleDelEmployee}
                         >
                             Confirm

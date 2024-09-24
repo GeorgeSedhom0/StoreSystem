@@ -26,6 +26,7 @@ export default function EmployeeRow(props: PropsType) {
                         <Button
                             color="info"
                             variant="contained"
+                            className="employeeEditBtn"
                             onClick={() => selectEmployee({ ...employee, purpose: 'edit' })}
                         >
                             Edit
@@ -35,6 +36,7 @@ export default function EmployeeRow(props: PropsType) {
                         <Button
                             color="error"
                             variant="contained"
+                            className="employeeDelBtn"
                             onClick={() => selectEmployee({ ...employee, purpose: 'del' })}
                         >
                             Remove
