@@ -49,6 +49,7 @@ class Database:
             self.conn.commit()
         self.conn.close()
 
+
 class EmployeeBase(BaseModel):
     name: str
     phone: Optional[str] = None

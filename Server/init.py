@@ -560,18 +560,21 @@ VALUES
 
 # Insert a bill with associated product flows
 current_time = datetime.now().isoformat()
-cur.execute("""
+cur.execute(
+    """
 INSERT INTO bills (store_id, ref_id, time, discount, total, type, party_id)
 VALUES (%s, %s, %s, %s, %s, %s, NULL) RETURNING id
 """, (1, '1_1', current_time, 0, 15, 'sell'))
 
-cur.execute("""
+cur.execute(
+    """
 INSERT INTO products_flow (store_id, bill_id, product_id, wholesale_price, price, amount)
 VALUES (%s, %s, (SELECT id FROM products WHERE name = %s), %s, %s, %s)
 """, (1, '1_1', 'Product A', 10, 15, -1))
 
 # Entries for employee table
-cur.execute("""
+cur.execute(
+    """
 INSERT INTO employee (name, phone, address, salary, started_on)
 VALUES
 (%s, %s, %s, %s, %s),
