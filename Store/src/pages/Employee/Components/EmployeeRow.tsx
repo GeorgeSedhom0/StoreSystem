@@ -1,8 +1,14 @@
 import { Button, Grid, TableCell } from '@mui/material'
 
-import { Employee } from '../../../utils/types'
+import { Employee as EmployeeType, SelectedEmployeeType } from '../../../utils/types'
 
-export default function EmployeeRow({ employee }: { employee: Employee }) {
+interface PropsType {
+    employee: EmployeeType,
+    selectEmployee: (e: SelectedEmployeeType) => void;
+}
+
+export default function EmployeeRow(props: PropsType) {
+    const { employee, selectEmployee } = props;
     return (
         <>
             <TableCell>{employee.id}</TableCell>
@@ -17,10 +23,22 @@ export default function EmployeeRow({ employee }: { employee: Employee }) {
             <TableCell colSpan={2}>
                 <Grid container>
                     <Grid item xs={6}>
-                        <Button color="info" variant="contained">Edit</Button>
+                        <Button
+                            color="info"
+                            variant="contained"
+                            onClick={() => selectEmployee({ ...employee, purpose: 'edit' })}
+                        >
+                            Edit
+                        </Button>
                     </Grid>
                     <Grid item xs={6}>
-                        <Button color="error" variant="contained">Remove</Button>
+                        <Button
+                            color="error"
+                            variant="contained"
+                            onClick={() => selectEmployee({ ...employee, purpose: 'del' })}
+                        >
+                            Remove
+                        </Button>
                     </Grid>
                 </Grid>
             </TableCell>

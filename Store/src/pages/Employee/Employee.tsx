@@ -2,14 +2,25 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 import { TableVirtuoso } from "react-virtuoso";
 import { useQuery } from "@tanstack/react-query";
-import { Grid, Card, Modal, Box, Typography } from "@mui/material";
+import { Grid, Card, Modal, Box, Typography, Button } from "@mui/material";
 
 import EmployeeRow from "./Components/EmployeeRow";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { Employee as EmployeeType } from "../../utils/types";
-import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import { fixedHeaderContent, VirtuosoTableComponents } from "./Components/VirtualTableHelpers";
 import EmployeeForm from "./Components/EmployeeForm";
+import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
+import { Employee as EmployeeType, SelectedEmployeeType } from "../../utils/types";
+import { fixedHeaderContent, VirtuosoTableComponents } from "./Components/VirtualTableHelpers";
+
+const modalStyle = {
+    position: 'absolute' as 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: 400,
+    bgcolor: 'background.paper',
+    boxShadow: 24,
+    p: 4,
+};
 
 const getEmployee = async () => {
     const { data } = await axios.get<EmployeeType[]>(
@@ -19,7 +30,14 @@ const getEmployee = async () => {
 };
 
 export default function Employee() {
-    const [selectedEmployee, setSelectedEmployee] = useState<EmployeeType & { purpose: 'edit' | 'del' } | null>(null);
+    const { data: employee, isLoading, refetch } = useQuery({
+        queryKey: ["employee"],
+        queryFn: getEmployee,
+        initialData: []
+    });
+
+    const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+    const [selectedEmployee, setSelectedEmployee] = useState<SelectedEmployeeType>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
 
@@ -41,16 +59,53 @@ export default function Employee() {
         setSelectedEmployee(null);
     }
 
-    const [msg, setMsg] = useState<AlertMsg>({
-        type: "",
-        text: "",
-    });
+    const handleSelectEmployee = (employee: SelectedEmployeeType, addingNew: boolean = false) => {
+        if (addingNew) openEditModal();
+        else setSelectedEmployee(employee)
+    }
 
-    const { data: employee, isLoading } = useQuery({
-        queryKey: ["employee"],
-        queryFn: getEmployee,
-        initialData: []
-    });
+    const handleAddEmployee = async (newEmployee: EmployeeType) => {
+        try {
+            await axios.post(
+                import.meta.env.VITE_SERVER_URL + "/employees/",
+                newEmployee
+            );
+            setMsg({ type: 'success', text: 'Added successfully!' });
+            closeEditModal();
+            refetch();
+        }
+        catch (err) {
+            setMsg({ type: 'error', text: 'Something went wrong!' });
+        }
+    }
+
+    const handleEditEmployee = async (updatedEmployee: EmployeeType) => {
+        try {
+            await axios.put(
+                import.meta.env.VITE_SERVER_URL + "/employees/" + selectedEmployee?.id,
+                updatedEmployee
+            );
+            setMsg({ type: 'success', text: 'Added successfully!' });
+            closeEditModal();
+            refetch();
+        }
+        catch (err) {
+            setMsg({ type: 'error', text: 'Something went wrong!' });
+        }
+    }
+
+    const handleDelEmployee = async () => {
+        try {
+            await axios.delete(import.meta.env.VITE_SERVER_URL + "/employees/" + selectedEmployee?.id);
+            setMsg({ type: 'success', text: 'Removed successfully!' });
+            closeDeleteModal();
+            refetch();
+        }
+        catch (err) {
+            setMsg({ type: 'error', text: 'Something went wrong!' });
+        }
+    }
+
 
     useEffect(() => {
         if (!selectedEmployee) return;
@@ -62,8 +117,15 @@ export default function Employee() {
 
     return (
         <>
+            <Button
+                color="info"
+                variant="contained"
+                onClick={() => handleSelectEmployee(null, true)}
+            >
+                Add New Employee
+            </Button>
             <AlertMessage message={msg} setMessage={setMsg} />
-            <Grid container spacing={3}>
+            <Grid container spacing={3} sx={{ marginTop: '10px' }}>
                 <Grid item xs={12}>
                     <Card
                         elevation={3}
@@ -80,6 +142,7 @@ export default function Employee() {
                             itemContent={(_, employee) => (
                                 <EmployeeRow
                                     employee={employee}
+                                    selectEmployee={handleSelectEmployee}
                                 />
                             )}
                         />
@@ -90,8 +153,13 @@ export default function Employee() {
                 open={isEditModalOpen}
                 onClose={closeEditModal}
             >
-                <Box>
-                    <EmployeeForm />
+                <Box sx={modalStyle}>
+                    <EmployeeForm
+                        employee={selectedEmployee}
+                        addEmployee={handleAddEmployee}
+                        editEmployee={handleEditEmployee}
+                        closeModal={closeEditModal}
+                    />
                 </Box>
             </Modal>
 
@@ -99,8 +167,25 @@ export default function Employee() {
                 open={isDeleteModalOpen}
                 onClose={closeDeleteModal}
             >
-                <Box>
+                <Box sx={modalStyle}>
                     <Typography>Are you sure you wan to delete selected employee?</Typography>
+                    <Grid container columnGap={2} sx={{ marginTop: "20px" }}>
+                        <Button
+                            color="error"
+                            variant="contained"
+                            type="submit"
+                            onClick={handleDelEmployee}
+                        >
+                            Confirm
+                        </Button>
+                        <Button
+                            color="info"
+                            variant="contained"
+                            onClick={closeDeleteModal}
+                        >
+                            Cancel
+                        </Button>
+                    </Grid>
                 </Box>
             </Modal>
         </>

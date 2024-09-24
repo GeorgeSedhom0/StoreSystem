@@ -74,3 +74,5 @@ export interface Employee {
   started_on: string;
   stopped_on: string;
 }
+
+export type SelectedEmployeeType = Employee & { purpose: 'edit' | 'del' } | null

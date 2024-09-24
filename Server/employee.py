@@ -78,14 +78,7 @@ router = APIRouter()
 
 
 @router.post("/employees")
-def add_employee(
-        name: str = Form(...),
-        phone: Optional[str] = Form(...),
-        address: Optional[str] = Form(...),
-        salary: float = Form(...),
-        started_on: datetime = Form(...),
-        stopped_on: Optional[datetime] = Form(None),
-) -> JSONResponse:
+def add_employee(employee: EmployeeBase) -> JSONResponse:
     """
     Add a new employee
     """
@@ -96,12 +89,9 @@ def add_employee(
                 INSERT INTO employee (name, phone, address, salary, started_on, stopped_on)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id, name, phone, address, salary, started_on, stopped_on
-                """, (name, phone, address, salary, started_on, stopped_on))
-            employee = cur.fetchone()
-            return JSONResponse(content={
-                "status": "success",
-                "employee": employee
-            })
+                """, (employee.name, employee.phone, employee.address, employee.salary, employee.started_on, employee.stopped_on))
+            # employee = cur.fetchone()
+            return JSONResponse(content={"status": "success"})
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -129,29 +119,30 @@ def get_employees() -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@router.put("/employees/{employee_id}", response_model=Employee)
-def update_employee(employee_id: int, employee: EmployeeUpdate):
+@router.put("/employees/{employee_id}")
+def update_employee(employee_id: int, employee: EmployeeUpdate)-> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
                 UPDATE employee
                 SET name = %s, phone = %s, address = %s, salary = %s, started_on = %s, stopped_on = %s
-                WHERE id = %s RETURNING id, name, phone, address, salary, started_on, stopped_on
+                WHERE id = %s RETURNING id
             """, (employee.name, employee.phone, employee.address,
                   employee.salary, employee.started_on, employee.stopped_on,
                   employee_id))
             updated_employee = cur.fetchone()
             if updated_employee:
-                return Employee(**updated_employee)
+                return JSONResponse(content={"status": "success"})
+            else:
+                raise HTTPException(status_code=404, detail="Employee not found")
     except Exception as e:
         logging.error(f"Error: {e}")
-        raise HTTPException(status_code=404,
-                            detail="Employee not found") from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.delete("/employees/{employee_id}")
-def delete_employee(employee_id: int):
+def delete_employee(employee_id: int)-> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute("DELETE FROM employee WHERE id = %s RETURNING id",
@@ -159,7 +150,8 @@ def delete_employee(employee_id: int):
             deleted_employee = cur.fetchone()
             if deleted_employee:
                 return JSONResponse(content={"status": "success"})
+            else:
+                raise HTTPException(status_code=404, detail="Employee not found")
     except Exception as e:
         logging.error(f"Error: {e}")
-        raise HTTPException(status_code=404,
-                            detail="Employee not found") from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
