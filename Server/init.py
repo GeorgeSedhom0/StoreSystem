@@ -550,6 +550,10 @@ FOR EACH ROW
 EXECUTE FUNCTION update_cash_flow_after_update();
 """)
 
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+
 # Insert initial products
 cur.execute("""
 INSERT INTO products (name, bar_code, wholesale_price, price, stock, category)
@@ -575,7 +579,7 @@ VALUES (%s, %s, (SELECT id FROM products WHERE name = %s), %s, %s, %s)
 # Entries for employee table
 cur.execute(
     """
-INSERT INTO employee (name, phone, address, salary, started_on)
+INSERT INTO employee (name, phone, address, salary, started_on, store_id)
 VALUES
 (%s, %s, %s, %s, %s),
 (%s, %s, %s, %s, %s)
