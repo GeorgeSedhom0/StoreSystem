@@ -21,6 +21,7 @@ cur = conn.cursor()
 # Create the employee table
 cur.execute("""
 CREATE TABLE employee (
+    store_id BIGINT,
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR NOT NULL,
     phone VARCHAR,
@@ -50,24 +51,24 @@ CREATE OR REPLACE FUNCTION insert_cash_flow_after_insert_salary()
 RETURNS TRIGGER AS $$
 DECLARE
     employee_name VARCHAR;
+    emp_store_id BIGINT;
 BEGIN
     SELECT name INTO employee_name FROM employee WHERE id = NEW.employee_id;
+    SELECT store_id INTO emp_store_id FROM employee WHERE id = NEW.employee_id;
 
     INSERT INTO cash_flow (
         store_id,
         time,
         amount,
         type,
-        bill_id,
         description,
         party_id
     ) VALUES (
-        NEW.store_id,
+        emp_store_id,
         NEW.time,
-        NEW.amount,
+        NEW.amount + NEW.bonus - NEW.deductions,
         'out',
-        NEW.store_id || '_' || NEW.id,
-        'راتب ' || employee_name,
+        'راتب ' || employee_name || ' بمبلغ ' || NEW.amount || ' ومكافأة ' || NEW.bonus || ' وخصم ' || NEW.deductions,
         NEW.employee_id
     );
     RETURN NEW;
