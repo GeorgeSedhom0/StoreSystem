@@ -72,7 +72,7 @@ export interface Employee {
   address: string;
   salary: number;
   started_on: string;
-  stopped_on: string;
+  stopped_on?: string;
 }
 
-export type SelectedEmployeeType = Employee & { purpose: 'edit' | 'del' } | null
+export type SelectedEmployeeType = Employee & { purpose: 'edit' | 'del' | 'pay' } | null

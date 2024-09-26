@@ -230,6 +230,7 @@ CREATE TABLE shifts (
 cur.execute("""
 CREATE TABLE employee (
     id BIGSERIAL PRIMARY KEY,
+    store_id BIGINT NOT NULL,
     name VARCHAR NOT NULL,
     phone VARCHAR,
     address VARCHAR,
@@ -327,24 +328,24 @@ CREATE OR REPLACE FUNCTION insert_cash_flow_after_insert_salary()
 RETURNS TRIGGER AS $$
 DECLARE
     employee_name VARCHAR;
+    emp_store_id BIGINT;
 BEGIN
     SELECT name INTO employee_name FROM employee WHERE id = NEW.employee_id;
+    SELECT store_id INTO emp_store_id FROM employee WHERE id = NEW.employee_id;
 
     INSERT INTO cash_flow (
         store_id,
         time,
         amount,
         type,
-        bill_id,
         description,
         party_id
     ) VALUES (
-        NEW.store_id,
+        emp_store_id,
         NEW.time,
-        NEW.amount,
+        NEW.amount + NEW.bonus - NEW.deductions,
         'out',
-        NEW.store_id || '_' || NEW.id,
-        'راتب ' || employee_name,
+        'راتب ' || employee_name || ' بمبلغ ' || NEW.amount || ' ومكافأة ' || NEW.bonus || ' وخصم ' || NEW.deductions,
         NEW.employee_id
     );
     RETURN NEW;
@@ -549,6 +550,10 @@ FOR EACH ROW
 EXECUTE FUNCTION update_cash_flow_after_update();
 """)
 
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+
 # Insert initial products
 cur.execute("""
 INSERT INTO products (name, bar_code, wholesale_price, price, stock, category)
@@ -574,10 +579,10 @@ VALUES (%s, %s, (SELECT id FROM products WHERE name = %s), %s, %s, %s)
 # Entries for employee table
 cur.execute(
     """
-INSERT INTO employee (name, phone, address, salary, started_on)
+INSERT INTO employee (name, phone, address, salary, started_on, store_id)
 VALUES
-(%s, %s, %s, %s, %s),
-(%s, %s, %s, %s, %s)
+(%s, %s, %s, %s, %s, 0),
+(%s, %s, %s, %s, %s, 0)
 """, ('John Doe', '01011111111', '123 Street, City', 5000, current_time,
       'Jane Smith', '01022222222', '456 Avenue, Town', 5500, current_time))
 

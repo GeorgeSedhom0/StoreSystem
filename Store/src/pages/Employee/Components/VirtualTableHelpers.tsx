@@ -16,14 +16,14 @@ export const fixedHeaderContent = () => {
         bgcolor: "background.paper",
       }}
     >
-      <TableCell>ID</TableCell>
-      <TableCell>Name</TableCell>
-      <TableCell>Phone</TableCell>
-      <TableCell>Address</TableCell>
-      <TableCell>Salary</TableCell>
-      <TableCell>Joining Date</TableCell>
-      <TableCell>End Datae</TableCell>
-      <TableCell colSpan={2}>Action</TableCell>
+      <TableCell>م</TableCell>
+      <TableCell>الاسم</TableCell>
+      <TableCell>رقم الهاتف</TableCell>
+      <TableCell>العنوان</TableCell>
+      <TableCell>الراتب</TableCell>
+      <TableCell>تاريخ الانضمام</TableCell>
+      <TableCell>تاريخ المغادرة</TableCell>
+      <TableCell colSpan={2}></TableCell>
     </TableRow>
   );
 };
