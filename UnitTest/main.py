@@ -4,6 +4,7 @@ from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from init import reset_db
 import HtmlTestRunner
 import time
 
@@ -12,6 +13,8 @@ from utils import login
 class StoreSystemTest(unittest.TestCase):
     @classmethod
     def setUp(self):
+        reset_db()
+
         chrome_service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=chrome_service)
         self.driver.implicitly_wait(10)
@@ -126,7 +129,7 @@ class StoreSystemTest(unittest.TestCase):
         time.sleep(2)
 
         try:
-            driver.find_element("xpath", "//td[contains(text(), 'Test Employee Updated')]")
+            driver.find_element("xpath", "//td[contains(text(), 'Jane Smith')]")
             assert False, "Delete employee not working"
         except:
             pass

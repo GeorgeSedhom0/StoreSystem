@@ -1,4 +1,6 @@
 selenium==4.24.0
 webdriver-manager==4.0.2
 html-testRunner==1.2.1
-
+psycopg2==2.9.9
+python-dotenv==1.0.1
+bcrypt==4.1.3
