@@ -38,13 +38,13 @@ const Layout = ({
   const profile = useContext(StoreContext) as Profile;
   const navigate = useNavigate();
 
-  // useEffect(() => {
-  //   if (
-  //     profile && !profile.user.paths.some((path) => location.pathname.startsWith(path))
-  //   ) {
-  //     navigate("/sell");
-  //   }
-  // }, [location.pathname, profile, navigate]);
+  useEffect(() => {
+    if (
+      profile && !profile.user.paths.some((path) => location.pathname.startsWith(path))
+    ) {
+      navigate("/sell");
+    }
+  }, [location.pathname, profile, navigate]);
 
   const { mutate: switchAccount } = useMutation({
     mutationFn: logoutWihtoutEndingShift,
