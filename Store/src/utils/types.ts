@@ -38,7 +38,6 @@ export interface Bill {
     amount: number;
     bar_code: string;
   }[];
-  isExpanded?: boolean;
 }
 
 export interface CashFlow {

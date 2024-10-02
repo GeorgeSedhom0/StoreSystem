@@ -113,6 +113,7 @@ const EmployeeForm = ({
               value={name}
               label="الاسم"
               variant="outlined"
+              id="employeeNameField"
               onChange={(e) => setName(e.target.value)}
               fullWidth
             />
@@ -122,6 +123,7 @@ const EmployeeForm = ({
               value={phone}
               label="رقم الهاتف"
               variant="outlined"
+              id="employeNumberField"
               onChange={(e) => setPhone(e.target.value)}
               fullWidth
             />
@@ -131,6 +133,7 @@ const EmployeeForm = ({
               value={address}
               label="Address"
               variant="outlined"
+              id="employeeAddressField"
               onChange={(e) => setAddress(e.target.value)}
               fullWidth
             />
@@ -141,6 +144,7 @@ const EmployeeForm = ({
               value={salary}
               label="Salary"
               variant="outlined"
+              id="employeeSalaryField"
               onChange={(e) => setSalary(parseFloat(e.target.value))}
               fullWidth
             />
@@ -166,6 +170,7 @@ const EmployeeForm = ({
           color="primary"
           variant="contained"
           onClick={handleSubmit}
+          id="employeeAddSubmitBtn"
           disabled={addMutation.isPending || editMutation.isPending}
         >
           {employee ? "حفظ التعديلات" : "تعيين الموضف"}

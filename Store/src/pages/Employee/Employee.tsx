@@ -179,6 +179,7 @@ export default function Employee() {
             <Button
               color="error"
               variant="contained"
+              id="employeeDelConfirmBtn"
               onClick={handleDelEmployee}
             >
               تاكيد

@@ -37,6 +37,7 @@ const EmployeeRow = ({
           </Button>
           <Button
             variant="contained"
+            className="employeeEditBtn"
             onClick={() => selectEmployee({ ...employee, purpose: "edit" })}
           >
             تعديل
@@ -44,6 +45,7 @@ const EmployeeRow = ({
           <Button
             color="error"
             variant="contained"
+            className="employeeDelBtn"
             onClick={() => selectEmployee({ ...employee, purpose: "del" })}
           >
             انهاء التعيين
