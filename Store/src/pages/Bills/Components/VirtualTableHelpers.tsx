@@ -7,8 +7,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import { TableComponents } from "react-virtuoso";
-import { Bill as BillType } from "../../../utils/types";
-import Bill from "./Bill";
+import { Bill } from "../../../utils/types";
 
 export const fixedHeaderContent = () => {
   return (
@@ -28,7 +27,7 @@ export const fixedHeaderContent = () => {
   );
 };
 
-export const VirtuosoTableComponents: TableComponents<BillType> = {
+export const VirtuosoTableComponents: TableComponents<Bill> = {
   Scroller: React.forwardRef<HTMLDivElement>((props, ref) => (
     <TableContainer {...props} ref={ref} />
   )),
@@ -38,7 +37,7 @@ export const VirtuosoTableComponents: TableComponents<BillType> = {
       sx={{ borderCollapse: "separate", tableLayout: "fixed" }}
     />
   ),
-  TableRow: Bill,
+  TableRow: ({ item: _item, ...props }) => <TableRow {...props} />,
   TableBody: React.forwardRef<HTMLTableSectionElement>((props, ref) => (
     <TableBody {...props} ref={ref} />
   )),
