@@ -22,7 +22,7 @@ const EmployeeRow = ({
       <TableCell>
         {new Date(employee.started_on).toLocaleDateString("ar-EG")}
       </TableCell>
-      <TableCell>
+      <TableCell className="employeeTerminationDate">
         {employee.stopped_on
           ? new Date(employee.stopped_on).toLocaleDateString("ar-EG")
           : "يعمل حتى الآن"}
