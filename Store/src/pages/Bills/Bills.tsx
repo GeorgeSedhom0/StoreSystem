@@ -10,6 +10,8 @@ import {
   Button,
   Autocomplete,
   TextField,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -19,9 +21,8 @@ import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ar-sa";
 import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { Bill as BillType } from "../../utils/types";
+import { Bill as BillType, DBProducts, Product } from "../../utils/types";
 import { TableVirtuoso } from "react-virtuoso";
-import Bill from "./Components/Bill";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
   fixedHeaderContent,
@@ -30,6 +31,13 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { useParties } from "../../utils/data/useParties";
+
+const getProds = async () => {
+  const { data } = await axios.get<DBProducts>(
+    import.meta.env.VITE_SERVER_URL + "/products"
+  );
+  return data;
+};
 
 const getBills = async (
   startDate: Dayjs,
@@ -50,6 +58,11 @@ const getBills = async (
 };
 
 const Bills = () => {
+  const [showExpandedBill, setShowExpandedBill] = useState<boolean>(() => {
+    const showExpandedBill = localStorage.getItem("showExpandedBill");
+    if (showExpandedBill === "true") return true;
+    return false;
+  });
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [filters, setFilters] = useState<string[]>([
@@ -60,9 +73,17 @@ const Bills = () => {
     "reserve",
     "installment",
   ]);
+  const [selectedProduct, setSelectedProduct] = useState<Product[]>([]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [printer, setPrinter] = useState<any | null>(null);
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
+
+  const { data: products } = useQuery({
+    queryKey: ["products"],
+    queryFn: getProds,
+    initialData: { products: [], reserved_products: [] },
+    select: (data) => data.products,
+  });
 
   const { partyId } = useParams();
 
@@ -120,12 +141,39 @@ const Bills = () => {
     [lastShift]
   );
 
-  const filteredBills = useMemo(
-    () => bills?.filter((bill) => filters.includes(bill.type)),
-    [bills, filters]
-  );
+  const filteredBills = useMemo(() => {
+    let filteredBills = bills.filter((bill) => filters.includes(bill.type));
 
-  const total = filteredBills?.reduce((acc, bill) => acc + bill.total, 0);
+    if (selectedProduct.length > 0) {
+      filteredBills = filteredBills.filter((bill) =>
+        bill.products.some((product) =>
+          selectedProduct.some(
+            (selectedProduct) => selectedProduct.name === product.name
+          )
+        )
+      );
+    }
+
+    if (showExpandedBill) {
+      const expandedFilteredBills: BillType[] = [];
+      filteredBills.forEach((bill) => {
+        expandedFilteredBills.push(bill);
+        expandedFilteredBills.push({ ...bill, isExpanded: true });
+      });
+      return expandedFilteredBills;
+    }
+
+    return filteredBills;
+  }, [bills, filters, selectedProduct, showExpandedBill]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "showExpandedBill",
+      showExpandedBill ? "true" : "false"
+    );
+  }, [showExpandedBill]);
+
+  const total = filteredBills.reduce((acc, bill) => acc + bill.total, 0);
 
   const loading = isShiftLoading || isBillsLoading;
 
@@ -137,7 +185,23 @@ const Bills = () => {
           <Card elevation={3} sx={{ p: 2 }}>
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h4">الفواتير</Typography>
+                <Grid container xs={12} justifyContent="space-between">
+                  <Grid item>
+                    <Typography variant="h4">الفواتير</Typography>
+                  </Grid>
+                  <Grid item>
+                    <FormControlLabel
+                      control={<Switch id="showExpandedBillSwitch" />}
+                      checked={showExpandedBill}
+                      label="عرض الفواتير المفصلة"
+                      onChange={(_, isChecked: boolean) => {
+                        // Don't turn this of while some product filter is applied
+                        if (selectedProduct.length !== 0) return;
+                        setShowExpandedBill(isChecked);
+                      }}
+                    />
+                  </Grid>
+                </Grid>
                 <Typography variant="body1">
                   قم بتحديد الفترة لعرض الفواتير
                 </Typography>
@@ -197,6 +261,26 @@ const Bills = () => {
                     <MenuItem value="installment">تقسيط</MenuItem>
                   </Select>
                 </FormControl>
+
+                <Autocomplete
+                  multiple
+                  options={products}
+                  id="selectProductDropdown"
+                  getOptionLabel={(option) => option.name}
+                  value={selectedProduct}
+                  sx={{ minWidth: 300 }}
+                  onChange={(_, newValue) => {
+                    setSelectedProduct(newValue);
+
+                    // Turn show product on if filter is selected
+                    if (newValue.length !== 0 && !showExpandedBill) {
+                      setShowExpandedBill(true);
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField {...params} label="بحث بالمنتج" />
+                  )}
+                />
               </Grid>
               <Grid item xs={12}>
                 <ButtonGroup>
@@ -259,15 +343,12 @@ const Bills = () => {
               fixedHeaderContent={fixedHeaderContent}
               components={VirtuosoTableComponents}
               data={filteredBills}
-              itemContent={(_, bill) => (
-                <Bill
-                  bill={bill}
-                  setMsg={setMsg}
-                  printer={printer}
-                  setPrinter={setPrinter}
-                  getBills={refetchBills}
-                />
-              )}
+              context={{
+                setMsg: setMsg,
+                printer: printer,
+                setPrinter: setPrinter,
+                getBills: refetchBills,
+              }}
             />
           </Card>
         </Grid>

@@ -38,6 +38,7 @@ export interface Bill {
     amount: number;
     bar_code: string;
   }[];
+  isExpanded?: boolean;
 }
 
 export interface CashFlow {
@@ -74,4 +75,6 @@ export interface Employee {
   stopped_on?: string;
 }
 
-export type SelectedEmployeeType = Employee & { purpose: 'edit' | 'del' | 'pay' } | null
+export type SelectedEmployeeType =
+  | (Employee & { purpose: "edit" | "del" | "pay" })
+  | null;

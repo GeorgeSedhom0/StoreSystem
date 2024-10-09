@@ -1,12 +1,11 @@
-import { Button, ButtonGroup, TableCell } from "@mui/material";
-import { Bill as BillType } from "../../../utils/types";
+import { Button, ButtonGroup, TableCell, TableRow } from "@mui/material";
 import { useCallback, useRef, useState } from "react";
 import BillView from "../../../utils/BillView";
 import { printBill } from "../../../utils/functions";
-import { AlertMsg } from "../../Shared/AlertMessage";
 import EditableBill from "./EditableBill";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
+import ProductsView from "../../../utils/ProductsView";
 
 const endReservation = async (id: string) => {
   await axios.get(import.meta.env.VITE_SERVER_URL + "/end-reservation", {
@@ -14,19 +13,8 @@ const endReservation = async (id: string) => {
   });
 };
 
-const Bill = ({
-  bill,
-  setMsg,
-  printer,
-  setPrinter,
-  getBills,
-}: {
-  bill: BillType;
-  setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>;
-  printer: any;
-  setPrinter: React.Dispatch<React.SetStateAction<any>>;
-  getBills: () => void;
-}) => {
+const Bill = ({ context, item: bill, ...props }: any) => {
+  const { setMsg, printer, setPrinter, getBills } = context;
   const [billPreviewOpen, setBillPreviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
@@ -79,46 +67,53 @@ const Bill = ({
       {editing ? (
         <EditableBill bill={bill} setEditing={setEditing} getBills={getBills} />
       ) : null}
-      <TableCell>{bill.id}</TableCell>
-      <TableCell>
-        فاتورة{" "}
-        {bill.type === "sell"
-          ? "بيع"
-          : bill.type === "buy"
-          ? "شراء"
-          : bill.type === "return"
-          ? "مرتجع"
-          : bill.type === "BNPL"
-          ? "بيع اجل"
-          : bill.type === "reserve"
-          ? "حجز"
-          : bill.type === "installment"
-          ? "قسط"
-          : ""}
-      </TableCell>
-      <TableCell>{new Date(bill.time).toLocaleString("ar-EG")}</TableCell>
-      <TableCell>{Math.abs(bill.discount)}</TableCell>
-      <TableCell>{Math.abs(bill.total)}</TableCell>
-      <TableCell>
-        <ButtonGroup
-          variant="outlined"
-          sx={{
-            width: "100%",
-          }}
-        >
-          <Button onClick={() => setEditing(true)}>تعديل</Button>
-          <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
-          <Button onClick={printWithPrinter}>طباعة</Button>
-          {bill.type === "reserve" && (
-            <Button onClick={() => endReservationMutation(bill.id)}>
-              تسليم
-            </Button>
-          )}
-        </ButtonGroup>
-      </TableCell>
-      <TableCell>
-        {bill.party_name ? bill.party_name : "بدون طرف ثانى"}
-      </TableCell>
+      {!bill.isExpanded && (
+        <TableRow {...props}>
+          <TableCell>{bill.id}</TableCell>
+          <TableCell>
+            فاتورة{" "}
+            {bill.type === "sell"
+              ? "بيع"
+              : bill.type === "buy"
+              ? "شراء"
+              : bill.type === "return"
+              ? "مرتجع"
+              : bill.type === "BNPL"
+              ? "بيع اجل"
+              : bill.type === "reserve"
+              ? "حجز"
+              : bill.type === "installment"
+              ? "قسط"
+              : ""}
+          </TableCell>
+          <TableCell>{new Date(bill.time).toLocaleString("ar-EG")}</TableCell>
+          <TableCell>{Math.abs(bill.discount)}</TableCell>
+          <TableCell>{Math.abs(bill.total)}</TableCell>
+          <TableCell>
+            <ButtonGroup
+              variant="outlined"
+              sx={{
+                width: "100%",
+              }}
+            >
+              <Button onClick={() => setEditing(true)}>تعديل</Button>
+              <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
+              <Button onClick={printWithPrinter}>طباعة</Button>
+              {bill.type === "reserve" && (
+                <Button onClick={() => endReservationMutation(bill.id)}>
+                  تسليم
+                </Button>
+              )}
+            </ButtonGroup>
+          </TableCell>
+          <TableCell>
+            {bill.party_name ? bill.party_name : "بدون طرف ثانى"}
+          </TableCell>
+        </TableRow>
+      )}
+      {bill.isExpanded && (
+        <TableRow {...props}>{<ProductsView bill={bill} />}</TableRow>
+      )}
     </>
   );
 };
