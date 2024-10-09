@@ -2,6 +2,7 @@ import psycopg2  # type: ignore
 from dotenv import load_dotenv  # type: ignore
 from os import getenv
 import bcrypt  # type: ignore
+from datetime import datetime
 
 load_dotenv()
 
@@ -31,6 +32,8 @@ cur.execute("DROP TABLE IF EXISTS assosiated_parties CASCADE")
 cur.execute("DROP TABLE IF EXISTS reserved_products CASCADE")
 cur.execute("DROP TABLE IF EXISTS installments CASCADE")
 cur.execute("DROP TABLE IF EXISTS installments_flow CASCADE")
+cur.execute("DROP TABLE IF EXISTS employee CASCADE")
+cur.execute("DROP TABLE IF EXISTS salaries CASCADE")
 
 cur.execute("SET TIME ZONE 'Africa/Cairo'")
 
@@ -44,7 +47,7 @@ CREATE TABLE scopes (
 cur.execute("""
 INSERT INTO scopes (name, pages)
 VALUES
-('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8])
+('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9])
 """)
 
 # Create pages table
@@ -65,7 +68,8 @@ VALUES
 ('المنتجات', '/products'),
 ('الحركات المالية', '/cash'),
 ('التقارير', '/analytics'),
-('الاعدادات', '/settings')
+('الاعدادات', '/settings'),
+('الموظفين', '/employees')
 """)
 
 # Create the users table
@@ -222,6 +226,32 @@ CREATE TABLE shifts (
 )
 """)
 
+# Create the employee table
+cur.execute("""
+CREATE TABLE employee (
+    id BIGSERIAL PRIMARY KEY,
+    store_id BIGINT NOT NULL,
+    name VARCHAR NOT NULL,
+    phone VARCHAR,
+    address VARCHAR,
+    salary FLOAT,
+    started_on TIMESTAMP,
+    stopped_on TIMESTAMP
+)
+""")
+
+# Create salaries table
+cur.execute("""
+CREATE TABLE salaries (
+    id BIGSERIAL PRIMARY KEY,
+    employee_id BIGINT REFERENCES employee(id),
+    amount FLOAT,
+    bonus FLOAT,
+    deductions FLOAT,
+    time TIMESTAMP
+)
+""")
+
 # --------------------------------------------------------------------
 # ----------------------------triggers--------------------------------
 # --------------------------------------------------------------------
@@ -289,6 +319,43 @@ CREATE TRIGGER trigger_insert_cash_flow_after_insert
 AFTER INSERT ON bills
 FOR EACH ROW
 EXECUTE FUNCTION insert_cash_flow_after_insert();
+""")
+
+# Create the trigger to insert into cash_flow after inserting a salary
+cur.execute("""
+-- Trigger to insert into cash_flow after inserting a salary
+CREATE OR REPLACE FUNCTION insert_cash_flow_after_insert_salary()
+RETURNS TRIGGER AS $$
+DECLARE
+    employee_name VARCHAR;
+    emp_store_id BIGINT;
+BEGIN
+    SELECT name INTO employee_name FROM employee WHERE id = NEW.employee_id;
+    SELECT store_id INTO emp_store_id FROM employee WHERE id = NEW.employee_id;
+
+    INSERT INTO cash_flow (
+        store_id,
+        time,
+        amount,
+        type,
+        description,
+        party_id
+    ) VALUES (
+        emp_store_id,
+        NEW.time,
+        NEW.amount + NEW.bonus - NEW.deductions,
+        'out',
+        'راتب ' || employee_name || ' بمبلغ ' || NEW.amount || ' ومكافأة ' || NEW.bonus || ' وخصم ' || NEW.deductions,
+        NEW.employee_id
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_insert_cash_flow_after_insert_salary
+AFTER INSERT ON salaries
+FOR EACH ROW
+EXECUTE FUNCTION insert_cash_flow_after_insert_salary();
 """)
 
 # Create the trigger to insert into cash_flow after inserting a installment
@@ -482,6 +549,22 @@ AFTER UPDATE ON bills
 FOR EACH ROW
 EXECUTE FUNCTION update_cash_flow_after_update();
 """)
+
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+
+current_time = datetime.now().isoformat()
+
+# Entries for employee table
+cur.execute(
+    """
+INSERT INTO employee (name, phone, address, salary, started_on, store_id)
+VALUES
+(%s, %s, %s, %s, %s, 0),
+(%s, %s, %s, %s, %s, 0)
+""", ('John Doe', '01011111111', '123 Street, City', 5000, current_time,
+      'Jane Smith', '01022222222', '456 Avenue, Town', 5500, current_time))
 
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------

@@ -61,5 +61,17 @@ export interface Party {
   phone: string;
   address: string;
   type: string;
-  extra_info: {[key: string]: string};
+  extra_info: { [key: string]: string };
 }
+
+export interface Employee {
+  id: number;
+  name: string;
+  phone: string;
+  address: string;
+  salary: number;
+  started_on: string;
+  stopped_on?: string;
+}
+
+export type SelectedEmployeeType = Employee & { purpose: 'edit' | 'del' | 'pay' } | null

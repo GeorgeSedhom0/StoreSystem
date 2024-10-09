@@ -136,7 +136,7 @@ const Sell = () => {
 
   useEffect(() => {
     if (!query) {
-      setOptions([]);
+      setOptions(products);
       return;
     }
     setOptions(

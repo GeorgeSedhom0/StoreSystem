@@ -21,6 +21,7 @@ import Analytics from "./pages/Analytics/Analytics";
 import { StoreDataProvider } from "./StoreDataProvider";
 import axios from "axios";
 import Installments from "./pages/Installments/Installments";
+import Employee from "./pages/Employee/Employee";
 
 axios.defaults.withCredentials = true;
 
@@ -93,6 +94,7 @@ const App = () => {
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/installments" element={<Installments />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/employees" element={<Employee />} />
                   <Route path="/login" element={<Login />} />
                   {/* if any route other than the defined go to /sell */}
                   <Route path="*" element={<Navigate to="/sell" />} />
