@@ -57,7 +57,7 @@ const EditableBill = ({
         const { data } = await axios.get(
           import.meta.env.VITE_SERVER_URL + "/products"
         );
-        setProducts(data);
+        setProducts(data.products);
       } catch (error) {
         console.log(error);
         // reload the page since these 2 requests are crucial

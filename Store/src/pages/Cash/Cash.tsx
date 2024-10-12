@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
@@ -13,6 +13,9 @@ import {
   InputLabel,
   ButtonGroup,
   Autocomplete,
+  FormControlLabel,
+  Switch,
+  Box,
 } from "@mui/material";
 import { CashFlow, Party } from "../../utils/types";
 import LoadingScreen from "../Shared/LoadingScreen";
@@ -63,12 +66,27 @@ const Cash = () => {
     type: "",
     extra_info: {},
   });
+  const [localTotal, setLocalTotal] = useState<boolean>(() => {
+    const localTotal = localStorage.getItem("localTotal");
+    if (localTotal) {
+      return true;
+    }
+    return false;
+  });
 
   const { partyId } = useParams();
 
   useEffect(() => {
     if (partyId) setSelectedPartyId(parseInt(partyId));
   }, [partyId]);
+
+  useEffect(() => {
+    if (localTotal) {
+      localStorage.setItem("localTotal", "true");
+    } else {
+      localStorage.removeItem("localTotal");
+    }
+  }, [localTotal]);
 
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
@@ -83,7 +101,7 @@ const Cash = () => {
   const { parties, addPartyMutationAsync } = useParties(setMsg);
 
   const {
-    data: cashFlow,
+    data: rawCashFlow,
     isLoading: isCashFlowLoading,
     refetch: updateCashFlow,
   } = useQuery({
@@ -91,6 +109,21 @@ const Cash = () => {
     queryFn: () => getCashFlow(startDate, endDate, selectedPartyId),
     initialData: [],
   });
+
+  const cashFlow = useMemo(() => {
+    if (localTotal) {
+      // override the total column to have the first total as 0
+      let total = 0;
+      const localCashFlow = [];
+      for (let i = rawCashFlow.length - 1; i >= 0; i--) {
+        const row = rawCashFlow[i];
+        total += row.amount;
+        localCashFlow.unshift({ ...row, total });
+      }
+      return localCashFlow;
+    }
+    return rawCashFlow;
+  }, [rawCashFlow, localTotal]);
 
   const loading = isShiftLoading || isCashFlowLoading;
 
@@ -167,36 +200,45 @@ const Cash = () => {
         <Grid item xs={12}>
           <Card elevation={3} sx={{ p: 3 }}>
             <Grid container spacing={3}>
-              <Grid item container xs={12} alignItems="center" gap={3}>
-                <TextField
-                  label="المبلغ"
-                  value={amount}
-                  onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+              <Grid item container xs={12} justifyContent="space-between">
+                <Box display="flex" alignItems="center" gap={3}>
+                  <TextField
+                    label="المبلغ"
+                    value={amount}
+                    onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                  />
+                  <FormControl>
+                    <InputLabel>نوع الحركة</InputLabel>
+                    <Select
+                      label="نوع الحركة"
+                      value={moveType}
+                      onChange={(e) =>
+                        setMoveType(e.target.value as "in" | "out")
+                      }
+                      sx={{
+                        minWidth: 120,
+                      }}
+                    >
+                      <MenuItem value="in">دخول</MenuItem>
+                      <MenuItem value="out">خروج</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="الوصف"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                  <Button onClick={addCashFlow} disabled={loading}>
+                    إضافة تدفق نقدي
+                  </Button>
+                </Box>
+                <FormControlLabel
+                  control={
+                    <Switch onChange={(e) => setLocalTotal(e.target.checked)} />
+                  }
+                  checked={localTotal}
+                  label="إظهار الإجمالى المحلي"
                 />
-                <FormControl>
-                  <InputLabel>نوع الحركة</InputLabel>
-                  <Select
-                    label="نوع الحركة"
-                    value={moveType}
-                    onChange={(e) =>
-                      setMoveType(e.target.value as "in" | "out")
-                    }
-                    sx={{
-                      minWidth: 120,
-                    }}
-                  >
-                    <MenuItem value="in">دخول</MenuItem>
-                    <MenuItem value="out">خروج</MenuItem>
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="الوصف"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-                <Button onClick={addCashFlow} disabled={loading}>
-                  إضافة تدفق نقدي
-                </Button>
               </Grid>
 
               <Grid item container gap={3} xs={12}>
