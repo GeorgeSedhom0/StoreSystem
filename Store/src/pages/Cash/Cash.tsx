@@ -73,6 +73,7 @@ const Cash = () => {
     }
     return false;
   });
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
 
   const { partyId } = useParams();
 
@@ -110,20 +111,36 @@ const Cash = () => {
     initialData: [],
   });
 
+  const availableTypes = useMemo(() => {
+    const types = new Set<string>();
+    rawCashFlow.forEach((row) => {
+      types.add(row.description);
+    });
+    return Array.from(types);
+  }, [rawCashFlow]);
+
   const cashFlow = useMemo(() => {
+    // Step 1: Filter the rawCashFlow based on selectedTypes
+    const filteredCashFlow = rawCashFlow.filter((row) =>
+      selectedTypes.length > 0 ? selectedTypes.includes(row.description) : true
+    );
+
+    // Step 2: Process the filtered data
+    const localCashFlow = [];
     if (localTotal) {
       // override the total column to have the first total as 0
       let total = 0;
-      const localCashFlow = [];
-      for (let i = rawCashFlow.length - 1; i >= 0; i--) {
-        const row = rawCashFlow[i];
+      for (let i = filteredCashFlow.length - 1; i >= 0; i--) {
+        const row = filteredCashFlow[i];
         total += row.amount;
         localCashFlow.unshift({ ...row, total });
       }
-      return localCashFlow;
+    } else {
+      localCashFlow.push(...filteredCashFlow);
     }
-    return rawCashFlow;
-  }, [rawCashFlow, localTotal]);
+
+    return localCashFlow;
+  }, [rawCashFlow, localTotal, selectedTypes]);
 
   const loading = isShiftLoading || isCashFlowLoading;
 
@@ -270,6 +287,19 @@ const Cash = () => {
                     }}
                   />
                 </LocalizationProvider>
+
+                <Autocomplete
+                  multiple
+                  options={availableTypes}
+                  value={selectedTypes}
+                  onChange={(_, value) => setSelectedTypes(value)}
+                  renderInput={(params) => (
+                    <TextField {...params} label="الأنواع" />
+                  )}
+                  sx={{
+                    minWidth: 250,
+                  }}
+                />
               </Grid>
 
               <Grid item xs={12}>
