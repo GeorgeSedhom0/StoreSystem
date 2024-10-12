@@ -32,6 +32,11 @@ CREATE TABLE employee (
 )
 """)
 
+cur.execute("""
+INSERT INTO pages (name, path)
+VALUES ('الموظفين', '/employees')
+""")
+
 # Create salaries table
 cur.execute("""
 CREATE TABLE salaries (
