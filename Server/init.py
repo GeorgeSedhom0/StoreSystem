@@ -69,6 +69,7 @@ VALUES
 ('الحركات المالية', '/cash'),
 ('التقارير', '/analytics'),
 ('الاعدادات', '/settings'),
+('اداارة الاقساط', '/installments'),
 ('الموظفين', '/employees')
 """)
 
@@ -88,15 +89,17 @@ CREATE TABLE users (
 # comment out the following query
 password = "verystrongpassword"
 hashed_password = bcrypt.hashpw(
-    password.encode('utf-8'),
+    password.encode("utf-8"),
     bcrypt.gensalt(),
-).decode('utf-8')
+).decode("utf-8")
 cur.execute(
     """
 INSERT INTO users (username, password, email, phone, language, scope_id)
 VALUES
 ('george', %s, 'myamazingemail@me.wow.so.cool.email', '01000000000', 'ar', 1)
-""", (hashed_password, ))
+""",
+    (hashed_password,),
+)
 
 # Create the store_data table
 cur.execute("""
@@ -560,15 +563,21 @@ VALUES
 
 # Insert a bill with associated product flows
 current_time = datetime.now().isoformat()
-cur.execute("""
+cur.execute(
+    """
 INSERT INTO bills (store_id, ref_id, time, discount, total, type, party_id)
 VALUES (%s, %s, %s, %s, %s, %s, NULL) RETURNING id
-""", (1, '1_1', current_time, 0, 15, 'sell'))
+""",
+    (1, "1_1", current_time, 0, 15, "sell"),
+)
 
-cur.execute("""
+cur.execute(
+    """
 INSERT INTO products_flow (store_id, bill_id, product_id, wholesale_price, price, amount)
 VALUES (%s, %s, (SELECT id FROM products WHERE name = %s), %s, %s, %s)
-""", (1, '1_1', 'Product A', 10, 15, -1))
+""",
+    (1, "1_1", "Product A", 10, 15, -1),
+)
 
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------
@@ -583,8 +592,20 @@ INSERT INTO employee (name, phone, address, salary, started_on, store_id)
 VALUES
 (%s, %s, %s, %s, %s, 0),
 (%s, %s, %s, %s, %s, 0)
-""", ('John Doe', '01011111111', '123 Street, City', 5000, current_time,
-      'Jane Smith', '01022222222', '456 Avenue, Town', 5500, current_time))
+""",
+    (
+        "John Doe",
+        "01011111111",
+        "123 Street, City",
+        5000,
+        current_time,
+        "Jane Smith",
+        "01022222222",
+        "456 Avenue, Town",
+        5500,
+        current_time,
+    ),
+)
 
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------
