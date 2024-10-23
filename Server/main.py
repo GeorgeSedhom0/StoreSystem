@@ -155,23 +155,25 @@ class Database:
         self.user = user
         self.password = password
         self.real_dict_cursor = real_dict_cursor
-
-    def __enter__(self):
         self.conn = psycopg2.connect(
             host=self.host,
             database=self.database,
             user=self.user,
             password=self.password,
         )
-        return self.conn.cursor(
+        self.cursor = self.conn.cursor(
             cursor_factory=RealDictCursor if self.real_dict_cursor else None
         )
+
+    def __enter__(self):
+        return self.cursor
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
             self.conn.rollback()
         else:
             self.conn.commit()
+        self.cursor.close()
         self.conn.close()
 
 
