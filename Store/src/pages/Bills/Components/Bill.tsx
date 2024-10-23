@@ -6,11 +6,21 @@ import EditableBill from "./EditableBill";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import ProductsView from "../../../utils/ProductsView";
+import FormatedNumber from "../../Shared/FormatedNumber";
 
 const endReservation = async (id: string) => {
   await axios.get(import.meta.env.VITE_SERVER_URL + "/end-reservation", {
     params: { bill_id: id },
   });
+};
+
+const billTypes = {
+  sell: "بيع",
+  buy: "شراء",
+  return: "مرتجع",
+  BNPL: "بيع اجل",
+  reserve: "حجز",
+  installment: "قسط",
 };
 
 const Bill = ({ context, item: bill, ...props }: any) => {
@@ -71,24 +81,15 @@ const Bill = ({ context, item: bill, ...props }: any) => {
         <TableRow {...props}>
           <TableCell>{bill.id}</TableCell>
           <TableCell>
-            فاتورة{" "}
-            {bill.type === "sell"
-              ? "بيع"
-              : bill.type === "buy"
-              ? "شراء"
-              : bill.type === "return"
-              ? "مرتجع"
-              : bill.type === "BNPL"
-              ? "بيع اجل"
-              : bill.type === "reserve"
-              ? "حجز"
-              : bill.type === "installment"
-              ? "قسط"
-              : ""}
+            فاتورة {billTypes[bill.type as keyof typeof billTypes] || bill.type}
           </TableCell>
           <TableCell>{new Date(bill.time).toLocaleString("ar-EG")}</TableCell>
-          <TableCell>{Math.abs(bill.discount)}</TableCell>
-          <TableCell>{Math.abs(bill.total)}</TableCell>
+          <TableCell>
+            <FormatedNumber>{Math.abs(bill.discount)}</FormatedNumber>
+          </TableCell>
+          <TableCell>
+            <FormatedNumber>{Math.abs(bill.total)}</FormatedNumber>
+          </TableCell>
           <TableCell>
             <ButtonGroup
               variant="outlined"

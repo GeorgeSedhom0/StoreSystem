@@ -32,10 +32,10 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
                   {-product.amount}
                 </TableCell>
                 <TableCell sx={{ borderBottom: "none" }}>
-                  {product.price}
+                  {product.price.toFixed(2)}
                 </TableCell>
                 <TableCell sx={{ borderBottom: "none" }}>
-                  {product.price * -product.amount}
+                  {(product.price * -product.amount).toFixed(2)}
                 </TableCell>
               </TableRow>
             ))}
@@ -45,7 +45,7 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
                 <TableCell sx={{ borderBottom: "none" }}></TableCell>
                 <TableCell sx={{ borderBottom: "none" }}></TableCell>
                 <TableCell sx={{ borderBottom: "none" }}>
-                  {bill.discount}
+                  {bill.discount.toFixed(2)}
                 </TableCell>
               </TableRow>
             )}
@@ -53,7 +53,7 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
               <TableCell sx={{ borderBottom: "none" }}>الاجمالى</TableCell>
               <TableCell sx={{ borderBottom: "none" }}></TableCell>
               <TableCell sx={{ borderBottom: "none" }}></TableCell>
-              <TableCell sx={{ borderBottom: "none" }}>{bill.total}</TableCell>
+              <TableCell sx={{ borderBottom: "none" }}>{bill.total.toFixed(2)}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

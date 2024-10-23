@@ -147,6 +147,9 @@ const EmployeeForm = ({
               id="employeeSalaryField"
               onChange={(e) => setSalary(parseFloat(e.target.value))}
               fullWidth
+              inputProps={{
+                inputMode: "decimal",
+              }}
             />
           </Grid>
           <Grid item>

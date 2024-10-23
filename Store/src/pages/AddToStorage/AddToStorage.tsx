@@ -82,6 +82,9 @@ const Storage = () => {
                   price: parseFloat(e.target.value) || 0,
                 })
               }
+              inputProps={{
+                inputMode: "decimal",
+              }}
             />
             <TextField
               label="سعر الشراء"
@@ -92,6 +95,9 @@ const Storage = () => {
                   wholesale_price: parseFloat(e.target.value) || 0,
                 })
               }
+              inputProps={{
+                inputMode: "decimal",
+              }}
             />
             <TextField
               label="الباركود"

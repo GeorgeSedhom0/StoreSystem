@@ -125,7 +125,10 @@ const PayInstallment = ({
                 label="المبلغ"
                 type="number"
                 value={amount}
-                onChange={(e) => setAmount(parseInt(e.target.value))}
+                onChange={(e) => setAmount(parseFloat(e.target.value))}
+                inputProps={{
+                  inputMode: "decimal",
+                }}
               />
             </>
           )}
