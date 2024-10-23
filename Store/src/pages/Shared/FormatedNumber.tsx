@@ -7,18 +7,18 @@ const formatNumber = (value: number) => {
 };
 
 const FormatedNumber = ({
-  value,
+  children,
   money,
 }: {
-  value: number;
+  children: number;
   money?: boolean;
 }) => {
-  let formatedValue = formatNumber(value);
+  let formatedValue = formatNumber(children);
   if (money) {
     formatedValue = Intl.NumberFormat("ar-eg", {
       style: "currency",
       currency: "EGP",
-    }).format(value);
+    }).format(children);
   }
   return <span>{formatedValue}</span>;
 };

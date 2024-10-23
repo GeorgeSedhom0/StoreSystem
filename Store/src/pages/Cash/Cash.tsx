@@ -439,10 +439,14 @@ const Cash = () => {
                       year: "numeric",
                     })}
                   </TableCell>
-                  <TableCell>{<FormatedNumber value={row.amount} />}</TableCell>
+                  <TableCell>
+                    <FormatedNumber>{row.amount}</FormatedNumber>
+                  </TableCell>
                   <TableCell>{row.type === "in" ? "دخول" : "خروج"}</TableCell>
                   <TableCell>{row.description}</TableCell>
-                  <TableCell>{<FormatedNumber value={row.total} />}</TableCell>
+                  <TableCell>
+                    <FormatedNumber>{row.total}</FormatedNumber>
+                  </TableCell>
                   <TableCell>
                     {row.party_name ? row.party_name : "بدون طرف ثانى"}
                   </TableCell>

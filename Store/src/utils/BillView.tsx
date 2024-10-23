@@ -17,6 +17,7 @@ import {
 import { Bill } from "./types";
 import { forwardRef, useContext } from "react";
 import { StoreContext } from "../StoreDataProvider";
+import FormatedNumber from "../pages/Shared/FormatedNumber";
 
 const theme = createTheme({
   direction: "rtl",
@@ -115,15 +116,19 @@ const BillView = forwardRef(
                         <TableCell>{product.name}</TableCell>
                         <TableCell>{Math.abs(product.amount)}</TableCell>
                         <TableCell>
-                          {["sell", "return", "BNPL"].includes(bill.type)
-                            ? product.price
-                            : product.wholesale_price}
+                          <FormatedNumber money>
+                            {bill.type === "buy"
+                              ? product.wholesale_price
+                              : product.price}
+                          </FormatedNumber>
                         </TableCell>
                         <TableCell>
-                          {["sell", "return", "BNPL"].includes(bill.type)
-                            ? (product.price * Math.abs(product.amount)).toFixed(2)
-                            : (product.wholesale_price *
-                              Math.abs(product.amount)).toFixed(2)}
+                          <FormatedNumber money>
+                            {Math.abs(product.amount) *
+                              (bill.type === "buy"
+                                ? product.wholesale_price
+                                : product.price)}
+                          </FormatedNumber>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -155,27 +160,33 @@ const BillView = forwardRef(
                     <TableRow>
                       <TableCell>الاجمالى</TableCell>
                       <TableCell>
-                        {bill.type === "BNPL"
-                          ? bill.products.reduce(
-                              (acc, p) => acc + Math.abs(p.amount) * p.price,
-                              0
-                            ).toFixed(2)
-                          : (Math.abs(bill.total) + Math.abs(bill.discount)).toFixed(2)}
+                        <FormatedNumber money>
+                          {bill.type === "BNPL"
+                            ? bill.products.reduce(
+                                (acc, p) => acc + Math.abs(p.amount) * p.price,
+                                0
+                              )
+                            : Math.abs(bill.total) + Math.abs(bill.discount)}
+                        </FormatedNumber>
                       </TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>الخصم</TableCell>
-                      <TableCell>{bill.discount.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <FormatedNumber money>{bill.discount}</FormatedNumber>
+                      </TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>الصافى</TableCell>
                       <TableCell>
-                        {bill.type === "BNPL"
-                          ? (bill.products.reduce(
-                              (acc, p) => acc + Math.abs(p.amount) * p.price,
-                              0
-                            ) - bill.discount).toFixed(2)
-                          : Math.abs(bill.total).toFixed(2)}
+                        <FormatedNumber money>
+                          {bill.type === "BNPL"
+                            ? bill.products.reduce(
+                                (acc, p) => acc + Math.abs(p.amount) * p.price,
+                                0
+                              ) - bill.discount
+                            : Math.abs(bill.total)}
+                        </FormatedNumber>
                       </TableCell>
                     </TableRow>
                   </TableBody>

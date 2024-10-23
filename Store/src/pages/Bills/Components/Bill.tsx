@@ -85,10 +85,10 @@ const Bill = ({ context, item: bill, ...props }: any) => {
           </TableCell>
           <TableCell>{new Date(bill.time).toLocaleString("ar-EG")}</TableCell>
           <TableCell>
-            <FormatedNumber value={Math.abs(bill.discount)} />
+            <FormatedNumber>{Math.abs(bill.discount)}</FormatedNumber>
           </TableCell>
           <TableCell>
-            <FormatedNumber value={Math.abs(bill.total)} />
+            <FormatedNumber>{Math.abs(bill.total)}</FormatedNumber>
           </TableCell>
           <TableCell>
             <ButtonGroup
