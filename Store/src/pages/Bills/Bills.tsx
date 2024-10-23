@@ -173,7 +173,7 @@ const Bills = () => {
     );
   }, [showExpandedBill]);
 
-  const total = filteredBills.reduce((acc, bill) => acc + bill.total, 0);
+  const total = filteredBills.reduce((acc, bill) => acc + parseFloat(bill.total.toFixed(2)), 0);
 
   const loading = isShiftLoading || isBillsLoading;
 
@@ -325,7 +325,7 @@ const Bills = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Typography variant="body2">المجموع: {total}</Typography>
+                <Typography variant="body2">المجموع: {total.toFixed(2)}</Typography>
               </Grid>
             </Grid>
           </Card>

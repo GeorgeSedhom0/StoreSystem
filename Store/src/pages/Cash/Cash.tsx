@@ -223,6 +223,9 @@ const Cash = () => {
                     label="المبلغ"
                     value={amount}
                     onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                    inputProps={{
+                      inputMode: "decimal",
+                    }}
                   />
                   <FormControl>
                     <InputLabel>نوع الحركة</InputLabel>

@@ -73,13 +73,19 @@ const PaySalary = ({
               label="الحافذ"
               type="number"
               value={bonus}
-              onChange={(e) => setBonus(+e.target.value)}
+              onChange={(e) => setBonus(parseFloat(e.target.value) || 0)}
+              inputProps={{
+                inputMode: "decimal",
+              }}
             />
             <TextField
               label="الخصم"
               type="number"
               value={deductions}
-              onChange={(e) => setDeductions(+e.target.value)}
+              onChange={(e) => setDeductions(parseFloat(e.target.value) || 0)}
+              inputProps={{
+                inputMode: "decimal",
+              }}
             />
             <LocalizationProvider
               dateAdapter={AdapterDayjs}

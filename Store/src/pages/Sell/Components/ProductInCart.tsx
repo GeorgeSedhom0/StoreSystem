@@ -45,6 +45,9 @@ const ProductInCart = ({
               )
             );
           }}
+          inputProps={{
+            inputMode: "decimal",
+          }}
         />
       </TableCell>
 

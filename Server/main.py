@@ -73,6 +73,12 @@ class Product(BaseModel):
     category: str
     stock: Optional[int] = None
 
+    def dict(self, *args, **kwargs):
+        data = super().dict(*args, **kwargs)
+        data['wholesale_price'] = f"{self.wholesale_price:.2f}"
+        data['price'] = f"{self.price:.2f}"
+        return data
+
 
 class ProductFlow(BaseModel):
     "Define the ProductFlow model"
@@ -82,6 +88,12 @@ class ProductFlow(BaseModel):
     price: float
     wholesale_price: float
 
+    def dict(self, *args, **kwargs):
+        data = super().dict(*args, **kwargs)
+        data['price'] = f"{self.price:.2f}"
+        data['wholesale_price'] = f"{self.wholesale_price:.2f}"
+        return data
+
 
 class Bill(BaseModel):
     "Define the Bill model"
@@ -90,6 +102,12 @@ class Bill(BaseModel):
     discount: float
     total: float
     products_flow: list[ProductFlow]
+
+    def dict(self, *args, **kwargs):
+        data = super().dict(*args, **kwargs)
+        data['discount'] = f"{self.discount:.2f}"
+        data['total'] = f"{self.total:.2f}"
+        return data
 
 
 class dbProduct(BaseModel):
@@ -102,6 +120,12 @@ class dbProduct(BaseModel):
     wholesale_price: float
     price: float
 
+    def dict(self, *args, **kwargs):
+        data = super().dict(*args, **kwargs)
+        data['wholesale_price'] = f"{self.wholesale_price:.2f}"
+        data['price'] = f"{self.price:.2f}"
+        return data
+
 
 class dbBill(BaseModel):
     "Define the dbBill model"
@@ -113,6 +137,12 @@ class dbBill(BaseModel):
     type: str
     products: list[dbProduct]
 
+    def dict(self, *args, **kwargs):
+        data = super().dict(*args, **kwargs)
+        data['discount'] = f"{self.discount:.2f}"
+        data['total'] = f"{self.total:.2f}"
+        return data
+
 
 class Database:
     "Database context manager to handle the connection and cursor"
@@ -120,7 +150,7 @@ class Database:
     def __init__(self, host, database, user, password, real_dict_cursor=True):
         self.host = host
         self.database = database
-        self.user = user
+        self.user = self.user
         self.password = password
         self.real_dict_cursor = real_dict_cursor
 
@@ -913,7 +943,7 @@ async def backup():
 
     except Exception as e:
         logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail.str(e)) from e
 
 
 @app.post("/restore")

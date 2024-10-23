@@ -465,10 +465,13 @@ const Sell = () => {
                 label="الخصم"
                 type="number"
                 value={discount}
-                onChange={(e) => setDiscount(parseInt(e.target.value) || 0)}
+                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
                 fullWidth
                 size="small"
                 disabled={["return", "installment"].includes(billPayment)}
+                inputProps={{
+                  inputMode: "decimal",
+                }}
               />
             </Grid>
 
@@ -539,8 +542,11 @@ const Sell = () => {
                     label="المقدم"
                     type="number"
                     value={paid}
-                    onChange={(e) => setPaid(parseInt(e.target.value) || 0)}
+                    onChange={(e) => setPaid(parseFloat(e.target.value) || 0)}
                     size="small"
+                    inputProps={{
+                      inputMode: "decimal",
+                    }}
                   />
                 </Grid>
                 <Grid item xs={12}>

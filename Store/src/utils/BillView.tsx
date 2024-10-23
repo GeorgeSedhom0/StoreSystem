@@ -121,9 +121,9 @@ const BillView = forwardRef(
                         </TableCell>
                         <TableCell>
                           {["sell", "return", "BNPL"].includes(bill.type)
-                            ? product.price * Math.abs(product.amount)
-                            : product.wholesale_price *
-                              Math.abs(product.amount)}
+                            ? (product.price * Math.abs(product.amount)).toFixed(2)
+                            : (product.wholesale_price *
+                              Math.abs(product.amount)).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -159,23 +159,23 @@ const BillView = forwardRef(
                           ? bill.products.reduce(
                               (acc, p) => acc + Math.abs(p.amount) * p.price,
                               0
-                            )
-                          : Math.abs(bill.total) + Math.abs(bill.discount)}
+                            ).toFixed(2)
+                          : (Math.abs(bill.total) + Math.abs(bill.discount)).toFixed(2)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>الخصم</TableCell>
-                      <TableCell>{bill.discount}</TableCell>
+                      <TableCell>{bill.discount.toFixed(2)}</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>الصافى</TableCell>
                       <TableCell>
                         {bill.type === "BNPL"
-                          ? bill.products.reduce(
+                          ? (bill.products.reduce(
                               (acc, p) => acc + Math.abs(p.amount) * p.price,
                               0
-                            ) - bill.discount
-                          : Math.abs(bill.total)}
+                            ) - bill.discount).toFixed(2)
+                          : Math.abs(bill.total).toFixed(2)}
                       </TableCell>
                     </TableRow>
                   </TableBody>
