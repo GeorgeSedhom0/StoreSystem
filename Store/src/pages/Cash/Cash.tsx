@@ -30,6 +30,7 @@ import { DateTimePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { useParties } from "../../utils/data/useParties";
 import { useParams } from "react-router-dom";
+import FormatedNumber from "../Shared/FormatedNumber";
 
 const getCashFlow = async (
   startDate: Dayjs,
@@ -438,10 +439,10 @@ const Cash = () => {
                       year: "numeric",
                     })}
                   </TableCell>
-                  <TableCell>{row.amount}</TableCell>
+                  <TableCell>{<FormatedNumber value={row.amount} />}</TableCell>
                   <TableCell>{row.type === "in" ? "دخول" : "خروج"}</TableCell>
                   <TableCell>{row.description}</TableCell>
-                  <TableCell>{row.total}</TableCell>
+                  <TableCell>{<FormatedNumber value={row.total} />}</TableCell>
                   <TableCell>
                     {row.party_name ? row.party_name : "بدون طرف ثانى"}
                   </TableCell>
