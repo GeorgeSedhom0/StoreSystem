@@ -218,6 +218,7 @@ const Products = () => {
                   setEditedProducts={setEditedProducts}
                   editedProducts={editedProducts}
                   key={product.id || product.bar_code}
+                  deleteProduct={deleteProduct}
                 />
               )}
             />
