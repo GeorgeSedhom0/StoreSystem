@@ -350,7 +350,7 @@ BEGIN
         NEW.amount + NEW.bonus - NEW.deductions,
         'out',
         'راتب ' || employee_name || ' بمبلغ ' || NEW.amount || ' ومكافأة ' || NEW.bonus || ' وخصم ' || NEW.deductions,
-        NEW.employee_id
+        NULL
     );
     RETURN NEW;
 END;
