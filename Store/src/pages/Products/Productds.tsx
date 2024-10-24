@@ -121,6 +121,27 @@ const Products = () => {
     setEditedProducts([]);
   }, [editedProducts]);
 
+  const deleteProduct = useCallback(async (productId: number) => {
+    setLoading(true);
+    try {
+      await axios.put(
+        import.meta.env.VITE_SERVER_URL + "/product/delete",
+        null,
+        {
+          params: {
+            product_id: productId,
+          },
+        }
+      );
+      setMsg({ type: "success", text: "تم ازالة المنتج بنجاح" });
+    } catch (error) {
+      console.log(error);
+      setMsg({ type: "error", text: "حدث خطأ أثناء ازالة المنتج" });
+    }
+    await getProds();
+    setLoading(false);
+  }, []);
+
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
