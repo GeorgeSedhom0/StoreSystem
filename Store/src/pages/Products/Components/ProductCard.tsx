@@ -197,7 +197,7 @@ const ProductCard = ({
       <TableCell>
         <Button
           variant="contained"
-          color="secondary"
+          color="error"
           onClick={() => deleteProduct(product.id!)}
         >
           ازالة المنتج
