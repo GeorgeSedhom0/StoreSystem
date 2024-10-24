@@ -185,6 +185,7 @@ def pay_salary(
         bonus: float = Form(...),
         deductions: float = Form(...),
         month: int = Form(...),
+        time: datetime = Form(...)
 ) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
@@ -202,9 +203,9 @@ def pay_salary(
                 """
                 INSERT INTO salaries
                     (employee_id, amount, bonus, deductions, time)
-                VALUES (%s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
-                """, (employee_id, salary, bonus, deductions))
+                """, (employee_id, salary, bonus, deductions, time))
             salary_id = cur.fetchone()
             if salary_id:
                 return JSONResponse(content={"status": "success"})
