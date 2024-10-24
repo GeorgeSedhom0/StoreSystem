@@ -125,7 +125,8 @@ CREATE TABLE products (
   wholesale_price FLOAT,
   price FLOAT,
   stock INT,
-  category VARCHAR
+  category VARCHAR,
+  is_deleted BOOLEAN DEFAULT FALSE
 )
 """)
 

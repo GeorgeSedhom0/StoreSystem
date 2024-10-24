@@ -8,6 +8,7 @@ interface ProductCardProps {
   reserved: number;
   setEditedProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   editedProducts: Product[];
+  deleteProduct: (productId: number) => void;
 }
 
 const ProductCard = ({
@@ -15,6 +16,7 @@ const ProductCard = ({
   reserved,
   setEditedProducts,
   editedProducts,
+  deleteProduct,
 }: ProductCardProps) => {
   const productInCart = useMemo(
     () => editedProducts.find((p) => p.id === product.id),
@@ -190,6 +192,16 @@ const ProductCard = ({
             })
           }
         />
+      </TableCell>
+
+      <TableCell>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => deleteProduct(product.id!)}
+        >
+          ازالة المنتج
+        </Button>
       </TableCell>
     </>
   );

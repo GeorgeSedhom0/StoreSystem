@@ -232,6 +232,7 @@ def get_products():
                         id, name, bar_code, wholesale_price,
                         price, stock, category
                         FROM products
+                        WHERE is_deleted = FALSE
                         ORDER BY name;
                         """)
             products = cur.fetchall()
@@ -358,6 +359,33 @@ def update_product(products: list[Product], store_id: int):
             )
 
             return JSONResponse(content={"message": "Products updated successfully"})
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/product/delete")
+def delete_product(product_id: int):
+    """
+    Mark a product as deleted in the database
+
+    Args:
+        product_id (int): The ID of the product to mark as deleted
+
+    Returns:
+        Dict: A message indicating the result of the operation
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                UPDATE products
+                SET is_deleted = TRUE
+                WHERE id = %s
+                """,
+                (product_id,),
+            )
+            return JSONResponse(content={"message": "Product marked as deleted successfully"})
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
