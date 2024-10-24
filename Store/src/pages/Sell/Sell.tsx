@@ -1,5 +1,4 @@
 import {
-  Autocomplete,
   Button,
   ButtonGroup,
   Card,
@@ -23,7 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Bill, DBProducts, Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import ProductInCart from "./Components/ProductInCart";
+import ProductInCart from "../Shared/ProductInCart";
 import ShiftDialog from "./Components/ShiftDialog";
 import BillView from "../../utils/BillView";
 import LoadingScreen from "../Shared/LoadingScreen";
@@ -32,6 +31,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useParties } from "../../utils/data/useParties";
 import PartyDetails from "../Shared/PartyDetails";
+import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
+import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
+import ProductAutocomplete from "../Shared/ProductAutocomplete";
+import Installments from "./Components/Installments";
 
 const getProds = async () => {
   const { data } = await axios.get<DBProducts>(
@@ -150,44 +153,8 @@ const Sell = () => {
     );
   }, [products, query]);
 
-  useEffect(() => {
-    // for ease of use, if the user holds ctrl and typing numbers
-    // the last product in the shopping cart quantity will be changed
-    // the can also remove the last digit by ctrl pressing backspace
-
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.ctrlKey && (!isNaN(parseInt(e.key)) || e.key === "Backspace")) {
-        e.preventDefault();
-        if (shoppingCart.length > 0) {
-          setShoppingCart((prev) =>
-            prev.map((item, index) => {
-              if (index === prev.length - 1) {
-                if (e.key === "Backspace") {
-                  return {
-                    ...item,
-                    quantity:
-                      parseInt(item.quantity.toString().slice(0, -1)) || 0,
-                  };
-                } else
-                  return {
-                    ...item,
-                    quantity:
-                      parseInt(item.quantity.toString() + e.key) ||
-                      item.quantity,
-                  };
-              } else return item;
-            })
-          );
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyPress);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyPress);
-    };
-  }, [shoppingCart]);
+  useQuickHandle(shoppingCart, setShoppingCart);
+  useBarcodeDetection(products, addToCart, setMsg);
 
   const addToCart = useCallback((product: Product | null) => {
     if (!product) return;
@@ -215,49 +182,6 @@ const Sell = () => {
       }
     });
   }, []);
-
-  useEffect(() => {
-    let code = "";
-    let reading = false;
-
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // If the target of the event is an input element, ignore the event
-      if ((e.target as HTMLElement).tagName.toLowerCase() === "input") {
-        return;
-      }
-
-      if (e.key === "Enter") {
-        if (code.length >= 7) {
-          const product = products.find((prod) => prod.bar_code === code);
-          if (product) {
-            addToCart(product);
-          } else {
-            setMsg({
-              type: "error",
-              text: "المنتج غير موجود",
-            });
-          }
-          code = "";
-        }
-      } else {
-        code += e.key;
-      }
-
-      if (!reading) {
-        reading = true;
-        setTimeout(() => {
-          code = "";
-          reading = false;
-        }, 500);
-      }
-    };
-
-    window.addEventListener("keypress", handleKeyPress);
-
-    return () => {
-      window.removeEventListener("keypress", handleKeyPress);
-    };
-  }, [products, addToCart]);
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
@@ -518,115 +442,20 @@ const Sell = () => {
               </Typography>
             </Grid>
             {billPayment === "installment" && (
-              <>
-                <Grid item container xs={12} gap={3}>
-                  <TextField
-                    label="عدد الاقساط"
-                    type="number"
-                    value={installments}
-                    onChange={(e) =>
-                      setInstallments(parseInt(e.target.value) || 1)
-                    }
-                    size="small"
-                  />
-                  <TextField
-                    label="الفترة بين الاقساط"
-                    type="number"
-                    value={installmentInterval}
-                    onChange={(e) =>
-                      setInstallmentInterval(parseInt(e.target.value) || 30)
-                    }
-                    size="small"
-                  />
-                  <TextField
-                    label="المقدم"
-                    type="number"
-                    value={paid}
-                    onChange={(e) => setPaid(parseFloat(e.target.value) || 0)}
-                    size="small"
-                    inputProps={{
-                      inputMode: "decimal",
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="h6">
-                    المتبقي:{" "}
-                    {shoppingCart.reduce(
-                      (acc, item) => acc + item.price * item.quantity,
-                      0
-                    ) -
-                      discount -
-                      paid}{" "}
-                    جنيه
-                  </Typography>
-                  <Typography variant="h6">
-                    قيمة القسط:{" "}
-                    {shoppingCart.reduce(
-                      (acc, item) => acc + item.price * item.quantity,
-                      0
-                    ) -
-                      discount -
-                      paid}{" "}
-                    / {installments} ={" "}
-                    {(shoppingCart.reduce(
-                      (acc, item) => acc + item.price * item.quantity,
-                      0
-                    ) -
-                      discount -
-                      paid) /
-                      installments}{" "}
-                    جنيه
-                  </Typography>
-                </Grid>
-              </>
+              <Installments
+                installments={installments}
+                setInstallments={setInstallments}
+                installmentInterval={installmentInterval}
+                setInstallmentInterval={setInstallmentInterval}
+                paid={paid}
+                setPaid={setPaid}
+                shoppingCart={shoppingCart}
+                discount={discount}
+              />
             )}
 
             <Grid item xs={12}>
-              <Autocomplete
-                options={options}
-                getOptionLabel={(option) => option.name}
-                isOptionEqualToValue={(option, value) =>
-                  option.id === value.id || option.bar_code === value.bar_code
-                }
-                value={null}
-                onChange={(_, value) => {
-                  addToCart(value);
-                  setQuery("");
-                }}
-                autoHighlight
-                inputValue={query}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="المنتج"
-                    onChange={(e) => {
-                      const currentValue = e.target.value;
-                      setQuery(currentValue);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        // if an enter is pressed, and the query is more than or equal to 8 numbers
-                        // then search for the product with the barcode and add it to the cart
-                        if (query.length >= 7 && !isNaN(parseInt(query))) {
-                          const product = products.find(
-                            (prod) => prod.bar_code === query
-                          );
-                          if (product) {
-                            addToCart(product);
-                          } else {
-                            setMsg({
-                              type: "error",
-                              text: "المنتج غير موجود",
-                            });
-                          }
-                          setQuery("");
-                        }
-                      }
-                    }}
-                  />
-                )}
-              />
+              <ProductAutocomplete onProductSelect={addToCart} />
             </Grid>
             {usingThirdParties && (
               <Grid item xs={12}>

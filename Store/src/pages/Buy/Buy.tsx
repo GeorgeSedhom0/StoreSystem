@@ -16,10 +16,13 @@ import { useCallback, useEffect, useState } from "react";
 import { DBProducts, Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import ProductInCart from "./Components/ProductInCart";
+import ProductInCart from "../Shared/ProductInCart";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { useParties } from "../../utils/data/useParties";
+import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
+import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
+import ProductAutocomplete from "../Shared/ProductAutocomplete";
 
 const getProducts = async () => {
   const { data } = await axios.get<DBProducts>(
@@ -106,49 +109,8 @@ const Buy = () => {
     });
   }, []);
 
-  useEffect(() => {
-    let code = "";
-    let reading = false;
-
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // If the target of the event is an input element, ignore the event
-      if ((e.target as HTMLElement).tagName.toLowerCase() === "input") {
-        return;
-      }
-
-      if (e.key === "Enter") {
-        if (code.length >= 8) {
-          const product = products.find((prod) => prod.bar_code === code);
-          if (product) {
-            addToCart(product);
-            console.log(product);
-          } else {
-            setMsg({
-              type: "error",
-              text: "المنتج غير موجود",
-            });
-          }
-          code = "";
-        }
-      } else {
-        code += e.key;
-      }
-
-      if (!reading) {
-        reading = true;
-        setTimeout(() => {
-          code = "";
-          reading = false;
-        }, 500);
-      }
-    };
-
-    window.addEventListener("keypress", handleKeyPress);
-
-    return () => {
-      window.removeEventListener("keypress", handleKeyPress);
-    };
-  }, [products, addToCart]);
+  useBarcodeDetection(products, addToCart, setMsg);
+  useQuickHandle(shoppingCart, setShoppingCart);
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
@@ -248,28 +210,7 @@ const Buy = () => {
             </Grid>
 
             <Grid item xs={12}>
-              <Autocomplete
-                options={options}
-                getOptionLabel={(option) => option.name}
-                isOptionEqualToValue={(option, value) =>
-                  option.id === value.id || option.bar_code === value.bar_code
-                }
-                value={null}
-                onChange={(_, value) => {
-                  addToCart(value);
-                  setQuery("");
-                }}
-                filterOptions={(x) => x}
-                autoHighlight
-                inputValue={query}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="المنتج"
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                )}
-              />
+              <ProductAutocomplete onProductSelect={addToCart} />
             </Grid>
             <Grid item xs={12}>
               <Autocomplete
