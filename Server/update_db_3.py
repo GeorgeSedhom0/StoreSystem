@@ -16,6 +16,12 @@ conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
 # Get a cursor
 cur = conn.cursor()
 
+# Drop the trigger and function if they already exist
+cur.execute("""
+DROP TRIGGER IF EXISTS trigger_insert_cash_flow_after_insert_salary ON salaries;
+DROP FUNCTION IF EXISTS insert_cash_flow_after_insert_salary;
+""")
+
 # Create the trigger to insert into cash_flow after inserting a salary
 cur.execute("""
 -- Trigger to insert into cash_flow after inserting a salary
@@ -24,9 +30,11 @@ RETURNS TRIGGER AS $$
 DECLARE
     employee_name VARCHAR;
     emp_store_id BIGINT;
+    formatted_date VARCHAR;
 BEGIN
     SELECT name INTO employee_name FROM employee WHERE id = NEW.employee_id;
     SELECT store_id INTO emp_store_id FROM employee WHERE id = NEW.employee_id;
+    formatted_date := TO_CHAR(NEW.time, 'MM/YYYY');
 
     INSERT INTO cash_flow (
         store_id,
@@ -37,10 +45,10 @@ BEGIN
         party_id
     ) VALUES (
         emp_store_id,
-        NEW.time,
-        NEW.amount + NEW.bonus - NEW.deductions,
+        NOW(),
+        -NEW.amount - NEW.bonus + NEW.deductions,
         'out',
-        'راتب ' || employee_name || ' بمبلغ ' || NEW.amount || ' ومكافأة ' || NEW.bonus || ' وخصم ' || NEW.deductions,
+        'راتب ' || employee_name || ' بمبلغ ' || NEW.amount || ' ومكافأة ' || NEW.bonus || ' وخصم ' || NEW.deductions || ' لشهر ' || formatted_date,
         NULL
     );
     RETURN NEW;

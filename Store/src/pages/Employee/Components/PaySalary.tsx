@@ -8,12 +8,13 @@ import {
   TextField,
 } from "@mui/material";
 import { Employee } from "../../../utils/types";
-import { useState } from "react";
+import { Dispatch, SetStateAction, useState } from "react";
 import dayjs from "dayjs";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
+import { AlertMsg } from "../../Shared/AlertMessage";
 
 const postNewSalary = async ({
   id,
