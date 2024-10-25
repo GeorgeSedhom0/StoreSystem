@@ -36,7 +36,7 @@ import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import Installments from "./Components/Installments";
 import useParties from "../Shared/hooks/useParties";
-import useProducts from "../Shared/hooks/UseProducts";
+import useProducts from "../Shared/hooks/useProducts";
 
 const getShift = async () => {
   const { data } = await axios.get(

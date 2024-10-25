@@ -22,7 +22,7 @@ import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
 import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import useParties from "../Shared/hooks/useParties";
-import useProducts from "../Shared/hooks/UseProducts";
+import useProducts from "../Shared/hooks/useProducts";
 
 const Buy = () => {
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
