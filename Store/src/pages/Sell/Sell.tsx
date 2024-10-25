@@ -1,4 +1,5 @@
 import {
+  Autocomplete,
   Button,
   ButtonGroup,
   Card,
@@ -19,7 +20,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bill, DBProducts, Party, Product, SCProduct } from "../../utils/types";
+import { Bill, Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
@@ -29,19 +30,13 @@ import LoadingScreen from "../Shared/LoadingScreen";
 import { printBill } from "../../utils/functions";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { useParties } from "../../utils/data/useParties";
 import PartyDetails from "../Shared/PartyDetails";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
 import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import Installments from "./Components/Installments";
-
-const getProds = async () => {
-  const { data } = await axios.get<DBProducts>(
-    import.meta.env.VITE_SERVER_URL + "/products"
-  );
-  return data;
-};
+import useParties from "../Shared/hooks/useParties";
+import useProducts from "../Shared/hooks/UseProducts";
 
 const getShift = async () => {
   const { data } = await axios.get(
@@ -55,8 +50,6 @@ const getShift = async () => {
 };
 
 const Sell = () => {
-  const [options, setOptions] = useState<Product[]>([]);
-  const [query, setQuery] = useState<string>("");
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
   const [msg, setMsg] = useState<AlertMsg>({
     type: "",
@@ -91,15 +84,10 @@ const Sell = () => {
   const naviagte = useNavigate();
 
   const {
-    data: products,
+    products,
     isLoading: isProductsLoading,
-    refetch: updateProducts,
-  } = useQuery({
-    queryKey: ["products"],
-    queryFn: getProds,
-    initialData: { products: [], reserved_products: [] },
-    select: (data) => data.products,
-  });
+    updateProducts,
+  } = useProducts();
 
   const {
     data: shift,
@@ -137,25 +125,6 @@ const Sell = () => {
 
   const loading = isProductsLoading || isShiftLoading;
 
-  useEffect(() => {
-    if (!query) {
-      setOptions(products);
-      return;
-    }
-    setOptions(
-      products
-        .filter(
-          (prod) =>
-            prod.name.toLowerCase().includes(query.toLowerCase()) ||
-            prod.bar_code.includes(query)
-        )
-        .slice(0, 30)
-    );
-  }, [products, query]);
-
-  useQuickHandle(shoppingCart, setShoppingCart);
-  useBarcodeDetection(products, addToCart, setMsg);
-
   const addToCart = useCallback((product: Product | null) => {
     if (!product) return;
     setShoppingCart((prev) => {
@@ -182,6 +151,9 @@ const Sell = () => {
       }
     });
   }, []);
+
+  useQuickHandle(shoppingCart, setShoppingCart);
+  useBarcodeDetection(products, addToCart, setMsg);
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
@@ -455,7 +427,10 @@ const Sell = () => {
             )}
 
             <Grid item xs={12}>
-              <ProductAutocomplete onProductSelect={addToCart} />
+              <ProductAutocomplete
+                onProductSelect={addToCart}
+                products={products}
+              />
             </Grid>
             {usingThirdParties && (
               <Grid item xs={12}>
@@ -540,14 +515,13 @@ const Sell = () => {
         <Card elevation={3}>
           <TableContainer
             sx={{
-              height: 650,
+              height: "60vh",
               overflowY: "auto",
             }}
           >
             <Table
               stickyHeader
               sx={{
-                // the Table Cell from Table Row from Table Head should be background.paper
                 "& .MuiTableCell-head": {
                   bgcolor: "background.paper",
                 },
@@ -569,6 +543,7 @@ const Sell = () => {
                     key={product.id}
                     product={product}
                     setShoppingCart={setShoppingCart}
+                    type="sell"
                   />
                 ))}
               </TableBody>

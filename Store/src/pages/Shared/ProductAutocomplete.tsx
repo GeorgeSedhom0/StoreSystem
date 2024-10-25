@@ -1,38 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Autocomplete, TextField } from '@mui/material';
-import axios from 'axios';
-import { Product } from '../../utils/types';
+import { useState, useEffect } from "react";
+import { Autocomplete, TextField } from "@mui/material";
+import { Product } from "../../utils/types";
 
-const ProductAutocomplete = ({ onProductSelect }: { onProductSelect: (product: Product | null) => void }) => {
+const ProductAutocomplete = ({
+  onProductSelect,
+  products,
+}: {
+  onProductSelect: (product: Product | null) => void;
+  products: Product[];
+}) => {
   const [options, setOptions] = useState<Product[]>([]);
-  const [query, setQuery] = useState<string>('');
-
-  const fetchProducts = useCallback(async () => {
-    try {
-      const { data } = await axios.get<Product[]>(import.meta.env.VITE_SERVER_URL + '/products');
-      setOptions(data);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-    }
-  }, []);
+  const [query, setQuery] = useState<string>("");
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
-
-  useEffect(() => {
-    if (!query) {
-      setOptions([]);
+    if (query === "") {
+      setOptions(products.slice(0, 50));
       return;
     }
-    setOptions((prevOptions) =>
-      prevOptions.filter(
+    setOptions(() =>
+      products.filter(
         (prod) =>
           prod.name.toLowerCase().includes(query.toLowerCase()) ||
           prod.bar_code.includes(query)
       )
     );
-  }, [query]);
+  }, [query, products]);
 
   return (
     <Autocomplete
@@ -44,7 +36,7 @@ const ProductAutocomplete = ({ onProductSelect }: { onProductSelect: (product: P
       value={null}
       onChange={(_, value) => {
         onProductSelect(value);
-        setQuery('');
+        setQuery("");
       }}
       filterOptions={(x) => x}
       autoHighlight

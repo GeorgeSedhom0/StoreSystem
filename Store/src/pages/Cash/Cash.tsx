@@ -28,9 +28,9 @@ import dayjs, { Dayjs } from "dayjs";
 import { useQuery } from "@tanstack/react-query";
 import { DateTimePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import { useParties } from "../../utils/data/useParties";
 import { useParams } from "react-router-dom";
 import FormatedNumber from "../Shared/FormatedNumber";
+import useParties from "../Shared/hooks/useParties";
 
 const getCashFlow = async (
   startDate: Dayjs,

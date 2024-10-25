@@ -2,7 +2,6 @@ import { useState } from "react";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import {
   Autocomplete,
-  ButtonGroup,
   Divider,
   FormControl,
   Grid,
@@ -14,7 +13,7 @@ import {
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { Party } from "../../../utils/types";
-import { useParties } from "../../../utils/data/useParties";
+import useParties from "../../Shared/hooks/useParties";
 
 const Parties = () => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });

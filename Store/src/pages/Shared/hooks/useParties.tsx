@@ -1,8 +1,8 @@
 import axios from "axios";
-import { Party } from "../types";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertMsg } from "../../pages/Shared/AlertMessage";
 import { Dispatch, SetStateAction } from "react";
+import { Party } from "../../../utils/types";
+import { AlertMsg } from "../AlertMessage";
 
 const getParties = async () => {
   const { data } = await axios.get<Party[]>(
@@ -31,7 +31,7 @@ const deleteParty = async (partyId: number) => {
   });
 };
 
-export const useParties = (
+const useParties = (
   setMsg: Dispatch<SetStateAction<AlertMsg>>,
   filter: (_: Party[]) => Party[] = (data) => data
 ) => {
@@ -92,3 +92,5 @@ export const useParties = (
     deletePartyLoading,
   };
 };
+
+export default useParties;

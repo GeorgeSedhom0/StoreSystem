@@ -30,7 +30,7 @@ import {
 } from "./Components/VirtualTableHelpers";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import { useParties } from "../../utils/data/useParties";
+import useParties from "../Shared/hooks/useParties";
 
 const getProds = async () => {
   const { data } = await axios.get<DBProducts>(
@@ -173,7 +173,10 @@ const Bills = () => {
     );
   }, [showExpandedBill]);
 
-  const total = filteredBills.reduce((acc, bill) => acc + parseFloat(bill.total.toFixed(2)), 0);
+  const total = filteredBills.reduce(
+    (acc, bill) => acc + parseFloat(bill.total.toFixed(2)),
+    0
+  );
 
   const loading = isShiftLoading || isBillsLoading;
 
@@ -325,7 +328,9 @@ const Bills = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Typography variant="body2">المجموع: {total.toFixed(2)}</Typography>
+                <Typography variant="body2">
+                  المجموع: {total.toFixed(2)}
+                </Typography>
               </Grid>
             </Grid>
           </Card>
