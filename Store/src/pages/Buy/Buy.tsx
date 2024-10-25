@@ -12,25 +12,19 @@ import {
   Table,
   TableBody,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
-import { DBProducts, Party, Product, SCProduct } from "../../utils/types";
+import { useCallback, useState } from "react";
+import { Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import ProductInCart from "./Components/ProductInCart";
-import { useQuery } from "@tanstack/react-query";
+import ProductInCart from "../Shared/ProductInCart";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { useParties } from "../../utils/data/useParties";
-
-const getProducts = async () => {
-  const { data } = await axios.get<DBProducts>(
-    import.meta.env.VITE_SERVER_URL + "/products"
-  );
-  return data;
-};
+import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
+import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
+import ProductAutocomplete from "../Shared/ProductAutocomplete";
+import useParties from "../Shared/hooks/useParties";
+import useProducts from "../Shared/hooks/UseProducts";
 
 const Buy = () => {
-  const [options, setOptions] = useState<Product[]>([]);
-  const [query, setQuery] = useState<string>("");
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
   const [partyId, setPartyId] = useState<number | null>(null);
   const [addingParty, setAddingParty] = useState<boolean>(false);
@@ -48,35 +42,14 @@ const Buy = () => {
   });
 
   const {
-    data: products,
-    refetch: updateProducts,
-    isLoading,
-  } = useQuery({
-    queryKey: ["products"],
-    queryFn: getProducts,
-    initialData: { products: [], reserved_products: [] },
-    select: (data) => data.products,
-  });
+    products,
+    updateProducts,
+    isLoading: isProductsLoading,
+  } = useProducts();
 
   const { parties, addPartyMutationAsync } = useParties(setMsg, (data) =>
     data.filter((party) => party.type === "مورد")
   );
-
-  useEffect(() => {
-    if (!query) {
-      setOptions([]);
-      return;
-    }
-    setOptions(
-      products
-        .filter(
-          (prod) =>
-            prod.name.toLowerCase().includes(query.toLowerCase()) ||
-            prod.bar_code.includes(query)
-        )
-        .slice(0, 30)
-    );
-  }, [products, query]);
 
   const addToCart = useCallback((product: Product | null) => {
     if (!product) return;
@@ -106,49 +79,8 @@ const Buy = () => {
     });
   }, []);
 
-  useEffect(() => {
-    let code = "";
-    let reading = false;
-
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // If the target of the event is an input element, ignore the event
-      if ((e.target as HTMLElement).tagName.toLowerCase() === "input") {
-        return;
-      }
-
-      if (e.key === "Enter") {
-        if (code.length >= 8) {
-          const product = products.find((prod) => prod.bar_code === code);
-          if (product) {
-            addToCart(product);
-            console.log(product);
-          } else {
-            setMsg({
-              type: "error",
-              text: "المنتج غير موجود",
-            });
-          }
-          code = "";
-        }
-      } else {
-        code += e.key;
-      }
-
-      if (!reading) {
-        reading = true;
-        setTimeout(() => {
-          code = "";
-          reading = false;
-        }, 500);
-      }
-    };
-
-    window.addEventListener("keypress", handleKeyPress);
-
-    return () => {
-      window.removeEventListener("keypress", handleKeyPress);
-    };
-  }, [products, addToCart]);
+  useBarcodeDetection(products, addToCart, setMsg);
+  useQuickHandle(shoppingCart, setShoppingCart);
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
@@ -208,7 +140,7 @@ const Buy = () => {
     <Grid container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
 
-      <LoadingScreen loading={isLoading} />
+      <LoadingScreen loading={isProductsLoading} />
 
       <Grid item xs={12}>
         <Card elevation={3} sx={{ p: 3 }}>
@@ -248,27 +180,9 @@ const Buy = () => {
             </Grid>
 
             <Grid item xs={12}>
-              <Autocomplete
-                options={options}
-                getOptionLabel={(option) => option.name}
-                isOptionEqualToValue={(option, value) =>
-                  option.id === value.id || option.bar_code === value.bar_code
-                }
-                value={null}
-                onChange={(_, value) => {
-                  addToCart(value);
-                  setQuery("");
-                }}
-                filterOptions={(x) => x}
-                autoHighlight
-                inputValue={query}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="المنتج"
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                )}
+              <ProductAutocomplete
+                onProductSelect={addToCart}
+                products={products}
               />
             </Grid>
             <Grid item xs={12}>
@@ -343,32 +257,43 @@ const Buy = () => {
       </Grid>
 
       <Grid item xs={12}>
-        <Card elevation={1} sx={{ p: 3 }}>
-          <Grid container spacing={3}>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>المنتج</TableCell>
-                    <TableCell>الكمية</TableCell>
-                    <TableCell>سعر الشراء</TableCell>
-                    <TableCell>السعر</TableCell>
-                    <TableCell>الاجمالي</TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {shoppingCart.map((product) => (
-                    <ProductInCart
-                      key={product.id}
-                      product={product}
-                      setShoppingCart={setShoppingCart}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Grid>
+        <Card elevation={3}>
+          <TableContainer
+            sx={{
+              height: "60vh",
+              overflowY: "auto",
+            }}
+          >
+            <Table
+              stickyHeader
+              sx={{
+                "& .MuiTableCell-head": {
+                  bgcolor: "background.paper",
+                },
+              }}
+            >
+              <TableHead>
+                <TableRow>
+                  <TableCell>المنتج</TableCell>
+                  <TableCell>الكمية</TableCell>
+                  <TableCell>سعر الشراء</TableCell>
+                  <TableCell>السعر</TableCell>
+                  <TableCell>الاجمالي</TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {shoppingCart.map((product) => (
+                  <ProductInCart
+                    key={product.id}
+                    product={product}
+                    setShoppingCart={setShoppingCart}
+                    type="buy"
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </Card>
       </Grid>
     </Grid>
