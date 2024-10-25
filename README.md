@@ -68,3 +68,7 @@ VITE_STORE_ID=0
 2. Login with the default credentials:
   - Username: `george`
   - Password: `verystrongpassword`
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for more details.
