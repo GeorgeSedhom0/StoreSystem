@@ -38,6 +38,10 @@ const ProductAutocomplete = ({
       }
       value={null}
       onChange={(_, value) => {
+        if (query.length >= 5 && !isNaN(parseInt(query))) {
+          setQuery("");
+          return;
+        }
         onProductSelect(value);
         setQuery("");
       }}
