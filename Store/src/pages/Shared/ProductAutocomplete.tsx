@@ -1,13 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Dispatch, SetStateAction } from "react";
 import { Autocomplete, TextField } from "@mui/material";
 import { Product } from "../../utils/types";
+import { AlertMsg } from "./AlertMessage";
 
 const ProductAutocomplete = ({
   onProductSelect,
   products,
+  setMsg,
 }: {
   onProductSelect: (product: Product | null) => void;
   products: Product[];
+  setMsg: Dispatch<SetStateAction<AlertMsg>>;
 }) => {
   const [options, setOptions] = useState<Product[]>([]);
   const [query, setQuery] = useState<string>("");
@@ -38,7 +41,6 @@ const ProductAutocomplete = ({
         onProductSelect(value);
         setQuery("");
       }}
-      filterOptions={(x) => x}
       autoHighlight
       inputValue={query}
       renderInput={(params) => (
@@ -46,6 +48,26 @@ const ProductAutocomplete = ({
           {...params}
           label="المنتج"
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              // if an enter is pressed, and the query is more than or equal to 8 numbers
+              // then search for the product with the barcode and add it to the cart
+              if (query.length >= 5 && !isNaN(parseInt(query))) {
+                const product = products.find(
+                  (prod) => prod.bar_code === query
+                );
+                if (product) {
+                  onProductSelect(product);
+                } else {
+                  setMsg({
+                    type: "error",
+                    text: "المنتج غير موجود",
+                  });
+                }
+                setQuery("");
+              }
+            }
+          }}
         />
       )}
     />

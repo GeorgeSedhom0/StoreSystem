@@ -183,6 +183,7 @@ const Buy = () => {
               <ProductAutocomplete
                 onProductSelect={addToCart}
                 products={products}
+                setMsg={setMsg}
               />
             </Grid>
             <Grid item xs={12}>

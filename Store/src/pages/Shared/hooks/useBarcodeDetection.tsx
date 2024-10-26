@@ -1,28 +1,34 @@
-import { useEffect } from 'react';
+import { Dispatch, SetStateAction, useEffect } from "react";
+import { Product } from "../../../utils/types";
+import { AlertMsg } from "../AlertMessage";
 
-const useBarcodeDetection = (products, addToCart, setMsg) => {
+const useBarcodeDetection = (
+  products: Product[],
+  addToCart: (product: Product) => void,
+  setMsg: Dispatch<SetStateAction<AlertMsg>>
+) => {
   useEffect(() => {
-    let code = '';
+    let code = "";
     let reading = false;
 
-    const handleKeyPress = (e) => {
+    const handleKeyPress = (e: any) => {
       // If the target of the event is an input element, ignore the event
-      if (e.target.tagName.toLowerCase() === 'input') {
+      if (e.target.tagName.toLowerCase() === "input") {
         return;
       }
 
-      if (e.key === 'Enter') {
-        if (code.length >= 7) {
+      if (e.key === "Enter") {
+        if (code.length >= 5) {
           const product = products.find((prod) => prod.bar_code === code);
           if (product) {
             addToCart(product);
           } else {
             setMsg({
-              type: 'error',
-              text: 'المنتج غير موجود',
+              type: "error",
+              text: "المنتج غير موجود",
             });
           }
-          code = '';
+          code = "";
         }
       } else {
         code += e.key;
@@ -31,16 +37,16 @@ const useBarcodeDetection = (products, addToCart, setMsg) => {
       if (!reading) {
         reading = true;
         setTimeout(() => {
-          code = '';
+          code = "";
           reading = false;
         }, 500);
       }
     };
 
-    window.addEventListener('keypress', handleKeyPress);
+    window.addEventListener("keypress", handleKeyPress);
 
     return () => {
-      window.removeEventListener('keypress', handleKeyPress);
+      window.removeEventListener("keypress", handleKeyPress);
     };
   }, [products, addToCart, setMsg]);
 };
