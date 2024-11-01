@@ -6,6 +6,7 @@ import Scopes from "./Components/Scopes";
 import Parties from "./Components/Parties";
 import autoAnimate from "@formkit/auto-animate";
 import Users from "./Components/Users";
+import Themes from "./Components/Themes";
 
 const Settings = () => {
   const [tab, setTab] = useState("1");
@@ -24,6 +25,7 @@ const Settings = () => {
           <Tab label="المستخدمين" value="2" />
           <Tab label="الصلاحيات" value="3" />
           <Tab label="العملاء و الموردين" value="4" />
+          <Tab label="الثيمات" value="5" />
         </TabList>
         <Divider />
         <TabPanel value="1">
@@ -37,6 +39,9 @@ const Settings = () => {
         </TabPanel>
         <TabPanel value="4">
           <Parties />
+        </TabPanel>
+        <TabPanel value="5">
+          <Themes />
         </TabPanel>
       </TabContext>
     </Card>
