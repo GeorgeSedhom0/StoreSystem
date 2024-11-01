@@ -1,4 +1,4 @@
-import { AppBar, Button, Toolbar, Grid, IconButton } from "@mui/material";
+import { AppBar, Button, Toolbar, Grid } from "@mui/material";
 import { Profile, ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -9,8 +9,6 @@ import {
   useEffect,
 } from "react";
 import { NavLink } from "react-router-dom";
-import DarkModeIcon from "@mui/icons-material/DarkMode";
-import BrightnessHighIcon from "@mui/icons-material/BrightnessHigh";
 import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
@@ -100,21 +98,6 @@ const Layout = ({
               <Button variant="contained" onClick={() => switchAccount()}>
                 تبديل المستخدم
               </Button>
-              <IconButton
-                onClick={() => {
-                  setThemeMode((prev) => (prev === "dark" ? "light" : "dark"));
-                  localStorage.setItem(
-                    "mode",
-                    themeMode === "dark" ? "light" : "dark"
-                  );
-                }}
-              >
-                {themeMode === "dark" ? (
-                  <BrightnessHighIcon />
-                ) : (
-                  <DarkModeIcon />
-                )}
-              </IconButton>
             </Grid>
           </Grid>
         </Toolbar>
