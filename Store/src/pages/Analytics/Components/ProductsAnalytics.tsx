@@ -10,6 +10,7 @@ import {
   Grid,
   TextField,
   Typography,
+  useTheme,
 } from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -50,6 +51,10 @@ const ProductsAnalytics = () => {
   );
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
+
+  const {
+    palette: { mode },
+  } = useTheme();
 
   const { data, isFetching } = useQuery({
     queryKey: ["analytics", selectedProducts, startDate, endDate],
@@ -115,7 +120,7 @@ const ProductsAnalytics = () => {
               // Collect all unique dates and products
               Object.entries(data).forEach(([name, values]) => {
                 allProducts.add(name);
-                values.forEach(([date, value]) => {
+                values.forEach(([date, _]) => {
                   allDates.add(date);
                 });
               });
@@ -242,7 +247,7 @@ const ProductsAnalytics = () => {
             <EChartsReact
               option={options}
               style={{ height: 500 }}
-              theme="dark"
+              theme={mode}
               notMerge={true}
             />
           </Grid>

@@ -113,7 +113,6 @@ export default function Employee() {
   return (
     <ViewContainer>
       <Button
-        color="info"
         id="addEmployeeBtn"
         variant="contained"
         onClick={() => handleSelectEmployee(null, true)}

@@ -12,6 +12,7 @@ import {
   MenuItem,
   Select,
   Typography,
+  useTheme,
 } from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -44,6 +45,10 @@ const SalesAnalytics = () => {
   );
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
   const [types, setTypes] = useState<string[]>(["sell", "return"]);
+
+  const {
+    palette: { mode },
+  } = useTheme();
 
   const { data, isFetching } = useQuery({
     queryKey: ["analytics", "sales", startDate, endDate, types],
@@ -189,7 +194,7 @@ const SalesAnalytics = () => {
             <EChartsReact
               option={options}
               style={{ height: 500 }}
-              theme="dark"
+              theme={mode}
               notMerge={true}
             />
           </Grid>

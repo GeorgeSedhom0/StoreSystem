@@ -2,7 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
 import { useCallback, useMemo, useState } from "react";
-import { Button, ButtonGroup, Card, Grid, Typography } from "@mui/material";
+import {
+  Button,
+  ButtonGroup,
+  Card,
+  Grid,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import EChartsReact from "echarts-for-react";
@@ -30,6 +37,10 @@ const TopProductsAnalytics = () => {
     dayjs().subtract(1, "month")
   );
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
+
+  const {
+    palette: { mode },
+  } = useTheme();
 
   const { data, isFetching } = useQuery({
     queryKey: ["analytics", "top-products", startDate, endDate],
@@ -80,7 +91,7 @@ const TopProductsAnalytics = () => {
               // Collect all unique dates and products
               Object.entries(data).forEach(([name, values]) => {
                 allProducts.add(name);
-                values.forEach(([date, value]) => {
+                values.forEach(([date, _]) => {
                   allDates.add(date);
                 });
               });
@@ -190,7 +201,7 @@ const TopProductsAnalytics = () => {
             <EChartsReact
               option={options}
               style={{ height: 500 }}
-              theme="dark"
+              theme={mode}
               notMerge={true}
             />
           </Grid>

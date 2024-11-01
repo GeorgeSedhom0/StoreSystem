@@ -44,6 +44,7 @@ const AlertsAnalytics = () => {
                   sx={{
                     p: 2,
                     bgcolor: alert.urgent ? "error.main" : "background.paper",
+                    color: alert.urgent ? "white" : "text.primary",
                   }}
                 >
                   <Typography variant="h6">{alert.name}</Typography>

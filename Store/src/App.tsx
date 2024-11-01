@@ -14,7 +14,6 @@ import Products from "./pages/Products/Productds";
 import Bills from "./pages/Bills/Bills";
 import Cash from "./pages/Cash/Cash";
 import Settings from "./pages/Setting/Setting";
-import { useState } from "react";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import Login from "./pages/Login/Login";
 import Analytics from "./pages/Analytics/Analytics";
@@ -22,23 +21,13 @@ import { StoreDataProvider } from "./StoreDataProvider";
 import axios from "axios";
 import Installments from "./pages/Installments/Installments";
 import Employee from "./pages/Employee/Employee";
+import { Theme, themes } from "./themes";
 
 axios.defaults.withCredentials = true;
 
-const localTheme = localStorage.getItem("selectedTheme");
-let themeSettings;
-
-if (!localTheme) {
-  themeSettings = {
-    mode: "dark",
-    primary: "#1976d2",
-    secondary: "#ff4081",
-    background: "#e3f2fd",
-  };
-  localStorage.setItem("selectedTheme", JSON.stringify(themeSettings));
-} else {
-  themeSettings = JSON.parse(localTheme);
-}
+const localTheme = localStorage.getItem("themeName");
+let themeSettings: Theme =
+  themes.find((t) => t.name === localTheme) || themes[0];
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,37 +37,73 @@ const queryClient = new QueryClient({
   },
 });
 
+console.log("themeSettings", localTheme);
+
 const App = () => {
-  const [themeMode, setThemeMode] = useState(themeSettings.mode);
   const theme = createTheme({
     direction: "rtl",
     palette: {
-      mode: themeMode,
+      mode: themeSettings.mode,
       primary: {
         main: themeSettings.primary,
+        contrastText: themeSettings.mode === "light" ? "#ffffff" : "#000000",
       },
       secondary: {
         main: themeSettings.secondary,
+        contrastText: themeSettings.mode === "light" ? "#ffffff" : "#000000",
       },
       background: {
         default: themeSettings.background,
-        paper: themeMode === "dark" ? "#293649" : "#c1d9ff",
+        paper: themeSettings.paper,
       },
-      divider: themeMode === "dark" ? "#3d4d64" : "#94b6ff",
+      text: themeSettings.text,
+      divider: themeSettings.divider,
+      error: {
+        main: themeSettings.error,
+      },
+      warning: {
+        main: themeSettings.warning,
+      },
+      info: {
+        main: themeSettings.info,
+      },
+      success: {
+        main: themeSettings.success,
+      },
+      action: themeSettings.action,
     },
     components: {
       MuiCssBaseline: {
         styleOverrides: {
           body: {
-            backgroundImage:
-              themeMode === "dark"
-                ? "radial-gradient(circle at center, #3d4d64 0%, #263245 100%);"
-                : "radial-gradient(circle at center, #8cb2ed 0%, #aabbff 7  0%);",
+            backgroundImage: themeSettings.backgroundImage,
             backgroundAttachment: "fixed",
             backgroundSize: "cover",
             backgroundRepeat: "no-repeat",
             backgroundPosition: "center",
             minHeight: "100vh",
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            backgroundColor: themeSettings.surface.main,
+            borderColor: themeSettings.surface.border,
+          },
+        },
+      },
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: "none",
+          },
+        },
+      },
+      MuiDivider: {
+        styleOverrides: {
+          root: {
+            borderColor: themeSettings.divider,
           },
         },
       },
@@ -92,7 +117,7 @@ const App = () => {
           <StoreDataProvider>
             <ThemeProvider theme={theme}>
               <CssBaseline />
-              <Layout themeMode={themeMode} setThemeMode={setThemeMode}>
+              <Layout>
                 <Routes>
                   <Route path="/sell" element={<Sell />} />
                   <Route path="/add-to-storage" element={<Storage />} />
