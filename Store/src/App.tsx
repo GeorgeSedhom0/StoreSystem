@@ -25,14 +25,19 @@ import Employee from "./pages/Employee/Employee";
 
 axios.defaults.withCredentials = true;
 
-const localMode = localStorage.getItem("mode");
-let mode: "dark" | "light";
+const localTheme = localStorage.getItem("selectedTheme");
+let themeSettings;
 
-if (!localMode || (localMode !== "dark" && localMode !== "light")) {
-  localStorage.setItem("mode", "dark");
-  mode = "dark";
+if (!localTheme) {
+  themeSettings = {
+    mode: "dark",
+    primary: "#1976d2",
+    secondary: "#ff4081",
+    background: "#e3f2fd",
+  };
+  localStorage.setItem("selectedTheme", JSON.stringify(themeSettings));
 } else {
-  mode = localMode;
+  themeSettings = JSON.parse(localTheme);
 }
 
 const queryClient = new QueryClient({
@@ -44,13 +49,19 @@ const queryClient = new QueryClient({
 });
 
 const App = () => {
-  const [themeMode, setThemeMode] = useState<"dark" | "light">(mode);
+  const [themeMode, setThemeMode] = useState(themeSettings.mode);
   const theme = createTheme({
     direction: "rtl",
     palette: {
       mode: themeMode,
+      primary: {
+        main: themeSettings.primary,
+      },
+      secondary: {
+        main: themeSettings.secondary,
+      },
       background: {
-        default: themeMode === "dark" ? "#323f54" : "#d5e5ff",
+        default: themeSettings.background,
         paper: themeMode === "dark" ? "#293649" : "#c1d9ff",
       },
       divider: themeMode === "dark" ? "#3d4d64" : "#94b6ff",
