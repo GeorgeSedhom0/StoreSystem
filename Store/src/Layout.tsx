@@ -57,6 +57,14 @@ const Layout = ({
     },
   });
 
+  const handleThemeToggle = () => {
+    const newThemeMode = themeMode === "dark" ? "light" : "dark";
+    setThemeMode(newThemeMode);
+    const themeSettings = JSON.parse(localStorage.getItem("selectedTheme") || "{}");
+    themeSettings.mode = newThemeMode;
+    localStorage.setItem("selectedTheme", JSON.stringify(themeSettings));
+  };
+
   return (
     <>
       <AppBar
@@ -100,15 +108,7 @@ const Layout = ({
               <Button variant="contained" onClick={() => switchAccount()}>
                 تبديل المستخدم
               </Button>
-              <IconButton
-                onClick={() => {
-                  setThemeMode((prev) => (prev === "dark" ? "light" : "dark"));
-                  localStorage.setItem(
-                    "mode",
-                    themeMode === "dark" ? "light" : "dark"
-                  );
-                }}
-              >
+              <IconButton onClick={handleThemeToggle}>
                 {themeMode === "dark" ? (
                   <BrightnessHighIcon />
                 ) : (
