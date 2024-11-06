@@ -2,7 +2,6 @@ import { Button, Dialog, DialogActions } from "@mui/material";
 import { Bill } from "./types";
 import { forwardRef, useContext } from "react";
 import { StoreContext } from "../StoreDataProvider";
-import FormatedNumber from "../pages/Shared/FormatedNumber";
 
 const BillView = forwardRef(
   (
@@ -26,7 +25,6 @@ const BillView = forwardRef(
           ref={ref}
           style={{
             width: "80mm",
-            padding: "2mm",
             display: "flex",
             flexDirection: "column",
             direction: "rtl",
@@ -113,123 +111,118 @@ const BillView = forwardRef(
             }}
           />
 
-          <div style={{ width: "100%", overflowX: "auto" }}>
-            <table
+          {/* <div style={{ width: "50mm" }}> */}
+          <table
+            style={{
+              width: "80mm",
+              borderCollapse: "collapse",
+            }}
+          >
+            <thead
               style={{
-                width: "100%",
-                borderCollapse: "collapse",
+                fontWeight: "bold",
               }}
             >
-              <thead
+              <tr
                 style={{
-                  fontWeight: "bold",
+                  backgroundColor: "rgba(0, 0, 0, 1)",
+                  color: "white",
                 }}
               >
-                <tr
+                <th
                   style={{
-                    backgroundColor: "rgba(0, 0, 0, 1)",
-                    color: "white",
+                    fontSize: "1.5em",
+                    textAlign: "center",
+                    padding: "12px",
                   }}
                 >
-                  <th
+                  المنتج
+                </th>
+                <th
+                  style={{
+                    fontSize: "1.5em",
+                    textAlign: "center",
+                    padding: "12px",
+                  }}
+                >
+                  الكمية
+                </th>
+                <th
+                  style={{
+                    fontSize: "1.5em",
+                    textAlign: "center",
+                    padding: "12px",
+                  }}
+                >
+                  السعر
+                </th>
+                <th
+                  style={{
+                    fontSize: "1.5em",
+                    textAlign: "center",
+                    padding: "12px",
+                  }}
+                >
+                  ألاجمالى
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {bill.products.map((product, i) => (
+                <tr
+                  key={i}
+                  style={{
+                    backgroundColor:
+                      i % 2 === 0 ? "white" : "rgba(0, 0, 0, 0.20)",
+                  }}
+                >
+                  <td
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
-                      width: "200px",
+                      padding: "12px",
+                      wordWrap: "break-word",
                     }}
                   >
-                    المنتج
-                  </th>
-                  <th
+                    {product.name}
+                  </td>
+                  <td
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
-                    الكمية
-                  </th>
-                  <th
+                    {Math.abs(product.amount)}
+                  </td>
+                  <td
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
-                    السعر
-                  </th>
-                  <th
+                    {bill.type === "buy"
+                      ? product.wholesale_price
+                      : product.price}
+                  </td>
+                  <td
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
-                    ألاجمالى
-                  </th>
+                    {Math.abs(product.amount) *
+                      (bill.type === "buy"
+                        ? product.wholesale_price
+                        : product.price)}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {bill.products.map((product, i) => (
-                  <tr
-                    key={i}
-                    style={{
-                      backgroundColor:
-                        i % 2 === 0 ? "white" : "rgba(0, 0, 0, 0.12)",
-                    }}
-                  >
-                    <td
-                      style={{
-                        fontSize: "1.5em",
-                        textAlign: "center",
-                        padding: "16px",
-                        wordWrap: "break-word",
-                      }}
-                    >
-                      {product.name}
-                    </td>
-                    <td
-                      style={{
-                        fontSize: "1.5em",
-                        textAlign: "center",
-                        padding: "16px",
-                      }}
-                    >
-                      {Math.abs(product.amount)}
-                    </td>
-                    <td
-                      style={{
-                        fontSize: "1.5em",
-                        textAlign: "center",
-                        padding: "16px",
-                      }}
-                    >
-                      <FormatedNumber money>
-                        {bill.type === "buy"
-                          ? product.wholesale_price
-                          : product.price}
-                      </FormatedNumber>
-                    </td>
-                    <td
-                      style={{
-                        fontSize: "1.5em",
-                        textAlign: "center",
-                        padding: "16px",
-                      }}
-                    >
-                      <FormatedNumber money>
-                        {Math.abs(product.amount) *
-                          (bill.type === "buy"
-                            ? product.wholesale_price
-                            : product.price)}
-                      </FormatedNumber>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+          {/* </div> */}
 
           <hr
             style={{
@@ -270,7 +263,7 @@ const BillView = forwardRef(
               <tbody>
                 <tr
                   style={{
-                    backgroundColor: "rgba(0, 0, 0, 0.12)",
+                    backgroundColor: "rgba(0, 0, 0, 0.20)",
                     color: "black",
                   }}
                 >
@@ -278,7 +271,7 @@ const BillView = forwardRef(
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
                     الاجمالى
@@ -287,17 +280,15 @@ const BillView = forwardRef(
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
-                    <FormatedNumber money>
-                      {bill.type === "BNPL"
-                        ? bill.products.reduce(
-                            (acc, p) => acc + Math.abs(p.amount) * p.price,
-                            0
-                          )
-                        : Math.abs(bill.total) + Math.abs(bill.discount)}
-                    </FormatedNumber>
+                    {bill.type === "BNPL"
+                      ? bill.products.reduce(
+                          (acc, p) => acc + Math.abs(p.amount) * p.price,
+                          0
+                        )
+                      : Math.abs(bill.total) + Math.abs(bill.discount)}
                   </td>
                 </tr>
                 <tr>
@@ -305,7 +296,7 @@ const BillView = forwardRef(
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
                     الخصم
@@ -314,15 +305,15 @@ const BillView = forwardRef(
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
-                    <FormatedNumber money>{bill.discount}</FormatedNumber>
+                    {bill.discount}
                   </td>
                 </tr>
                 <tr
                   style={{
-                    backgroundColor: "rgba(0, 0, 0, 0.12)",
+                    backgroundColor: "rgba(0, 0, 0, 0.20)",
                     color: "black",
                   }}
                 >
@@ -330,7 +321,7 @@ const BillView = forwardRef(
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
                     الصافى
@@ -339,17 +330,15 @@ const BillView = forwardRef(
                     style={{
                       fontSize: "1.5em",
                       textAlign: "center",
-                      padding: "16px",
+                      padding: "12px",
                     }}
                   >
-                    <FormatedNumber money>
-                      {bill.type === "BNPL"
-                        ? bill.products.reduce(
-                            (acc, p) => acc + Math.abs(p.amount) * p.price,
-                            0
-                          ) - bill.discount
-                        : Math.abs(bill.total)}
-                    </FormatedNumber>
+                    {bill.type === "BNPL"
+                      ? bill.products.reduce(
+                          (acc, p) => acc + Math.abs(p.amount) * p.price,
+                          0
+                        ) - bill.discount
+                      : Math.abs(bill.total)}
                   </td>
                 </tr>
               </tbody>
@@ -360,7 +349,7 @@ const BillView = forwardRef(
             <h5
               style={{
                 textAlign: "center",
-                fontSize: "5rem",
+                fontSize: "1rem",
                 margin: "0.15rem 0",
               }}
             >

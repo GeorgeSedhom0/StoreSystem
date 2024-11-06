@@ -1,4 +1,3 @@
-import domtoimage from "dom-to-image";
 import { AlertMsg } from "../pages/Shared/AlertMessage";
 import JsBarcode from "jsbarcode";
 import printJS from "print-js";
@@ -8,16 +7,20 @@ export const printBill = async (
   setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>,
   setLastBillOpen: React.Dispatch<React.SetStateAction<boolean>>
 ) => {
-  console.log("printing");
-  if (!billRef.current) return;
-  console.log(billRef.current);
-  printJS({
-    printable: billRef.current.id,
-    type: "html",
-    targetStyles: ["*"],
-    scanStyles: true,
-  });
+  try {
+    if (!billRef.current) return;
+    printJS({
+      // extract raw html from the ref
+      printable: billRef.current.outerHTML,
+      type: "raw-html",
+      targetStyles: ["*"],
+      scanStyles: true,
+      maxWidth: 800,
+    });
   setLastBillOpen(false);
+  } catch (e) {
+    setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+  }
 };
 
 export const printCode = (
