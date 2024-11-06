@@ -43,27 +43,29 @@ const Bill = ({ context, item: bill, ...props }: any) => {
 
   const printWithPrinter = useCallback(async () => {
     setBillPreviewOpen(true);
-    if (printer) {
-      setTimeout(() => {
-        printBill(billRef, setMsg, setBillPreviewOpen, printer);
-      }, 500);
-    } else {
-      // request access to usb device, no filter listing all devices
-      // @ts-ignore
-      const usbDevice = await navigator.usb.requestDevice({
-        filters: [
-          {
-            vendorId: 2727,
-          },
-        ],
-      });
-      // open the device
-      await usbDevice.open();
-      await usbDevice.selectConfiguration(1);
-      await usbDevice.claimInterface(0);
-      setPrinter(usbDevice);
-      printBill(billRef, setMsg, setBillPreviewOpen, usbDevice);
-    }
+    // if (printer) {
+    //   setTimeout(() => {
+    //     printBill(billRef, setMsg, setBillPreviewOpen);
+    //   }, 500);
+    // } else {
+    // request access to usb device, no filter listing all devices
+    // @ts-ignore
+    // const usbDevice = await navigator.usb.requestDevice({
+    //   filters: [
+    //     {
+    //       vendorId: 2727,
+    //     },
+    //   ],
+    // });
+    // // open the device
+    // await usbDevice.open();
+    // await usbDevice.selectConfiguration(1);
+    // await usbDevice.claimInterface(0);
+    // setPrinter(usbDevice);
+    setTimeout(() => {
+      printBill(billRef, setMsg, setBillPreviewOpen);
+    }, 500);
+    // }
   }, [printer]);
 
   return (
