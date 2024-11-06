@@ -9,6 +9,8 @@ interface ProductCardProps {
   setEditedProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   editedProducts: Product[];
   deleteProduct: (productId: number) => void;
+  restoreProduct: (productId: number) => void;
+  isShowingDeleted: boolean;
 }
 
 const ProductCard = ({
@@ -17,6 +19,8 @@ const ProductCard = ({
   setEditedProducts,
   editedProducts,
   deleteProduct,
+  restoreProduct,
+  isShowingDeleted,
 }: ProductCardProps) => {
   const productInCart = useMemo(
     () => editedProducts.find((p) => p.id === product.id),
@@ -195,13 +199,23 @@ const ProductCard = ({
       </TableCell>
 
       <TableCell>
-        <Button
-          variant="contained"
-          color="error"
-          onClick={() => deleteProduct(product.id!)}
-        >
-          ازالة المنتج
-        </Button>
+        {isShowingDeleted ? (
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => restoreProduct(product.id!)}
+          >
+            استعادة المنتج
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => deleteProduct(product.id!)}
+          >
+            ازالة المنتج
+          </Button>
+        )}
       </TableCell>
     </>
   );

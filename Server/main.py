@@ -218,7 +218,9 @@ def get_bar_code():
 
 
 @app.get("/products")
-def get_products():
+def get_products(
+    is_deleted: Optional[bool] = False,
+):
     """
     Get all products from the database
 
@@ -228,13 +230,16 @@ def get_products():
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("""SELECT
+            cur.execute(
+                """SELECT
                         id, name, bar_code, wholesale_price,
                         price, stock, category
                         FROM products
-                        WHERE is_deleted = FALSE
+                        WHERE is_deleted = %s
                         ORDER BY name;
-                        """)
+                        """,
+                (is_deleted,),
+            )
             products = cur.fetchall()
 
             # Get reserved products
@@ -385,7 +390,36 @@ def delete_product(product_id: int):
                 """,
                 (product_id,),
             )
-            return JSONResponse(content={"message": "Product marked as deleted successfully"})
+            return JSONResponse(
+                content={"message": "Product marked as deleted successfully"}
+            )
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/product/restore")
+def restore_product(product_id: int):
+    """
+    Restore a product that was marked as deleted in the database
+
+    Args:
+        product_id (int): The ID of the product to restore
+
+    Returns:
+        Dict: A message indicating the result of the operation
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                UPDATE products
+                SET is_deleted = FALSE
+                WHERE id = %s
+                """,
+                (product_id,),
+            )
+            return JSONResponse(content={"message": "Product restored successfully"})
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e

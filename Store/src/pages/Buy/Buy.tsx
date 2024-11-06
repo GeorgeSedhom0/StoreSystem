@@ -281,6 +281,7 @@ const Buy = () => {
                   <TableCell>السعر</TableCell>
                   <TableCell>الاجمالي</TableCell>
                   <TableCell></TableCell>
+                  <TableCell></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>

@@ -1,7 +1,15 @@
 import axios from "axios";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { DBProducts, Product } from "../../utils/types";
-import { Button, Card, Grid, TextField, Typography } from "@mui/material";
+import { useCallback, useMemo, useState } from "react";
+import { Product } from "../../utils/types";
+import {
+  Button,
+  Card,
+  FormControlLabel,
+  Grid,
+  Switch,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { TableVirtuoso } from "react-virtuoso";
 import ProductCard from "./Components/ProductCard";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -11,12 +19,9 @@ import {
 } from "./Components/VirtualTableHelpers";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { Link } from "react-router-dom";
+import useProducts from "../Shared/hooks/useProducts";
 
 const Products = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [reservedProducts, setReservedProducts] = useState<
-    Record<number, Product>
-  >({});
   const [editedProducts, setEditedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [msg, setMsg] = useState<AlertMsg>({
@@ -25,6 +30,13 @@ const Products = () => {
   });
   const [changedOnly, setChangedOnly] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
+  const [showDeleted, setShowDeleted] = useState<boolean>(false);
+
+  const {
+    products,
+    reservedProducts,
+    updateProducts: getProds,
+  } = useProducts(showDeleted);
 
   const filteredProducts = useMemo(() => {
     if (query === "") {
@@ -42,34 +54,6 @@ const Products = () => {
       product.name.toLowerCase().includes(query.toLowerCase())
     );
   }, [products, editedProducts, query, changedOnly]);
-
-  const getProds = useCallback(async () => {
-    setLoading(true);
-    try {
-      const {
-        data: { products, reserved_products },
-      } = await axios.get<DBProducts>(
-        import.meta.env.VITE_SERVER_URL + "/products"
-      );
-      console.log(
-        products,
-        reserved_products.reduce((acc, product) => {
-          acc[product.id!] = product;
-          return acc;
-        }, {} as Record<number, Product>)
-      );
-      setProducts(products);
-      setReservedProducts(
-        reserved_products.reduce((acc, product) => {
-          acc[product.id!] = product;
-          return acc;
-        }, {} as Record<number, Product>)
-      );
-    } catch (error) {
-      console.log(error);
-    }
-    setLoading(false);
-  }, []);
 
   const getInventory = useCallback(async () => {
     setLoading(true);
@@ -91,10 +75,6 @@ const Products = () => {
       console.log(error);
     }
     setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    getProds();
   }, []);
 
   const submitProducts = useCallback(async () => {
@@ -142,6 +122,27 @@ const Products = () => {
     setLoading(false);
   }, []);
 
+  const restoreProduct = useCallback(async (productId: number) => {
+    setLoading(true);
+    try {
+      await axios.put(
+        import.meta.env.VITE_SERVER_URL + "/product/restore",
+        null,
+        {
+          params: {
+            product_id: productId,
+          },
+        }
+      );
+      setMsg({ type: "success", text: "تم استعادة المنتج بنجاح" });
+    } catch (error) {
+      console.log(error);
+      setMsg({ type: "error", text: "حدث خطأ أثناء استعادة المنتج" });
+    }
+    await getProds();
+    setLoading(false);
+  }, []);
+
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
@@ -149,8 +150,19 @@ const Products = () => {
         <Grid item xs={12}>
           <Card elevation={3} sx={{ p: 2 }}>
             <Grid container spacing={3}>
-              <Grid item xs={12}>
+              <Grid item container xs={12} justifyContent="space-between">
                 <Typography variant="h4">المنتجات</Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showDeleted}
+                      onChange={(e) => setShowDeleted(e.target.checked)}
+                    />
+                  }
+                  label="عرض المنتجات المحذوفة"
+                />
+              </Grid>
+              <Grid item xs={12}>
                 <Typography variant="subtitle1">
                   عند الانتهاء من التعديل يرجى الضغط على "عرض المعدلة فقط"
                   للتأكد من الحفظ بشكل صحيح
@@ -219,6 +231,8 @@ const Products = () => {
                   editedProducts={editedProducts}
                   key={product.id || product.bar_code}
                   deleteProduct={deleteProduct}
+                  restoreProduct={restoreProduct}
+                  isShowingDeleted={showDeleted}
                 />
               )}
             />

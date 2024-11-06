@@ -1,5 +1,6 @@
 import { Button, TextField, TableRow, TableCell } from "@mui/material";
 import { SCProduct } from "../../utils/types";
+import { printCode } from "../../utils/functions";
 
 const NameColumn = ({ name }: { name: string }) => {
   return <TableCell>{name}</TableCell>;
@@ -142,6 +143,27 @@ const StockColumn = ({ stock }: { stock: number }) => {
   return <TableCell>{stock}</TableCell>;
 };
 
+const PrintBarCodeColumn = ({ product }: { product: SCProduct }) => {
+  return (
+    <TableCell>
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={() => {
+          printCode(
+            product.barCode ?? "",
+            `فحم المهندس \n ${product.name}`,
+            product.price.toString() + " " + "جنية ",
+            "ar"
+          );
+        }}
+      >
+        طباعة باركود
+      </Button>
+    </TableCell>
+  );
+};
+
 type availableColumns =
   | "name"
   | "quantity"
@@ -149,13 +171,22 @@ type availableColumns =
   | "wholesalePrice"
   | "totalPrice"
   | "delete"
-  | "stock";
+  | "stock"
+  | "printBarCode";
 
 const typeToColumns: {
   buy: availableColumns[];
   sell: availableColumns[];
 } = {
-  buy: ["name", "quantity", "wholesalePrice", "price", "totalPrice", "delete"],
+  buy: [
+    "name",
+    "quantity",
+    "wholesalePrice",
+    "price",
+    "totalPrice",
+    "delete",
+    "printBarCode",
+  ],
   sell: ["name", "quantity", "price", "totalPrice", "delete", "stock"],
 };
 
@@ -202,6 +233,8 @@ const Column = ({
     return <DeleteColumn product={product} setShoppingCart={setShoppingCart} />;
   } else if (column === "stock") {
     return <StockColumn stock={product.stock} />;
+  } else if (column === "printBarCode") {
+    return <PrintBarCodeColumn product={product} />;
   } else {
     return null;
   }
