@@ -11,11 +11,11 @@ export const printBill = async (
     if (!billRef.current) return;
 
     // Check if running in Electron
-    if (window?.electron) {
+    if (window?.electron?.ipcRenderer) {
       const options = {
-        silent: true, // Don't show the print dialog
+        silent: true,
         printBackground: true,
-        deviceName: "x80c", // Your thermal printer name
+        deviceName: "XP-880C (copy 3)", // Printer name
         margins: {
           marginType: "custom",
           top: 0,
@@ -25,19 +25,22 @@ export const printBill = async (
         },
         pageSize: {
           width: 80000, // 80mm in microns
-          height: billRef.current.offsetHeight * 1000, // Convert px to microns
+          height: billRef.current.offsetHeight * 1000,
         },
       };
 
-      // Use Electron's print API
-      window.electron
-        .print(billRef.current.outerHTML, options)
-        .then(() => {
-          setLastBillOpen(false);
-        })
-        .catch((error) => {
-          setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+      // Use IPC to communicate with main process for printing
+      try {
+        const data = await window.electron.ipcRenderer.invoke('print', {
+          html: billRef.current.outerHTML,
+          options
         });
+        console.log(data);
+        setLastBillOpen(false);
+      } catch (error) {
+        console.error(error);
+        setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+      }
     } else {
       // Fallback to printJS for web browser
       printJS({

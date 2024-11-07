@@ -26,6 +26,26 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  ipcMain.handle('print', async (event, { html, options }) => {
+    try{
+      console.log('Printing..2.');
+      const win = new BrowserWindow({
+        show: false,
+      webPreferences: {
+        nodeIntegration: true
+      }
+    });
+    
+    await win.loadURL(`data:text/html,${html}`);
+    await win.webContents.print(options);
+    win.close();
+    return 'Printed';
+  } catch (error) {
+    console.error(error);
+    return error;
+  }
+  });
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
