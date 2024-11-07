@@ -1,4 +1,3 @@
-import { ViewContainer } from "./../Shared/Utils";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { TableVirtuoso } from "react-virtuoso";
@@ -29,7 +28,7 @@ import PaySalary from "./Components/PaySalary";
 
 const getEmployee = async () => {
   const { data } = await axios.get<EmployeeType[]>(
-    import.meta.env.VITE_SERVER_URL + "/employees"
+    import.meta.env.VITE_SERVER_URL + "/employees",
   );
   return data;
 };
@@ -73,7 +72,7 @@ export default function Employee() {
 
   const handleSelectEmployee = (
     employee: SelectedEmployeeType,
-    addingNew: boolean = false
+    addingNew: boolean = false,
   ) => {
     if (addingNew) openEditModal();
     else setSelectedEmployee(employee);
@@ -82,7 +81,7 @@ export default function Employee() {
   const handleDelEmployee = async () => {
     try {
       await axios.delete(
-        import.meta.env.VITE_SERVER_URL + "/employees/" + selectedEmployee?.id
+        import.meta.env.VITE_SERVER_URL + "/employees/" + selectedEmployee?.id,
       );
 
       setMsg({ type: "success", text: "تم انهاء التعيين بنجاح" });
@@ -111,7 +110,7 @@ export default function Employee() {
   }, [selectedEmployee]);
 
   return (
-    <ViewContainer>
+    <>
       <Button
         id="addEmployeeBtn"
         variant="contained"
@@ -189,6 +188,6 @@ export default function Employee() {
           </Grid>
         </DialogContent>
       </Dialog>
-    </ViewContainer>
+    </>
   );
 }

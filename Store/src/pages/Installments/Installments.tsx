@@ -13,7 +13,6 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { ViewContainer } from "../Shared/Utils";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../Shared/LoadingScreen";
@@ -77,7 +76,7 @@ const Installments = () => {
   });
 
   return (
-    <ViewContainer>
+    <>
       <Grid container spacing={2}>
         <Grid item xs={12}>
           <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
@@ -201,7 +200,7 @@ const Installments = () => {
           </Card>
         </Grid>
       </Grid>
-    </ViewContainer>
+    </>
   );
 };
 

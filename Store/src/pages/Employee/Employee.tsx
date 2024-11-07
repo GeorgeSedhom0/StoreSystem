@@ -1,4 +1,3 @@
-import { ViewContainer } from "./../Shared/Utils";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { TableVirtuoso } from "react-virtuoso";
@@ -111,7 +110,7 @@ export default function Employee() {
   }, [selectedEmployee]);
 
   return (
-    <ViewContainer>
+    <>
       <Button
         id="addEmployeeBtn"
         variant="contained"
@@ -189,6 +188,6 @@ export default function Employee() {
           </Grid>
         </DialogContent>
       </Dialog>
-    </ViewContainer>
+    </>
   );
 }

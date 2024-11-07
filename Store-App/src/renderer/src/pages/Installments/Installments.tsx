@@ -13,7 +13,6 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { ViewContainer } from "../Shared/Utils";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../Shared/LoadingScreen";
@@ -44,7 +43,7 @@ export interface Installment {
 }
 const getInstallments = async () => {
   const { data } = await axios.get<Installment[]>(
-    import.meta.env.VITE_SERVER_URL + "/installments"
+    import.meta.env.VITE_SERVER_URL + "/installments",
   );
   return data;
 };
@@ -56,7 +55,7 @@ const Installments = () => {
   });
   const [showEnded, setShowEnded] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<number | null>(
-    null
+    null,
   );
 
   const { data, isFetching, isPlaceholderData, refetch } = useQuery({
@@ -77,7 +76,7 @@ const Installments = () => {
   });
 
   return (
-    <ViewContainer>
+    <>
       <Grid container spacing={2}>
         <Grid item xs={12}>
           <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
@@ -120,7 +119,7 @@ const Installments = () => {
                   <PayInstallment
                     selectedInstallment={
                       data.find(
-                        (installment) => installment.id === selectedInstallment
+                        (installment) => installment.id === selectedInstallment,
                       )!
                     }
                     setSelectedInstallment={setSelectedInstallment}
@@ -172,7 +171,7 @@ const Installments = () => {
                                     <TableCell>{flow.amount}</TableCell>
                                     <TableCell>
                                       {new Date(flow.time).toLocaleString(
-                                        "ar-EG"
+                                        "ar-EG",
                                       )}
                                     </TableCell>
                                   </TableRow>
@@ -201,7 +200,7 @@ const Installments = () => {
           </Card>
         </Grid>
       </Grid>
-    </ViewContainer>
+    </>
   );
 };
 

@@ -5,19 +5,50 @@ import printJS from "print-js";
 export const printBill = async (
   billRef: React.RefObject<HTMLDivElement>,
   setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>,
-  setLastBillOpen: React.Dispatch<React.SetStateAction<boolean>>
+  setLastBillOpen: React.Dispatch<React.SetStateAction<boolean>>,
 ) => {
   try {
     if (!billRef.current) return;
-    printJS({
-      // extract raw html from the ref
-      printable: billRef.current.outerHTML,
-      type: "raw-html",
-      targetStyles: ["*"],
-      scanStyles: true,
-      maxWidth: 800,
-    });
-  setLastBillOpen(false);
+
+    // Check if running in Electron
+    if (window?.electron) {
+      const options = {
+        silent: true, // Don't show the print dialog
+        printBackground: true,
+        deviceName: "x80c", // Your thermal printer name
+        margins: {
+          marginType: "custom",
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+        },
+        pageSize: {
+          width: 80000, // 80mm in microns
+          height: billRef.current.offsetHeight * 1000, // Convert px to microns
+        },
+      };
+
+      // Use Electron's print API
+      window.electron
+        .print(billRef.current.outerHTML, options)
+        .then(() => {
+          setLastBillOpen(false);
+        })
+        .catch((error) => {
+          setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+        });
+    } else {
+      // Fallback to printJS for web browser
+      printJS({
+        printable: billRef.current.outerHTML,
+        type: "raw-html",
+        targetStyles: ["*"],
+        scanStyles: true,
+        maxWidth: 800,
+      });
+      setLastBillOpen(false);
+    }
   } catch (e) {
     setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
   }
@@ -27,7 +58,7 @@ export const printCode = (
   code: string,
   title: string,
   footer: string,
-  lang: "ar" | "en"
+  lang: "ar" | "en",
 ) => {
   const containter = document.createElement("div");
   const svg = document.createElement("svg");

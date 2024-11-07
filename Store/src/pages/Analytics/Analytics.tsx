@@ -1,5 +1,4 @@
 import { Card, Grid, Typography } from "@mui/material";
-import { ViewContainer } from "../Shared/Utils";
 import ShiftsAnalytics from "./Components/ShiftsAnalytics";
 import TopProductsAnalytics from "./Components/TopProductsAnalytics";
 import AlertsAnalytics from "./Components/AlertsAnalytics";
@@ -8,7 +7,7 @@ import SalesAnalytics from "./Components/SalesAnalytics";
 
 const Analytics = () => {
   return (
-    <ViewContainer>
+    <>
       <Grid container spacing={2}>
         <Grid item xs={12}>
           <Card elevation={3} sx={{ px: 3, py: 2 }}>
@@ -24,7 +23,7 @@ const Analytics = () => {
         <ProductsAnalytics />
         <AlertsAnalytics />
       </Grid>
-    </ViewContainer>
+    </>
   );
 };
 

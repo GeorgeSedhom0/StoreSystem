@@ -49,6 +49,9 @@ const Layout = ({ children }: { children: ReactNode }) => {
         sx={{
           bgcolor: "background.paper",
           display: location.pathname === "/login" ? "none" : "block",
+          width: "100vw",
+          overflowX: "auto",
+          height: 64,
         }}
       >
         <Toolbar>
@@ -90,7 +93,13 @@ const Layout = ({ children }: { children: ReactNode }) => {
           </Grid>
         </Toolbar>
       </AppBar>
-      <ViewContainer>{children}</ViewContainer>
+      <ViewContainer
+        sx={{
+          height: "calc(100vh - 205px)",
+        }}
+      >
+        {children}
+      </ViewContainer>
     </>
   );
 };

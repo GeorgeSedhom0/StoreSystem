@@ -1,10 +1,13 @@
 import { Fab, styled } from "@mui/material";
+
 export const ViewContainer = styled("div")(({ theme }) => ({
   margin: "30px",
   [theme.breakpoints.down("sm")]: {
     margin: "16px",
   },
+  width: "98vw",
 }));
+
 export const ContentBox = styled("div")(({}) => ({
   display: "flex",
   flexWrap: "wrap",
