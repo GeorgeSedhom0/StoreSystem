@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Grid, TextField, Typography } from "@mui/material";
 
 const Installments = ({
@@ -55,7 +54,7 @@ const Installments = ({
           المتبقي:{" "}
           {shoppingCart.reduce(
             (acc, item) => acc + item.price * item.quantity,
-            0
+            0,
           ) -
             discount -
             paid}{" "}
@@ -65,14 +64,14 @@ const Installments = ({
           قيمة القسط:{" "}
           {shoppingCart.reduce(
             (acc, item) => acc + item.price * item.quantity,
-            0
+            0,
           ) -
             discount -
             paid}{" "}
           / {installments} ={" "}
           {(shoppingCart.reduce(
             (acc, item) => acc + item.price * item.quantity,
-            0
+            0,
           ) -
             discount -
             paid) /

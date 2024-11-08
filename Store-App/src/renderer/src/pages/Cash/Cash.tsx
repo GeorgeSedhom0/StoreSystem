@@ -35,7 +35,7 @@ import useParties from "../Shared/hooks/useParties";
 const getCashFlow = async (
   startDate: Dayjs,
   endDate: Dayjs,
-  partyId: number | null
+  partyId: number | null,
 ) => {
   const { data } = await axios.get<CashFlow[]>(
     import.meta.env.VITE_SERVER_URL + "/cash-flow",
@@ -45,7 +45,7 @@ const getCashFlow = async (
         end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
         party_id: partyId,
       },
-    }
+    },
   );
   return data;
 };
@@ -94,7 +94,7 @@ const Cash = () => {
     queryKey: ["lastShift"],
     queryFn: async () => {
       const { data } = await axios.get(
-        import.meta.env.VITE_SERVER_URL + "/last-shift"
+        import.meta.env.VITE_SERVER_URL + "/last-shift",
       );
       return data;
     },
@@ -123,11 +123,11 @@ const Cash = () => {
   const cashFlow = useMemo(() => {
     // Step 1: Filter the rawCashFlow based on selectedTypes
     const filteredCashFlow = rawCashFlow.filter((row) =>
-      selectedTypes.length > 0 ? selectedTypes.includes(row.description) : true
+      selectedTypes.length > 0 ? selectedTypes.includes(row.description) : true,
     );
 
     // Step 2: Process the filtered data
-    const localCashFlow = [];
+    const localCashFlow: CashFlow[] = [];
     if (localTotal) {
       // override the total column to have the first total as 0
       let total = 0;
@@ -170,7 +170,7 @@ const Cash = () => {
           break;
       }
     },
-    [lastShift]
+    [lastShift],
   );
 
   const addCashFlow = async () => {
@@ -201,7 +201,7 @@ const Cash = () => {
             store_id: import.meta.env.VITE_STORE_ID,
             party_id: newPartyId,
           },
-        }
+        },
       );
       await updateCashFlow();
       setMsg({ type: "success", text: "تمت إضافة سجل التدفق النقدي بنجاح" });
@@ -363,7 +363,7 @@ const Cash = () => {
                     const filtered = options.filter(
                       (option) =>
                         option.name.toLowerCase().includes(params.inputValue) ||
-                        option.phone.includes(params.inputValue)
+                        option.phone.includes(params.inputValue),
                     );
                     return filtered;
                   }}
