@@ -1,4 +1,4 @@
-import { Button, Dialog, DialogActions } from "@mui/material";
+import { Button, DialogActions } from "@mui/material";
 import { Bill } from "./types";
 import { forwardRef, useContext } from "react";
 import { StoreContext } from "../StoreDataProvider";
@@ -14,18 +14,31 @@ const BillView = forwardRef(
       open: boolean;
       setOpen: (open: boolean) => void;
     },
-    ref: any
+    ref: any,
   ) => {
     if (!bill) return null;
     const { store } = useContext(StoreContext);
 
     return (
-      <Dialog open={open} onClose={() => setOpen(false)}>
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          display: open ? "flex" : "none",
+          justifyContent: "center",
+          alignItems: "center",
+          flexWrap: "wrap",
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          zIndex: 9999999999999,
+        }}
+      >
         <div
           ref={ref}
           style={{
-            width: "80mm",
-            display: "flex",
+            width: open ? "120mm" : "80mm",
             flexDirection: "column",
             direction: "rtl",
             backgroundColor: "white",
@@ -111,10 +124,9 @@ const BillView = forwardRef(
             }}
           />
 
-          {/* <div style={{ width: "50mm" }}> */}
           <table
             style={{
-              width: "80mm",
+              width: "100%",
               borderCollapse: "collapse",
             }}
           >
@@ -222,7 +234,6 @@ const BillView = forwardRef(
               ))}
             </tbody>
           </table>
-          {/* </div> */}
 
           <hr
             style={{
@@ -286,7 +297,7 @@ const BillView = forwardRef(
                     {bill.type === "BNPL"
                       ? bill.products.reduce(
                           (acc, p) => acc + Math.abs(p.amount) * p.price,
-                          0
+                          0,
                         )
                       : Math.abs(bill.total) + Math.abs(bill.discount)}
                   </td>
@@ -336,7 +347,7 @@ const BillView = forwardRef(
                     {bill.type === "BNPL"
                       ? bill.products.reduce(
                           (acc, p) => acc + Math.abs(p.amount) * p.price,
-                          0
+                          0,
                         ) - bill.discount
                       : Math.abs(bill.total)}
                   </td>
@@ -356,13 +367,17 @@ const BillView = forwardRef(
               عند ارجاع المنتجات لا تقبل الا من خلال هذة الفاتورة
             </h5>
           </div>
+          {open && (
+            <DialogActions>
+              <Button variant="contained" onClick={() => setOpen(false)}>
+                اغلاق
+              </Button>
+            </DialogActions>
+          )}
         </div>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>إغلاق</Button>
-        </DialogActions>
-      </Dialog>
+      </div>
     );
-  }
+  },
 );
 
 export default BillView;

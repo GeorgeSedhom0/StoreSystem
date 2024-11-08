@@ -34,7 +34,7 @@ import useParties from "../Shared/hooks/useParties";
 
 const getProds = async () => {
   const { data } = await axios.get<DBProducts>(
-    import.meta.env.VITE_SERVER_URL + "/products"
+    import.meta.env.VITE_SERVER_URL + "/products",
   );
   return data;
 };
@@ -42,7 +42,7 @@ const getProds = async () => {
 const getBills = async (
   startDate: Dayjs,
   endDate: Dayjs,
-  partyId: number | null
+  partyId: number | null,
 ) => {
   const { data } = await axios.get<BillType[]>(
     import.meta.env.VITE_SERVER_URL + "/bills",
@@ -52,7 +52,7 @@ const getBills = async (
         end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
         party_id: partyId,
       },
-    }
+    },
   );
   return data;
 };
@@ -75,7 +75,6 @@ const Bills = () => {
   ]);
   const [selectedProduct, setSelectedProduct] = useState<Product[]>([]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
-  const [printer, setPrinter] = useState<any | null>(null);
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
 
   const { data: products } = useQuery({
@@ -95,7 +94,7 @@ const Bills = () => {
     queryKey: ["lastShift"],
     queryFn: async () => {
       const { data } = await axios.get(
-        import.meta.env.VITE_SERVER_URL + "/last-shift"
+        import.meta.env.VITE_SERVER_URL + "/last-shift",
       );
       return data;
     },
@@ -138,7 +137,7 @@ const Bills = () => {
           break;
       }
     },
-    [lastShift]
+    [lastShift],
   );
 
   const filteredBills = useMemo(() => {
@@ -148,9 +147,9 @@ const Bills = () => {
       filteredBills = filteredBills.filter((bill) =>
         bill.products.some((product) =>
           selectedProduct.some(
-            (selectedProduct) => selectedProduct.name === product.name
-          )
-        )
+            (selectedProduct) => selectedProduct.name === product.name,
+          ),
+        ),
       );
     }
 
@@ -169,13 +168,13 @@ const Bills = () => {
   useEffect(() => {
     localStorage.setItem(
       "showExpandedBill",
-      showExpandedBill ? "true" : "false"
+      showExpandedBill ? "true" : "false",
     );
   }, [showExpandedBill]);
 
   const total = filteredBills.reduce(
     (acc, bill) => acc + parseFloat(bill.total.toFixed(2)),
-    0
+    0,
   );
 
   const loading = isShiftLoading || isBillsLoading;
@@ -247,7 +246,7 @@ const Bills = () => {
                       setFilters(
                         Array.isArray(e.target.value)
                           ? e.target.value
-                          : [e.target.value]
+                          : [e.target.value],
                       )
                     }
                     label="نوع الفاتورة"
@@ -320,7 +319,7 @@ const Bills = () => {
                     const filtered = options.filter(
                       (option) =>
                         option.name.toLowerCase().includes(params.inputValue) ||
-                        option.phone.includes(params.inputValue)
+                        option.phone.includes(params.inputValue),
                     );
                     return filtered;
                   }}
@@ -350,8 +349,6 @@ const Bills = () => {
               data={filteredBills}
               context={{
                 setMsg: setMsg,
-                printer: printer,
-                setPrinter: setPrinter,
                 getBills: refetchBills,
               }}
             />

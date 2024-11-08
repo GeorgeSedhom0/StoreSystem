@@ -1,5 +1,5 @@
 import { Button, ButtonGroup, TableCell, TableRow } from "@mui/material";
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import BillView from "../../../utils/BillView";
 import { printBill } from "../../../utils/functions";
 import EditableBill from "./EditableBill";
@@ -24,7 +24,7 @@ const billTypes = {
 };
 
 const Bill = ({ context, item: bill, ...props }: any) => {
-  const { setMsg, printer, setPrinter, getBills } = context;
+  const { setMsg, getBills } = context;
   const [billPreviewOpen, setBillPreviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
@@ -40,13 +40,6 @@ const Bill = ({ context, item: bill, ...props }: any) => {
       setMsg({ type: "error", text: "حدث خطأ أثناء تسليم الحجز" });
     },
   });
-
-  const printWithPrinter = useCallback(async () => {
-    setBillPreviewOpen(true);
-    setTimeout(() => {
-      printBill(billRef, setMsg, setBillPreviewOpen);
-    }, 500);
-  }, [printer]);
 
   return (
     <>
@@ -81,7 +74,11 @@ const Bill = ({ context, item: bill, ...props }: any) => {
             >
               <Button onClick={() => setEditing(true)}>تعديل</Button>
               <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
-              <Button onClick={printWithPrinter}>طباعة</Button>
+              <Button
+                onClick={() => printBill(billRef, setMsg, setBillPreviewOpen)}
+              >
+                طباعة
+              </Button>
               {bill.type === "reserve" && (
                 <Button onClick={() => endReservationMutation(bill.id)}>
                   تسليم

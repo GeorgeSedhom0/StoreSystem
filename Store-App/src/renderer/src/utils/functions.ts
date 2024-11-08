@@ -5,38 +5,22 @@ import printJS from "print-js";
 export const printBill = async (
   billRef: React.RefObject<HTMLDivElement>,
   setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>,
-  setLastBillOpen: React.Dispatch<React.SetStateAction<boolean>>,
+  setBillPreviewOpen?: React.Dispatch<React.SetStateAction<boolean>>,
 ) => {
   try {
     if (!billRef.current) return;
-
     // Check if running in Electron
     if (window?.electron?.ipcRenderer) {
-      const options = {
-        silent: true,
-        printBackground: true,
-        deviceName: "XP-880C (copy 3)", // Printer name
-        margins: {
-          marginType: "custom",
-          top: 0,
-          bottom: 0,
-          left: 0,
-          right: 0,
-        },
-        pageSize: {
-          width: 80000, // 80mm in microns
-          height: billRef.current.offsetHeight * 1000,
-        },
-      };
-
       // Use IPC to communicate with main process for printing
       try {
-        const data = await window.electron.ipcRenderer.invoke('print', {
+        const data = await window.electron.ipcRenderer.invoke("print", {
           html: billRef.current.outerHTML,
-          options
+          deviceName: "HP LaserJet Professional P1102",
         });
-        console.log(data);
-        setLastBillOpen(false);
+        if (!data.success) {
+          console.error(data.error);
+          setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+        }
       } catch (error) {
         console.error(error);
         setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
@@ -50,7 +34,7 @@ export const printBill = async (
         scanStyles: true,
         maxWidth: 800,
       });
-      setLastBillOpen(false);
+      if (setBillPreviewOpen) setBillPreviewOpen(false);
     }
   } catch (e) {
     setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });

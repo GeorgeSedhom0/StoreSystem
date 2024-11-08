@@ -40,7 +40,7 @@ import useProducts from "../Shared/hooks/useProducts";
 
 const getShift = async () => {
   const { data } = await axios.get(
-    import.meta.env.VITE_SERVER_URL + "/current-shift"
+    import.meta.env.VITE_SERVER_URL + "/current-shift",
   );
   if (data.start_date_time) {
     return data.start_date_time;
@@ -72,7 +72,6 @@ const Sell = () => {
   const [shiftDialog, setShiftDialog] = useState<boolean>(false);
   const [lastBill, setLastBill] = useState<Bill | null>(null);
   const [lastBillOpen, setLastBillOpen] = useState<boolean>(false);
-  const [printer, setPrinter] = useState<any | null>(null);
   const [installments, setInstallments] = useState<number>(1);
   const [installmentInterval, setInstallmentInterval] = useState<number>(30);
   const [paid, setPaid] = useState<number>(0);
@@ -101,7 +100,7 @@ const Sell = () => {
   });
 
   const { parties, addPartyMutationAsync } = useParties(setMsg, (parties) =>
-    parties.filter((party) => party.type === "عميل")
+    parties.filter((party) => party.type === "عميل"),
   );
 
   useEffect(() => {
@@ -134,7 +133,7 @@ const Sell = () => {
         return prev.map((item) =>
           item.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
-            : item
+            : item,
         );
       } else {
         return [
@@ -173,7 +172,7 @@ const Sell = () => {
           total:
             shoppingCart.reduce(
               (acc, item) => acc + item.price * item.quantity,
-              0
+              0,
             ) - discount,
           products_flow: shoppingCart,
         };
@@ -205,7 +204,7 @@ const Sell = () => {
               installments: installments,
               installment_interval: installmentInterval,
             },
-          }
+          },
         );
 
         setLastBill(data.bill);
@@ -235,7 +234,7 @@ const Sell = () => {
           text: "حدث خطأ ما",
         });
         window.alert(
-          "حدث خطا ما اثناء اضافة الفاتورة يرجى التاكد فى صفحة الفواتير ان كانت الفاتورة محفوظة"
+          "حدث خطا ما اثناء اضافة الفاتورة يرجى التاكد فى صفحة الفواتير ان كانت الفاتورة محفوظة",
         );
       }
       savingRef.current = false;
@@ -249,7 +248,7 @@ const Sell = () => {
       installments,
       installmentInterval,
       paid,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -260,9 +259,7 @@ const Sell = () => {
       if (e.key === "F1") {
         e.preventDefault();
         await submitBill(shoppingCart, discount);
-        setTimeout(() => {
-          printWithPrinter();
-        }, 500);
+        printBill(billRef, setMsg, setLastBillOpen);
       }
     };
     window.addEventListener("keydown", handleF2);
@@ -270,13 +267,6 @@ const Sell = () => {
       window.removeEventListener("keydown", handleF2);
     };
   }, [shoppingCart, discount, submitBill]);
-
-  const printWithPrinter = useCallback(async () => {
-    setLastBillOpen(true);
-    setTimeout(() => {
-      printBill(billRef, setMsg, setLastBillOpen);
-    }, 500);
-  }, [printer]);
 
   return (
     <Grid container spacing={3}>
@@ -310,7 +300,7 @@ const Sell = () => {
                 onChange={() => {
                   localStorage.setItem(
                     "usingThirdParties",
-                    usingThirdParties ? "" : "true"
+                    usingThirdParties ? "" : "true",
                   );
                   setUsingThirdParties((prev) => !prev);
                 }}
@@ -369,9 +359,7 @@ const Sell = () => {
                   variant="contained"
                   onClick={async () => {
                     await submitBill(shoppingCart, discount);
-                    setTimeout(() => {
-                      printWithPrinter();
-                    }, 500);
+                    printBill(billRef, setMsg, setLastBillOpen);
                   }}
                   disabled={
                     shoppingCart.length === 0 ||
@@ -390,7 +378,7 @@ const Sell = () => {
               <Typography variant="body1" align="center">
                 {shoppingCart.reduce(
                   (acc, item) => acc + item.price * item.quantity,
-                  0
+                  0,
                 ) - discount}{" "}
                 جنيه
               </Typography>
@@ -449,7 +437,7 @@ const Sell = () => {
                     const filtered = options.filter(
                       (option) =>
                         option.name.toLowerCase().includes(params.inputValue) ||
-                        option.phone.includes(params.inputValue)
+                        option.phone.includes(params.inputValue),
                     );
                     return filtered;
                   }}
