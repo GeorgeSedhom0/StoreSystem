@@ -19,11 +19,14 @@ Var DbPassText
 Var OtherStoreText
 Var SecretText
 Var NextButton
+Var InstallServer
+Var ServerChoice
 
 # Define pages
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+Page custom serverChoicePage serverChoicePageLeave
 Page custom pythonInfoPage pythonInfoPageLeave
 Page custom configurationPage configurationPageLeave
 Page custom createVenvPage createVenvPageLeave
@@ -39,7 +42,31 @@ Function GetNextButton
     Pop $0
 FunctionEnd
 
+Function serverChoicePage
+    nsDialogs::Create 1018
+    Pop $Dialog
+    
+    ${NSD_CreateLabel} 0 0 100% 40u "Would you like to install and configure the server component?"
+    Pop $0
+    
+    ${NSD_CreateRadioButton} 10u 50u 80% 12u "Yes, install server (Requires Python)"
+    Pop $ServerChoice
+    SendMessage $ServerChoice ${BM_SETCHECK} ${BST_CHECKED} 0
+    
+    ${NSD_CreateRadioButton} 10u 70u 80% 12u "No, just install files"
+    Pop $0
+    
+    nsDialogs::Show
+FunctionEnd
+
+Function serverChoicePageLeave
+    ${NSD_GetState} $ServerChoice $InstallServer
+FunctionEnd
+
 Function pythonInfoPage
+    ${If} $InstallServer != ${BST_CHECKED}
+        Abort
+    ${EndIf}
     nsDialogs::Create 1018
     Pop $Dialog
     
@@ -65,6 +92,9 @@ Function pythonInfoPageLeave
 FunctionEnd
 
 Function configurationPage
+    ${If} $InstallServer != ${BST_CHECKED}
+        Abort
+    ${EndIf}
     nsDialogs::Create 1018
     Pop $Dialog
     
@@ -120,10 +150,10 @@ Function configurationPageLeave
     
     # Create .env file with error handling
     ClearErrors
-    CreateDirectory "$INSTDIR\resources\server"
-    FileOpen $0 "$INSTDIR\resources\server\.env" w
+    CreateDirectory "$INSTDIR\server"
+    FileOpen $0 "$INSTDIR\server\.env" w
     ${If} ${Errors}
-        MessageBox MB_OK|MB_ICONSTOP "Failed to create .env file. Please ensure you have write permissions to $INSTDIR\resources\server"
+        MessageBox MB_OK|MB_ICONSTOP "Failed to create .env file. Please ensure you have write permissions to $INSTDIR\server"
         Abort
     ${EndIf}
     
@@ -146,6 +176,9 @@ Function configurationPageLeave
 FunctionEnd
 
 Function createVenvPage
+    ${If} $InstallServer != ${BST_CHECKED}
+        Abort
+    ${EndIf}
     nsDialogs::Create 1018
     Pop $Dialog
     
@@ -164,7 +197,7 @@ Function createVenvPageLeave
     ${NSD_SetText} $StatusLabel "Creating Python virtual environment... Please wait..."
     
     # Execute venv creation
-    nsExec::ExecToStack 'cmd /c "python -m venv "$INSTDIR\resources\server\env" --clear 2>&1"'
+    nsExec::ExecToStack 'cmd /c "python -m venv "$INSTDIR\server\env" --clear 2>&1"'
     Pop $0
     Pop $1
     
@@ -178,6 +211,9 @@ Function createVenvPageLeave
 FunctionEnd
 
 Function installRequirementsPage
+    ${If} $InstallServer != ${BST_CHECKED}
+        Abort
+    ${EndIf}
     nsDialogs::Create 1018
     Pop $Dialog
     
@@ -188,6 +224,10 @@ Function installRequirementsPage
 FunctionEnd
 
 Function installRequirementsPageLeave
+    ${If} $InstallServer != ${BST_CHECKED}
+        SetRebootFlag false
+        Quit
+    ${EndIf}
     # Disable Next button first
     Call GetNextButton
     EnableWindow $NextButton 0
@@ -196,7 +236,7 @@ Function installRequirementsPageLeave
     ${NSD_SetText} $StatusLabel "Installing Python requirements... Please wait..."
     
     # Execute pip install
-    nsExec::ExecToStack 'cmd /c ""$INSTDIR\resources\server\env\Scripts\pip.exe" install -r "$INSTDIR\resources\server\requirements.txt" 2>&1"'
+    nsExec::ExecToStack 'cmd /c ""$INSTDIR\server\env\Scripts\pip.exe" install -r "$INSTDIR\server\requirements.txt" 2>&1"'
     Pop $0
     Pop $1
     

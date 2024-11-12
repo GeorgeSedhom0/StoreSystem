@@ -9,15 +9,15 @@ files:
   - "!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
   - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
-  - "resources/**/*"
-  - "!resources/server/env/**"
-  - "!resources/server/.env"
-  - "!resources/server/__pycache__/**"
+  - "server/**/*"
+  - "!server/env/**"
+  - "!server/.env"
+  - "!server/__pycache__/**"
   - "build/installer.nsh"
   - "out/**/*"
 extraFiles:
-  - from: "resources/server"
-    to: "resources/server"
+  - from: "server"
+    to: "server"
     filter: ["!env/**", "!__pycache__/**", "!.env"]
 asarUnpack:
   - "resources/**"

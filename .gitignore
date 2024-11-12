@@ -1,7 +1,7 @@
 /.mypy_cache
 package-lock.json
 pnpm-lock.yaml
-/resources/Server/env
+server/env
 .env
 __pycache__
 olddata.xls
