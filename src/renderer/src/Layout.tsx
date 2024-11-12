@@ -89,6 +89,14 @@ const Layout = ({ children }: { children: ReactNode }) => {
               <Button variant="contained" onClick={() => switchAccount()}>
                 تبديل المستخدم
               </Button>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  window.electron!.ipcRenderer.invoke("open-new-window");
+                }}
+              >
+                +
+              </Button>
             </Grid>
           </Grid>
         </Toolbar>

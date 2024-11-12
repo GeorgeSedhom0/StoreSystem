@@ -8,14 +8,20 @@ function createChildWindow(url: string): void {
   const childWindow = new BrowserWindow({
     width: 900,
     height: 670,
-    parent: BrowserWindow.getFocusedWindow() || undefined,
+    // Remove parent property to make window independent
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       nodeIntegration: true,
       contextIsolation: false,
     },
+    // Add these properties to make window independent
+    show: false,
+    skipTaskbar: false,
+    title: "Store System",
   });
+
   childWindow.maximize();
+  childWindow.show();
 
   childWindow.loadURL(url);
 
@@ -125,6 +131,14 @@ function createWindow(): void {
       }
     },
   );
+
+  ipcMain.handle("open-new-window", () => {
+    const url =
+      is.dev && process.env["ELECTRON_RENDERER_URL"]
+        ? process.env["ELECTRON_RENDERER_URL"]
+        : `file://${join(__dirname, "../renderer/index.html")}`;
+    createChildWindow(url);
+  });
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
