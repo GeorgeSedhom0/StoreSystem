@@ -5,7 +5,7 @@ import { AlertMsg } from "../AlertMessage";
 const useBarcodeDetection = (
   products: Product[],
   addToCart: (product: Product) => void,
-  setMsg: Dispatch<SetStateAction<AlertMsg>>
+  setMsg: Dispatch<SetStateAction<AlertMsg>>,
 ) => {
   useEffect(() => {
     let code = "";

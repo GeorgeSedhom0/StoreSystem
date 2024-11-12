@@ -24,12 +24,12 @@ const ProductCard = ({
 }: ProductCardProps) => {
   const productInCart = useMemo(
     () => editedProducts.find((p) => p.id === product.id),
-    [editedProducts, product.id]
+    [editedProducts, product.id],
   );
 
   const productToMap = useMemo(
     () => (productInCart ? productInCart : product),
-    [productInCart, product]
+    [productInCart, product],
   );
 
   return (
@@ -43,7 +43,7 @@ const ProductCard = ({
             setEditedProducts((prev) => {
               const newProducts = [...prev];
               const changedProduct = newProducts.find(
-                (p) => p.id === product.id
+                (p) => p.id === product.id,
               );
               if (changedProduct) {
                 changedProduct.name = e.target.value;
@@ -65,7 +65,7 @@ const ProductCard = ({
             setEditedProducts((prev) => {
               const newProducts = [...prev];
               const changedProduct = newProducts.find(
-                (p) => p.id === product.id
+                (p) => p.id === product.id,
               );
               if (changedProduct) {
                 changedProduct.bar_code = e.target.value;
@@ -84,7 +84,7 @@ const ProductCard = ({
                       product.bar_code,
                       `فحم المهندس \n ${product.name}`,
                       product.price.toString() + " " + "جنية ",
-                      "ar"
+                      "ar",
                     )
                   }
                 >
@@ -105,7 +105,7 @@ const ProductCard = ({
             setEditedProducts((prev) => {
               const newProducts = [...prev];
               const changedProduct = newProducts.find(
-                (p) => p.id === product.id
+                (p) => p.id === product.id,
               );
               if (changedProduct) {
                 changedProduct.price = parseFloat(e.target.value) || 0;
@@ -130,7 +130,7 @@ const ProductCard = ({
             setEditedProducts((prev) => {
               const newProducts = [...prev];
               const changedProduct = newProducts.find(
-                (p) => p.id === product.id
+                (p) => p.id === product.id,
               );
               if (changedProduct) {
                 changedProduct.wholesale_price =
@@ -156,7 +156,7 @@ const ProductCard = ({
             setEditedProducts((prev) => {
               const newProducts = [...prev];
               const changedProduct = newProducts.find(
-                (p) => p.id === product.id
+                (p) => p.id === product.id,
               );
               if (changedProduct) {
                 changedProduct.stock = parseInt(e.target.value) || 0;
@@ -185,7 +185,7 @@ const ProductCard = ({
             setEditedProducts((prev) => {
               const newProducts = [...prev];
               const changedProduct = newProducts.find(
-                (p) => p.id === product.id
+                (p) => p.id === product.id,
               );
               if (changedProduct) {
                 changedProduct.category = e.target.value;

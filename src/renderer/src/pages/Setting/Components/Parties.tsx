@@ -84,7 +84,7 @@ const Parties = () => {
                   .includes(params.inputValue.toLowerCase()) ||
                 option.type
                   .toLowerCase()
-                  .includes(params.inputValue.toLowerCase())
+                  .includes(params.inputValue.toLowerCase()),
             );
           }}
           onChange={(_, value) => {

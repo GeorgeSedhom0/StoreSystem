@@ -27,7 +27,7 @@ const Storage = () => {
     try {
       const { data } = await axios.post(
         import.meta.env.VITE_SERVER_URL + "/product",
-        product
+        product,
       );
       console.log(data);
       setProduct({
@@ -48,7 +48,7 @@ const Storage = () => {
   const getBarcode = useCallback(async () => {
     try {
       const { data } = await axios.get(
-        import.meta.env.VITE_SERVER_URL + "/barcode"
+        import.meta.env.VITE_SERVER_URL + "/barcode",
       );
       setProduct({ ...product, bar_code: data });
     } catch (error) {
@@ -114,7 +114,7 @@ const Storage = () => {
                           product.bar_code,
                           `فحم المهندس \n ${product.name}`,
                           product.price.toString() + " " + "جنية ",
-                          "ar"
+                          "ar",
                         );
                       }}
                       disabled={product.bar_code === ""}

@@ -18,7 +18,7 @@ import { LoadingButton } from "@mui/lab";
 
 const getScopes = async () => {
   const { data } = await axios.get<Scope[]>(
-    import.meta.env.VITE_SERVER_URL + "/scopes"
+    import.meta.env.VITE_SERVER_URL + "/scopes",
   );
   return data;
 };
@@ -134,7 +134,7 @@ const Scopes = () => {
                 return;
               }
               setSelectedScope(
-                scopes.find((scope) => scope.id === e.target.value)!
+                scopes.find((scope) => scope.id === e.target.value)!,
               );
             }}
             fullWidth
@@ -172,7 +172,7 @@ const Scopes = () => {
                         setSelectedScope({
                           ...selectedScope,
                           pages: selectedScope.pages.filter(
-                            (selectedPage) => selectedPage !== page.id
+                            (selectedPage) => selectedPage !== page.id,
                           ),
                         });
                       }

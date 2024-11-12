@@ -48,7 +48,7 @@ const Buy = () => {
   } = useProducts();
 
   const { parties, addPartyMutationAsync } = useParties(setMsg, (data) =>
-    data.filter((party) => party.type === "مورد")
+    data.filter((party) => party.type === "مورد"),
   );
 
   const addToCart = useCallback((product: Product | null) => {
@@ -60,7 +60,7 @@ const Buy = () => {
         return prev.map((item) =>
           item.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
-            : item
+            : item,
         );
       } else {
         return [
@@ -91,7 +91,7 @@ const Buy = () => {
           total:
             shoppingCart.reduce(
               (acc, item) => acc + item.wholesale_price * item.quantity,
-              0
+              0,
             ) - discount,
           products_flow: shoppingCart,
         };
@@ -133,7 +133,7 @@ const Buy = () => {
         });
       }
     },
-    [addingParty, newParty, partyId, updateProducts]
+    [addingParty, newParty, partyId, updateProducts],
   );
 
   return (
@@ -173,7 +173,7 @@ const Buy = () => {
               <Typography variant="body1" align="center">
                 {shoppingCart.reduce(
                   (acc, item) => acc + item.wholesale_price * item.quantity,
-                  0
+                  0,
                 )}{" "}
                 جنيه
               </Typography>
@@ -219,7 +219,7 @@ const Buy = () => {
                   const filtered = options.filter(
                     (option) =>
                       option.name.toLowerCase().includes(params.inputValue) ||
-                      option.phone.includes(params.inputValue)
+                      option.phone.includes(params.inputValue),
                   );
                   return filtered;
                 }}

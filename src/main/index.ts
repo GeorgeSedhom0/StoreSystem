@@ -47,7 +47,6 @@ function createWindow(): void {
     // Check that localhost:8000 aka the server is running before showing the window
     mainWindow.maximize();
     mainWindow.show();
-    mainWindow.webContents.openDevTools();
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -64,62 +63,68 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
-  ipcMain.handle("print", async (_event, { html, options }): Promise<any> => {
-    const { deviceName, printBackground, width, copies } = options;
-    let win: BrowserWindow | null = null;
-    try {
-      win = new BrowserWindow({
-        show: false,
-        webPreferences: {
-          nodeIntegration: true,
-          contextIsolation: false,
-        },
-      });
+  ipcMain.handle(
+    "print",
+    async (
+      _event,
+      { html, options },
+    ): Promise<{ success: boolean; error?: string } | void> => {
+      const { deviceName, printBackground, width, copies } = options;
+      let win: BrowserWindow | null = null;
+      try {
+        win = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+          },
+        });
 
-      await win.loadFile("print-template.html");
+        await win.loadFile("print-template.html");
 
-      await win.webContents.executeJavaScript(`
+        await win.webContents.executeJavaScript(`
           document.body.innerHTML = \`${html}\`;
         `);
 
-      // get hight of the content
-      const height = await win.webContents.executeJavaScript(`
+        // get hight of the content
+        const height = await win.webContents.executeJavaScript(`
         document.body.scrollHeight
       `);
 
-      win.webContents.print(
-        {
-          silent: true,
-          printBackground: printBackground,
-          deviceName,
-          margins: {
-            marginType: "custom",
-            top: 0,
-            bottom: 0,
-            left: 0,
-            right: 0,
+        win.webContents.print(
+          {
+            silent: true,
+            printBackground: printBackground,
+            deviceName,
+            margins: {
+              marginType: "custom",
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+            },
+            pageSize: {
+              width: width * 1000, // convert to microns
+              height: height * 1000, // convert to microns
+            },
+            copies,
           },
-          pageSize: {
-            width: width * 1000, // convert to microns
-            height: height * 1000, // convert to microns
+          (success, errorType) => {
+            if (!success) {
+              console.error("Printing failed:", errorType);
+              return { success: false, error: errorType };
+            } else {
+              console.log("Printed successfully");
+              return { success: true };
+            }
           },
-          copies,
-        },
-        (success, errorType) => {
-          if (!success) {
-            console.error("Printing failed:", errorType);
-            return { success: false, error: errorType };
-          } else {
-            console.log("Printed successfully");
-            return { success: true };
-          }
-        },
-      );
-    } catch (error) {
-      console.error("Printing failed:", error);
-      return { success: false, error: error };
-    }
-  });
+        );
+      } catch (error) {
+        console.error("Printing failed:", error);
+        return { success: false, error: error as string };
+      }
+    },
+  );
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.

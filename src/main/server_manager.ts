@@ -5,7 +5,7 @@ import tree from "tree-kill";
 export class ServerManager {
   private serverProcess: ChildProcess | null = null;
 
-  startServer() {
+  startServer(): void {
     if (this.serverProcess) return;
 
     const serverPath = `${app.getPath("exe")}\\..\\resources\\server\\start_server.bat`;
@@ -19,7 +19,7 @@ export class ServerManager {
     });
   }
 
-  stopServer() {
+  stopServer(): void {
     if (
       this.serverProcess &&
       !this.serverProcess.killed &&

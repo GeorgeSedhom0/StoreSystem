@@ -55,7 +55,7 @@ const EditableBill = ({
       setLoading(true);
       try {
         const { data } = await axios.get(
-          import.meta.env.VITE_SERVER_URL + "/products"
+          import.meta.env.VITE_SERVER_URL + "/products",
         );
         setProducts(data.products);
       } catch (error) {
@@ -78,9 +78,9 @@ const EditableBill = ({
         .filter(
           (prod) =>
             prod.name.toLowerCase().includes(query.toLowerCase()) ||
-            prod.bar_code.includes(query)
+            prod.bar_code.includes(query),
         )
-        .slice(0, 30)
+        .slice(0, 30),
     );
   }, [products, query]);
 
@@ -106,7 +106,7 @@ const EditableBill = ({
       if (!product.id) return;
       let newBill = { ...editedBill };
       const productIndex = newBill.products.findIndex(
-        (prod) => prod.id === product.id
+        (prod) => prod.id === product.id,
       );
       if (productIndex === -1) {
         newBill.products.push({
@@ -123,7 +123,7 @@ const EditableBill = ({
       newBill.total = totalEval(newBill);
       setEditedBill(newBill);
     },
-    [editedBill]
+    [editedBill],
   );
 
   const submitBill = useCallback(async () => {
@@ -199,7 +199,7 @@ const EditableBill = ({
 
                           const newBill = { ...editedBill };
                           const productIndex = newBill.products.findIndex(
-                            (prod) => prod.id === product.id
+                            (prod) => prod.id === product.id,
                           );
                           if (productIndex === -1) return;
                           newBill.products[productIndex].amount = amount;
@@ -214,7 +214,7 @@ const EditableBill = ({
                         onChange={(e) => {
                           const newBill = { ...editedBill };
                           const productIndex = newBill.products.findIndex(
-                            (prod) => prod.id === product.id
+                            (prod) => prod.id === product.id,
                           );
                           if (productIndex === -1) return;
                           newBill.products[productIndex].wholesale_price =
@@ -230,7 +230,7 @@ const EditableBill = ({
                         onChange={(e) => {
                           const newBill = { ...editedBill };
                           const productIndex = newBill.products.findIndex(
-                            (prod) => prod.id === product.id
+                            (prod) => prod.id === product.id,
                           );
                           if (productIndex === -1) return;
                           newBill.products[productIndex].price =
@@ -247,7 +247,7 @@ const EditableBill = ({
                           const newBill = {
                             ...editedBill,
                             products: editedBill.products.filter(
-                              (prod) => prod.id !== product.id
+                              (prod) => prod.id !== product.id,
                             ),
                           };
                           setEditedBill({
@@ -295,7 +295,7 @@ const EditableBill = ({
                     // then search for the product with the barcode and add it to the cart
                     if (query.length >= 8 && !isNaN(parseInt(query))) {
                       const product = products.find(
-                        (prod) => prod.bar_code === query
+                        (prod) => prod.bar_code === query,
                       );
                       if (product) {
                         addToCart(product);

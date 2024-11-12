@@ -24,13 +24,13 @@ const saveStoreData = async ({
         phone,
         address,
       },
-    }
+    },
   );
 };
 
 const getStoreData = async () => {
   const { data } = await axios.get<Profile["store"]>(
-    import.meta.env.VITE_SERVER_URL + "/store-data"
+    import.meta.env.VITE_SERVER_URL + "/store-data",
   );
   return data;
 };
@@ -48,7 +48,7 @@ const Basics = () => {
     setLoading(true);
     try {
       const { data } = await axios.get(
-        import.meta.env.VITE_SERVER_URL + "/backup"
+        import.meta.env.VITE_SERVER_URL + "/backup",
       );
       // download the backup file
       const url = window.URL.createObjectURL(new Blob([data]));
@@ -67,7 +67,7 @@ const Basics = () => {
 
   const restore = useCallback(async () => {
     const userConsent = window.confirm(
-      "هل انت متاكد من استعادة النسخة الاحطياتية"
+      "هل انت متاكد من استعادة النسخة الاحطياتية",
     );
     if (!userConsent) return;
     setLoading(true);
@@ -91,7 +91,7 @@ const Basics = () => {
             headers: {
               "Content-Type": "multipart/form-data",
             },
-          }
+          },
         );
         setMsg({ type: "success", text: "تم استعادة النسخة الاحطياتية" });
       };

@@ -6,7 +6,7 @@ import { AlertMsg } from "../AlertMessage";
 
 const getParties = async () => {
   const { data } = await axios.get<Party[]>(
-    import.meta.env.VITE_SERVER_URL + "/parties"
+    import.meta.env.VITE_SERVER_URL + "/parties",
   );
   return data;
 };
@@ -14,7 +14,7 @@ const getParties = async () => {
 const addParty = async (party: Party) => {
   const { data } = await axios.post<{ id: number }>(
     import.meta.env.VITE_SERVER_URL + "/party",
-    party
+    party,
   );
   return data.id;
 };
@@ -33,7 +33,7 @@ const deleteParty = async (partyId: number) => {
 
 const useParties = (
   setMsg: Dispatch<SetStateAction<AlertMsg>>,
-  filter: (_: Party[]) => Party[] = (data) => data
+  filter: (_: Party[]) => Party[] = (data) => data,
 ) => {
   const { data: parties, refetch: refetchParties } = useQuery({
     queryKey: ["parties"],

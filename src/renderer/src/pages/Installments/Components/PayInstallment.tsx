@@ -28,7 +28,7 @@ const payInstallment = async ({
         amount,
         time: new Date().toISOString(),
       },
-    }
+    },
   );
 };
 
@@ -54,7 +54,7 @@ const PayInstallment = ({
   const fullyPaidIntervals = Math.floor(
     selectedInstallment.flow.reduce((acc, flow) => {
       return acc + flow.amount;
-    }, 0) / installmentSize
+    }, 0) / installmentSize,
   );
   const nextInstallmentTime =
     new Date(selectedInstallment.time).getTime() +

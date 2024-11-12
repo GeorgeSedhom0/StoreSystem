@@ -27,8 +27,8 @@ const QuantityColumn = ({
             prev.map((item) =>
               item.id === product.id
                 ? { ...item, quantity: parseInt(e.target.value) || 0 }
-                : item
-            )
+                : item,
+            ),
           );
         }}
       />
@@ -57,8 +57,8 @@ const PriceColumn = ({
             prev.map((item) =>
               item.id === product.id
                 ? { ...item, price: parseFloat(e.target.value) || 0 }
-                : item
-            )
+                : item,
+            ),
           );
         }}
         inputProps={{
@@ -90,8 +90,8 @@ const WholesalePriceColumn = ({
             prev.map((item) =>
               item.id === product.id
                 ? { ...item, wholesale_price: parseFloat(e.target.value) || 0 }
-                : item
-            )
+                : item,
+            ),
           );
         }}
         inputProps={{
@@ -129,7 +129,7 @@ const DeleteColumn = ({
         color="error"
         onClick={() => {
           setShoppingCart((prev) =>
-            prev.filter((item) => item.id !== product.id)
+            prev.filter((item) => item.id !== product.id),
           );
         }}
       >
@@ -154,7 +154,7 @@ const PrintBarCodeColumn = ({ product }: { product: SCProduct }) => {
             product.barCode ?? "",
             `فحم المهندس \n ${product.name}`,
             product.price.toString() + " " + "جنية ",
-            "ar"
+            "ar",
           );
         }}
       >

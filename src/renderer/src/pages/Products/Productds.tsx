@@ -47,11 +47,11 @@ const Products = () => {
     }
     if (changedOnly) {
       return editedProducts.filter((product) =>
-        product.name.toLowerCase().includes(query.toLowerCase())
+        product.name.toLowerCase().includes(query.toLowerCase()),
       );
     }
     return products.filter((product) =>
-      product.name.toLowerCase().includes(query.toLowerCase())
+      product.name.toLowerCase().includes(query.toLowerCase()),
     );
   }, [products, editedProducts, query, changedOnly]);
 
@@ -62,7 +62,7 @@ const Products = () => {
         import.meta.env.VITE_SERVER_URL + "/inventory",
         {
           responseType: "blob", // important
-        }
+        },
       );
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
@@ -87,7 +87,7 @@ const Products = () => {
           params: {
             store_id: import.meta.env.VITE_STORE_ID,
           },
-        }
+        },
       );
       setMsg({ type: "success", text: "تم تعديل المنتجات بنجاح" });
     } catch (error) {
@@ -111,7 +111,7 @@ const Products = () => {
           params: {
             product_id: productId,
           },
-        }
+        },
       );
       setMsg({ type: "success", text: "تم ازالة المنتج بنجاح" });
     } catch (error) {
@@ -132,7 +132,7 @@ const Products = () => {
           params: {
             product_id: productId,
           },
-        }
+        },
       );
       setMsg({ type: "success", text: "تم استعادة المنتج بنجاح" });
     } catch (error) {

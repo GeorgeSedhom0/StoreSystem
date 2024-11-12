@@ -24,8 +24,8 @@ const ProductAutocomplete = ({
       products.filter(
         (prod) =>
           prod.name.toLowerCase().includes(query.toLowerCase()) ||
-          prod.bar_code.includes(query)
-      )
+          prod.bar_code.includes(query),
+      ),
     );
   }, [query, products]);
 
@@ -58,7 +58,7 @@ const ProductAutocomplete = ({
               // then search for the product with the barcode and add it to the cart
               if (query.length >= 5 && !isNaN(parseInt(query))) {
                 const product = products.find(
-                  (prod) => prod.bar_code === query
+                  (prod) => prod.bar_code === query,
                 );
                 if (product) {
                   onProductSelect(product);

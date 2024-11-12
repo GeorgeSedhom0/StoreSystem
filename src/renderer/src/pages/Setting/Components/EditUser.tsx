@@ -47,14 +47,14 @@ const editUser = async ({
 
 const getScopes = async () => {
   const { data } = await axios.get<Scope[]>(
-    import.meta.env.VITE_SERVER_URL + "/scopes"
+    import.meta.env.VITE_SERVER_URL + "/scopes",
   );
   return data;
 };
 
 const getUsers = async () => {
   const { data } = await axios.get<DBUser[]>(
-    import.meta.env.VITE_SERVER_URL + "/users"
+    import.meta.env.VITE_SERVER_URL + "/users",
   );
   return data;
 };
@@ -128,7 +128,7 @@ const UpdateUser = () => {
               value={selectedUser?.id.toString() || ""}
               onChange={(e) =>
                 setSelectedUser(
-                  users.find((u) => u.id.toString() === e.target.value) || null
+                  users.find((u) => u.id.toString() === e.target.value) || null,
                 )
               }
               disabled={isUsersLoading}

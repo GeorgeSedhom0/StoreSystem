@@ -30,7 +30,7 @@ interface ShiftTotal {
 
 const getShiftTotal = async () => {
   const { data } = await axios.get<ShiftTotal>(
-    import.meta.env.VITE_SERVER_URL + "/shift-total"
+    import.meta.env.VITE_SERVER_URL + "/shift-total",
   );
   return data;
 };

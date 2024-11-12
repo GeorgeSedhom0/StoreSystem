@@ -26,7 +26,7 @@ const addEmployee = async (employee: Employee) => {
       params: {
         store_id: import.meta.env.VITE_STORE_ID,
       },
-    }
+    },
   );
   return data;
 };
@@ -34,7 +34,7 @@ const addEmployee = async (employee: Employee) => {
 const editEmployee = async ({ id, ...employee }: Employee) => {
   const { data } = await axios.put<Employee>(
     import.meta.env.VITE_SERVER_URL + `/employees/${id}`,
-    employee
+    employee,
   );
   return data;
 };
@@ -55,7 +55,7 @@ const EmployeeForm = ({
   const [address, setAddress] = useState(employee?.address ?? "");
   const [salary, setSalary] = useState(employee?.salary ?? 0);
   const [joiningDate, setJoiningDate] = useState(
-    employee?.started_on ? dayjs(employee.started_on) : dayjs()
+    employee?.started_on ? dayjs(employee.started_on) : dayjs(),
   );
 
   const addMutation = useMutation({

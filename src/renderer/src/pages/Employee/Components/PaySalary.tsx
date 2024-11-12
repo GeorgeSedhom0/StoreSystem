@@ -37,7 +37,7 @@ const postNewSalary = async ({
 
   await axios.post(
     import.meta.env.VITE_SERVER_URL + `/employees/${id}/pay-salary`,
-    formData
+    formData,
   );
 };
 

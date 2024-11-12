@@ -17,7 +17,7 @@ const getPartyDetails = async (partyId: number) => {
       params: {
         party_id: partyId,
       },
-    }
+    },
   );
   return data;
 };

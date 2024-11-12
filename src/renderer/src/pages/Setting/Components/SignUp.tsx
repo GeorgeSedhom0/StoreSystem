@@ -39,7 +39,7 @@ const signup = async ({
 
 const getScopes = async () => {
   const { data } = await axios.get<Scope[]>(
-    import.meta.env.VITE_SERVER_URL + "/scopes"
+    import.meta.env.VITE_SERVER_URL + "/scopes",
   );
   return data;
 };

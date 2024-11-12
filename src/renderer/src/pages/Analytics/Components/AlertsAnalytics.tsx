@@ -10,7 +10,7 @@ interface AlertAnalytics {
 }
 const getAnalytics = async () => {
   const { data } = await axios.get<AlertAnalytics[]>(
-    import.meta.env.VITE_SERVER_URL + "/analytics/alerts"
+    import.meta.env.VITE_SERVER_URL + "/analytics/alerts",
   );
   return data;
 };

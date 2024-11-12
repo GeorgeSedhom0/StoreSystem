@@ -8,7 +8,7 @@ const StoreContext = createContext<Profile>({} as Profile);
 
 const getProfile = async () => {
   const { data } = await axios.get<Profile>(
-    import.meta.env.VITE_SERVER_URL + "/profile"
+    import.meta.env.VITE_SERVER_URL + "/profile",
   );
 
   return data;
