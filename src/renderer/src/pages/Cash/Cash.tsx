@@ -37,16 +37,13 @@ const getCashFlow = async (
   endDate: Dayjs,
   partyId: number | null,
 ) => {
-  const { data } = await axios.get<CashFlow[]>(
-    import.meta.env.VITE_SERVER_URL + "/cash-flow",
-    {
-      params: {
-        start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
-        end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
-        party_id: partyId,
-      },
+  const { data } = await axios.get<CashFlow[]>("/cash-flow", {
+    params: {
+      start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
+      end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
+      party_id: partyId,
     },
-  );
+  });
   return data;
 };
 
@@ -93,9 +90,7 @@ const Cash = () => {
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
     queryFn: async () => {
-      const { data } = await axios.get(
-        import.meta.env.VITE_SERVER_URL + "/last-shift",
-      );
+      const { data } = await axios.get("/last-shift");
       return data;
     },
   });
@@ -191,7 +186,7 @@ const Cash = () => {
       }
 
       await axios.post(
-        import.meta.env.VITE_SERVER_URL + "/cash-flow",
+        "/cash-flow",
         {},
         {
           params: {

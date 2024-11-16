@@ -35,10 +35,7 @@ const postNewSalary = async ({
   formData.append("month", month.toString());
   formData.append("time", date.toISOString());
 
-  await axios.post(
-    import.meta.env.VITE_SERVER_URL + `/employees/${id}/pay-salary`,
-    formData,
-  );
+  await axios.post(`/employees/${id}/pay-salary`, formData);
 };
 
 const PaySalary = ({

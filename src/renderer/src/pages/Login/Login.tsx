@@ -18,7 +18,7 @@ const Login = () => {
       formdata.append("username", username);
       formdata.append("password", password);
 
-      await axios.post(import.meta.env.VITE_SERVER_URL + "/login", formdata);
+      await axios.post("/login", formdata);
       navigate("/sell");
     } catch (e) {
       setMsg({ type: "error", text: "حدث خطأ ما" });

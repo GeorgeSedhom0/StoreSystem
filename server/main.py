@@ -177,6 +177,11 @@ class Database:
         self.conn.close()
 
 
+@app.get("/test")
+def test():
+    return "Hello, World!"
+
+
 @app.get("/barcode")
 def get_bar_code():
     """

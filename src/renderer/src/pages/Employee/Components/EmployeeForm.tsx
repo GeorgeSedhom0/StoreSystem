@@ -19,23 +19,16 @@ import axios from "axios";
 import { AlertMsg } from "../../Shared/AlertMessage";
 
 const addEmployee = async (employee: Employee) => {
-  const { data } = await axios.post<Employee>(
-    import.meta.env.VITE_SERVER_URL + "/employees",
-    employee,
-    {
-      params: {
-        store_id: import.meta.env.VITE_STORE_ID,
-      },
+  const { data } = await axios.post<Employee>("/employees", employee, {
+    params: {
+      store_id: import.meta.env.VITE_STORE_ID,
     },
-  );
+  });
   return data;
 };
 
 const editEmployee = async ({ id, ...employee }: Employee) => {
-  const { data } = await axios.put<Employee>(
-    import.meta.env.VITE_SERVER_URL + `/employees/${id}`,
-    employee,
-  );
+  const { data } = await axios.put<Employee>(`/employees/${id}`, employee);
   return data;
 };
 

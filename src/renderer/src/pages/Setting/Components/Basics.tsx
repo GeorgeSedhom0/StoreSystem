@@ -16,7 +16,7 @@ const saveStoreData = async ({
   address: string;
 }) => {
   await axios.put(
-    import.meta.env.VITE_SERVER_URL + "/store-data",
+    "/store-data",
     {},
     {
       params: {
@@ -29,9 +29,7 @@ const saveStoreData = async ({
 };
 
 const getStoreData = async () => {
-  const { data } = await axios.get<Profile["store"]>(
-    import.meta.env.VITE_SERVER_URL + "/store-data",
-  );
+  const { data } = await axios.get<Profile["store"]>("/store-data");
   return data;
 };
 
@@ -47,9 +45,7 @@ const Basics = () => {
   const backUp = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(
-        import.meta.env.VITE_SERVER_URL + "/backup",
-      );
+      const { data } = await axios.get("/backup");
       // download the backup file
       const url = window.URL.createObjectURL(new Blob([data]));
       const link = document.createElement("a");
@@ -84,15 +80,11 @@ const Basics = () => {
         }
         const formData = new FormData();
         formData.append("file", file);
-        await axios.post(
-          import.meta.env.VITE_SERVER_URL + "/restore",
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
+        await axios.post("/restore", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
           },
-        );
+        });
         setMsg({ type: "success", text: "تم استعادة النسخة الاحطياتية" });
       };
     } catch (e) {

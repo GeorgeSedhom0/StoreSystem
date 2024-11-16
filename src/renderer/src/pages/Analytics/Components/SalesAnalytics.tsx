@@ -27,7 +27,7 @@ const getAnalytics = async (
   types: string[],
 ) => {
   const { data } = await axios.post<SalesAnalyticsType>(
-    import.meta.env.VITE_SERVER_URL + "/analytics/sales",
+    "/analytics/sales",
     types,
     {
       params: {

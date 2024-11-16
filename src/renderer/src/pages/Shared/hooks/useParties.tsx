@@ -5,28 +5,23 @@ import { Party } from "../../../utils/types";
 import { AlertMsg } from "../AlertMessage";
 
 const getParties = async () => {
-  const { data } = await axios.get<Party[]>(
-    import.meta.env.VITE_SERVER_URL + "/parties",
-  );
+  const { data } = await axios.get<Party[]>("/parties");
   return data;
 };
 
 const addParty = async (party: Party) => {
-  const { data } = await axios.post<{ id: number }>(
-    import.meta.env.VITE_SERVER_URL + "/party",
-    party,
-  );
+  const { data } = await axios.post<{ id: number }>("/party", party);
   return data.id;
 };
 
 const updateParty = async (party: Party) => {
-  await axios.put(import.meta.env.VITE_SERVER_URL + "/party", party, {
+  await axios.put("/party", party, {
     params: { party_id: party.id },
   });
 };
 
 const deleteParty = async (partyId: number) => {
-  await axios.delete(import.meta.env.VITE_SERVER_URL + "/party", {
+  await axios.delete("/party", {
     params: { party_id: partyId },
   });
 };

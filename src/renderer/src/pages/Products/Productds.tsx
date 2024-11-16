@@ -58,12 +58,9 @@ const Products = () => {
   const getInventory = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(
-        import.meta.env.VITE_SERVER_URL + "/inventory",
-        {
-          responseType: "blob", // important
-        },
-      );
+      const response = await axios.get("/inventory", {
+        responseType: "blob", // important
+      });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -80,15 +77,11 @@ const Products = () => {
   const submitProducts = useCallback(async () => {
     setLoading(true);
     try {
-      await axios.put(
-        import.meta.env.VITE_SERVER_URL + "/products",
-        editedProducts,
-        {
-          params: {
-            store_id: import.meta.env.VITE_STORE_ID,
-          },
+      await axios.put("/products", editedProducts, {
+        params: {
+          store_id: import.meta.env.VITE_STORE_ID,
         },
-      );
+      });
       setMsg({ type: "success", text: "تم تعديل المنتجات بنجاح" });
     } catch (error) {
       console.log(error);
@@ -104,15 +97,11 @@ const Products = () => {
   const deleteProduct = useCallback(async (productId: number) => {
     setLoading(true);
     try {
-      await axios.put(
-        import.meta.env.VITE_SERVER_URL + "/product/delete",
-        null,
-        {
-          params: {
-            product_id: productId,
-          },
+      await axios.put("/product/delete", null, {
+        params: {
+          product_id: productId,
         },
-      );
+      });
       setMsg({ type: "success", text: "تم ازالة المنتج بنجاح" });
     } catch (error) {
       console.log(error);
@@ -125,15 +114,11 @@ const Products = () => {
   const restoreProduct = useCallback(async (productId: number) => {
     setLoading(true);
     try {
-      await axios.put(
-        import.meta.env.VITE_SERVER_URL + "/product/restore",
-        null,
-        {
-          params: {
-            product_id: productId,
-          },
+      await axios.put("/product/restore", null, {
+        params: {
+          product_id: productId,
         },
-      );
+      });
       setMsg({ type: "success", text: "تم استعادة المنتج بنجاح" });
     } catch (error) {
       console.log(error);

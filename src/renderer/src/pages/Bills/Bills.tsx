@@ -33,9 +33,7 @@ import { useParams } from "react-router-dom";
 import useParties from "../Shared/hooks/useParties";
 
 const getProds = async () => {
-  const { data } = await axios.get<DBProducts>(
-    import.meta.env.VITE_SERVER_URL + "/products",
-  );
+  const { data } = await axios.get<DBProducts>("/products");
   return data;
 };
 
@@ -44,16 +42,13 @@ const getBills = async (
   endDate: Dayjs,
   partyId: number | null,
 ) => {
-  const { data } = await axios.get<BillType[]>(
-    import.meta.env.VITE_SERVER_URL + "/bills",
-    {
-      params: {
-        start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
-        end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
-        party_id: partyId,
-      },
+  const { data } = await axios.get<BillType[]>("/bills", {
+    params: {
+      start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
+      end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
+      party_id: partyId,
     },
-  );
+  });
   return data;
 };
 
@@ -93,9 +88,7 @@ const Bills = () => {
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
     queryFn: async () => {
-      const { data } = await axios.get(
-        import.meta.env.VITE_SERVER_URL + "/last-shift",
-      );
+      const { data } = await axios.get("/last-shift");
       return data;
     },
   });

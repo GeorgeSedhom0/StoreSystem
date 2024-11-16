@@ -31,7 +31,7 @@ const getAnalytics = async (
   types: string[],
 ) => {
   const { data } = await axios.post<ShiftsAnalytics[]>(
-    import.meta.env.VITE_SERVER_URL + "/shifts-analytics",
+    "/shifts-analytics",
     types,
     {
       params: {

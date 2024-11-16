@@ -6,14 +6,25 @@ import { NavLink } from "react-router-dom";
 import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
+import SetBaseUrl from "./setBaseUrl";
 
 const logoutWihtoutEndingShift = async () => {
-  await axios.get(import.meta.env.VITE_SERVER_URL + "/switch", {
+  await axios.get("/switch", {
     withCredentials: true,
   });
 };
 
-const Layout = ({ children }: { children: ReactNode }) => {
+const Layout = ({
+  isBaseUrlSet,
+  children,
+}: {
+  isBaseUrlSet: boolean;
+  children: ReactNode;
+}) => {
+  if (!isBaseUrlSet) {
+    return <SetBaseUrl />;
+  }
+
   const location = useLocation();
   if (location.pathname === "/login") {
     return <>{children}</>;

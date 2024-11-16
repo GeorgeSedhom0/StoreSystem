@@ -39,9 +39,7 @@ import useParties from "../Shared/hooks/useParties";
 import useProducts from "../Shared/hooks/useProducts";
 
 const getShift = async () => {
-  const { data } = await axios.get(
-    import.meta.env.VITE_SERVER_URL + "/current-shift",
-  );
+  const { data } = await axios.get("/current-shift");
   if (data.start_date_time) {
     return data.start_date_time;
   } else {
@@ -192,20 +190,16 @@ const Sell = () => {
           });
         }
 
-        const { data } = await axios.post(
-          import.meta.env.VITE_SERVER_URL + "/bill",
-          bill,
-          {
-            params: {
-              move_type: billPayment,
-              store_id: import.meta.env.VITE_STORE_ID,
-              party_id: newPartyId,
-              paid: paid,
-              installments: installments,
-              installment_interval: installmentInterval,
-            },
+        const { data } = await axios.post("/bill", bill, {
+          params: {
+            move_type: billPayment,
+            store_id: import.meta.env.VITE_STORE_ID,
+            party_id: newPartyId,
+            paid: paid,
+            installments: installments,
+            installment_interval: installmentInterval,
           },
-        );
+        });
 
         setLastBill(data.bill);
         setShoppingCart([]);

@@ -34,13 +34,11 @@ const signup = async ({
   formdata.append("phone", phone);
   formdata.append("scope_id", scope.toString());
 
-  await axios.post(import.meta.env.VITE_SERVER_URL + "/signup", formdata);
+  await axios.post("/signup", formdata);
 };
 
 const getScopes = async () => {
-  const { data } = await axios.get<Scope[]>(
-    import.meta.env.VITE_SERVER_URL + "/scopes",
-  );
+  const { data } = await axios.get<Scope[]>("/scopes");
   return data;
 };
 

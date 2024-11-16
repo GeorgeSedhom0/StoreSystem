@@ -11,14 +11,11 @@ interface PartyDetails {
   total_cash: number;
 }
 const getPartyDetails = async (partyId: number) => {
-  const { data } = await axios.get<PartyDetails>(
-    import.meta.env.VITE_SERVER_URL + "/party/details",
-    {
-      params: {
-        party_id: partyId,
-      },
+  const { data } = await axios.get<PartyDetails>("/party/details", {
+    params: {
+      party_id: partyId,
     },
-  );
+  });
   return data;
 };
 

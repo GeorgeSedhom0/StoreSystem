@@ -3,6 +3,7 @@ import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
 import { ServerManager } from "./server_manager";
+import { writeFileSync, readFileSync, existsSync } from "fs";
 
 function createChildWindow(url: string): void {
   const childWindow = new BrowserWindow({
@@ -35,6 +36,11 @@ function createWindow(): void {
   // Run the server before creating the window
   serverManager = new ServerManager();
   serverManager.startServer();
+
+  // create file settings.json if it doesn't exist
+  if (!existsSync("settings.json")) {
+    writeFileSync("settings.json", "{}");
+  }
 
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -138,6 +144,20 @@ function createWindow(): void {
         ? process.env["ELECTRON_RENDERER_URL"]
         : `file://${join(__dirname, "../renderer/index.html")}`;
     createChildWindow(url);
+  });
+
+  ipcMain.handle("set", (_event, key, value) => {
+    // Set the key value pair in a settings.json file
+    const current = JSON.parse(readFileSync("settings.json", "utf-8"));
+    // check of the key exists
+    current[key] = value;
+    writeFileSync("settings.json", JSON.stringify(current));
+  });
+
+  ipcMain.handle("get", (_event, key) => {
+    // Get the value of the key from the settings.json file
+    const current = JSON.parse(readFileSync("settings.json", "utf-8"));
+    return current[key] ? current[key] : null;
   });
 
   // HMR for renderer base on electron-vite cli.

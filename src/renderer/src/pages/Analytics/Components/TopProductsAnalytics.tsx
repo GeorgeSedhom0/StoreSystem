@@ -21,7 +21,7 @@ export interface ProductsAnalyticsType {
 }
 const getAnalytics = async (startDate: string, endDate: string) => {
   const { data } = await axios.get<ProductsAnalyticsType>(
-    import.meta.env.VITE_SERVER_URL + "/analytics/top-products",
+    "/analytics/top-products",
     {
       params: {
         start_date: startDate,

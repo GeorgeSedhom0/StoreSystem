@@ -27,9 +27,7 @@ import {
 import PaySalary from "./Components/PaySalary";
 
 const getEmployee = async () => {
-  const { data } = await axios.get<EmployeeType[]>(
-    import.meta.env.VITE_SERVER_URL + "/employees",
-  );
+  const { data } = await axios.get<EmployeeType[]>("/employees");
   return data;
 };
 
@@ -80,9 +78,7 @@ export default function Employee() {
 
   const handleDelEmployee = async () => {
     try {
-      await axios.delete(
-        import.meta.env.VITE_SERVER_URL + "/employees/" + selectedEmployee?.id,
-      );
+      await axios.delete("/employees/" + selectedEmployee?.id);
 
       setMsg({ type: "success", text: "تم انهاء التعيين بنجاح" });
       closeDeleteModal();

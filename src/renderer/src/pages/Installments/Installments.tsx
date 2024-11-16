@@ -42,9 +42,7 @@ export interface Installment {
   ended: boolean;
 }
 const getInstallments = async () => {
-  const { data } = await axios.get<Installment[]>(
-    import.meta.env.VITE_SERVER_URL + "/installments",
-  );
+  const { data } = await axios.get<Installment[]>("/installments");
   return data;
 };
 

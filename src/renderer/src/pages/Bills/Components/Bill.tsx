@@ -9,7 +9,7 @@ import ProductsView from "../../../utils/ProductsView";
 import FormatedNumber from "../../Shared/FormatedNumber";
 
 const endReservation = async (id: string) => {
-  await axios.get(import.meta.env.VITE_SERVER_URL + "/end-reservation", {
+  await axios.get("/end-reservation", {
     params: { bill_id: id },
   });
 };

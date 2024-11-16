@@ -54,9 +54,7 @@ const EditableBill = ({
     const getProds = async () => {
       setLoading(true);
       try {
-        const { data } = await axios.get(
-          import.meta.env.VITE_SERVER_URL + "/products",
-        );
+        const { data } = await axios.get("/products");
         setProducts(data.products);
       } catch (error) {
         console.log(error);
@@ -129,7 +127,7 @@ const EditableBill = ({
   const submitBill = useCallback(async () => {
     setLoading(true);
     try {
-      await axios.put(import.meta.env.VITE_SERVER_URL + "/bill", editedBill, {
+      await axios.put("/bill", editedBill, {
         params: {
           store_id: import.meta.env.VITE_STORE_ID,
         },

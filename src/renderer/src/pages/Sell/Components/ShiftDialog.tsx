@@ -29,9 +29,7 @@ interface ShiftTotal {
 }
 
 const getShiftTotal = async () => {
-  const { data } = await axios.get<ShiftTotal>(
-    import.meta.env.VITE_SERVER_URL + "/shift-total",
-  );
+  const { data } = await axios.get<ShiftTotal>("/shift-total");
   return data;
 };
 
@@ -63,7 +61,7 @@ const ShiftDialog = ({
 
   const closeShift = async () => {
     try {
-      await axios.post(import.meta.env.VITE_SERVER_URL + "/logout");
+      await axios.post("/logout");
       navigate("/login");
     } catch (err) {
       console.log(err);

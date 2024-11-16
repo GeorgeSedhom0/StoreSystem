@@ -22,6 +22,8 @@ import axios from "axios";
 import Installments from "./pages/Installments/Installments";
 import Employee from "./pages/Employee/Employee";
 import { Theme, themes } from "./themes";
+import { useEffect, useState } from "react";
+import LoadingScreen from "./pages/Shared/LoadingScreen";
 
 axios.defaults.withCredentials = true;
 
@@ -37,9 +39,10 @@ const queryClient = new QueryClient({
   },
 });
 
-console.log("themeSettings", localTheme);
-
 const App = () => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isBaseURLSet, setIsBaseURLSet] = useState(true);
+
   const theme = createTheme({
     direction: "rtl",
     palette: {
@@ -110,6 +113,36 @@ const App = () => {
     },
   });
 
+  useEffect(() => {
+    const setBaseUrl = async () => {
+      try {
+        const baseUrl = await window.electron.ipcRenderer.invoke(
+          "get",
+          "baseUrl",
+        );
+        if (baseUrl) {
+          const { data } = await axios.get(baseUrl + "/test");
+          if (data === "Hello, World!") {
+            axios.defaults.baseURL = baseUrl;
+          } else {
+            setIsBaseURLSet(false);
+          }
+        } else {
+          setIsBaseURLSet(false);
+        }
+      } catch (e) {
+        console.log(e);
+      }
+      setIsLoading(false);
+    };
+
+    setBaseUrl();
+  }, []);
+
+  if (isLoading) {
+    return <LoadingScreen loading={true} />;
+  }
+
   return (
     <Rtl>
       <QueryClientProvider client={queryClient}>
@@ -117,7 +150,7 @@ const App = () => {
           <StoreDataProvider>
             <ThemeProvider theme={theme}>
               <CssBaseline />
-              <Layout>
+              <Layout isBaseUrlSet={isBaseURLSet}>
                 <Routes>
                   <Route path="/sell" element={<Sell />} />
                   <Route path="/add-to-storage" element={<Storage />} />

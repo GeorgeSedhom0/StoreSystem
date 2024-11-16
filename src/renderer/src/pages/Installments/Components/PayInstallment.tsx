@@ -21,7 +21,7 @@ const payInstallment = async ({
   amount: number;
 }) => {
   axios.post(
-    import.meta.env.VITE_SERVER_URL + "/installments/pay/" + id.toString(),
+    "/installments/pay/" + id.toString(),
     {},
     {
       params: {

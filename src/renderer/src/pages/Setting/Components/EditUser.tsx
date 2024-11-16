@@ -42,20 +42,16 @@ const editUser = async ({
   formdata.append("phone", phone);
   formdata.append("scope_id", scope.toString());
 
-  await axios.put(import.meta.env.VITE_SERVER_URL + "/user", formdata);
+  await axios.put("/user", formdata);
 };
 
 const getScopes = async () => {
-  const { data } = await axios.get<Scope[]>(
-    import.meta.env.VITE_SERVER_URL + "/scopes",
-  );
+  const { data } = await axios.get<Scope[]>("/scopes");
   return data;
 };
 
 const getUsers = async () => {
-  const { data } = await axios.get<DBUser[]>(
-    import.meta.env.VITE_SERVER_URL + "/users",
-  );
+  const { data } = await axios.get<DBUser[]>("/users");
   return data;
 };
 

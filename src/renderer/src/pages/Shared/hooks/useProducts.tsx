@@ -3,12 +3,9 @@ import { DBProducts } from "../../../utils/types";
 import { useQuery } from "@tanstack/react-query";
 
 const getProducts = async ({ queryKey }: { queryKey: [string, boolean] }) => {
-  const { data } = await axios.get<DBProducts>(
-    import.meta.env.VITE_SERVER_URL + "/products",
-    {
-      params: { is_deleted: queryKey[1] },
-    },
-  );
+  const { data } = await axios.get<DBProducts>("/products", {
+    params: { is_deleted: queryKey[1] },
+  });
   return data;
 };
 

@@ -9,9 +9,7 @@ interface AlertAnalytics {
   urgent: boolean;
 }
 const getAnalytics = async () => {
-  const { data } = await axios.get<AlertAnalytics[]>(
-    import.meta.env.VITE_SERVER_URL + "/analytics/alerts",
-  );
+  const { data } = await axios.get<AlertAnalytics[]>("/analytics/alerts");
   return data;
 };
 const AlertsAnalytics = () => {

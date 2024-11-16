@@ -26,7 +26,7 @@ const getAnalytics = async (
   selectedProducts: number[],
 ) => {
   const { data } = await axios.post<ProductsAnalyticsType>(
-    import.meta.env.VITE_SERVER_URL + "/analytics/products",
+    "/analytics/products",
     selectedProducts,
     {
       params: {
@@ -39,9 +39,7 @@ const getAnalytics = async (
 };
 
 const getProds = async () => {
-  const { data } = await axios.get<DBProducts>(
-    import.meta.env.VITE_SERVER_URL + "/products",
-  );
+  const { data } = await axios.get<DBProducts>("/products");
   return data;
 };
 

@@ -17,16 +17,13 @@ import { Scope } from "../../../utils/types";
 import { LoadingButton } from "@mui/lab";
 
 const getScopes = async () => {
-  const { data } = await axios.get<Scope[]>(
-    import.meta.env.VITE_SERVER_URL + "/scopes",
-  );
+  const { data } = await axios.get<Scope[]>("/scopes");
   return data;
 };
 
 const getPages = async () => {
-  const { data } = await axios.get<
-    { name: string; path: string; id: number }[]
-  >(import.meta.env.VITE_SERVER_URL + "/pages");
+  const { data } =
+    await axios.get<{ name: string; path: string; id: number }[]>("/pages");
   return data;
 };
 
@@ -42,18 +39,18 @@ const updateScope = async ({
   newScope?: boolean;
 }) => {
   if (newScope) {
-    await axios.post(import.meta.env.VITE_SERVER_URL + "/scope", pages, {
+    await axios.post("/scope", pages, {
       params: { name },
     });
   } else {
-    await axios.put(import.meta.env.VITE_SERVER_URL + "/scope", pages, {
+    await axios.put("/scope", pages, {
       params: { name, id },
     });
   }
 };
 
 const deleteScope = async (id: number) => {
-  await axios.delete(import.meta.env.VITE_SERVER_URL + "/scope", {
+  await axios.delete("/scope", {
     params: { id },
   });
 };

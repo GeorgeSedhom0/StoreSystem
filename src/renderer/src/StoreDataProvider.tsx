@@ -7,9 +7,7 @@ import LoadingScreen from "./pages/Shared/LoadingScreen";
 const StoreContext = createContext<Profile>({} as Profile);
 
 const getProfile = async () => {
-  const { data } = await axios.get<Profile>(
-    import.meta.env.VITE_SERVER_URL + "/profile",
-  );
+  const { data } = await axios.get<Profile>("/profile");
 
   return data;
 };
