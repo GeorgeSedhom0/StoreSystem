@@ -2,6 +2,14 @@ import { AlertMsg } from "../pages/Shared/AlertMessage";
 import JsBarcode from "jsbarcode";
 import printJS from "print-js";
 
+export const handlePrintError = (
+  error: string,
+  setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>
+) => {
+  console.error(error);
+  setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+};
+
 export const printBill = async (
   billRef: React.RefObject<HTMLDivElement>,
   setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>,
@@ -18,12 +26,10 @@ export const printBill = async (
           deviceName: "HP LaserJet Professional P1102",
         });
         if (!data.success) {
-          console.error(data.error);
-          setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+          handlePrintError(data.error, setMsg);
         }
       } catch (error) {
-        console.error(error);
-        setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+        handlePrintError(error as string, setMsg);
       }
     } else {
       // Fallback to printJS for web browser
@@ -37,11 +43,11 @@ export const printBill = async (
       if (setBillPreviewOpen) setBillPreviewOpen(false);
     }
   } catch (e) {
-    setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+    handlePrintError(e as string, setMsg);
   }
 };
 
-export const printCode = (
+export const printCode = async (
   code: string,
   title: string,
   footer: string,
@@ -66,35 +72,55 @@ export const printCode = (
   containter.appendChild(svg);
   containter.appendChild(footerSpan);
   const containterHtml = containter.outerHTML;
-  printJS({
-    printable: containterHtml,
-    type: "raw-html",
-    targetStyles: ["*"],
-    scanStyles: false,
-    style: `
-    .barcode {
-      display: flex;
-      flex-direction: column;
-      align-items: center
-      justify-content: flex-start;
+
+  if (window?.electron?.ipcRenderer) {
+    try {
+      const data = await window.electron.ipcRenderer.invoke("print", {
+        html: containterHtml,
+        options: {
+          deviceName: "Barcode Printer",
+          printBackground: true,
+          width: 100,
+          copies: 1,
+        },
+      });
+      if (!data.success) {
+        console.error(data.error);
+      }
+    } catch (error) {
+      console.error(error);
     }
-    .barcode svg {
-      width: 100%;
-      height: 40px;
-    }
-    .barcode span {
-      display: block;
-      font-size: 12px;
-      text-align: center;
-      direction: ${lang === "ar" ? "rtl" : "ltr"};
-    }
-    .barcode .title {
-      max-height: 30px;
-    }
-    .barcode .footer {
-      max-height: 10px;
-    }
-    `,
-  });
-  svg.remove();
+  } else {
+    printJS({
+      printable: containterHtml,
+      type: "raw-html",
+      targetStyles: ["*"],
+      scanStyles: false,
+      style: `
+      .barcode {
+        display: flex;
+        flex-direction: column;
+        align-items: center
+        justify-content: flex-start;
+      }
+      .barcode svg {
+        width: 100%;
+        height: 40px;
+      }
+      .barcode span {
+        display: block;
+        font-size: 12px;
+        text-align: center;
+        direction: ${lang === "ar" ? "rtl" : "ltr"};
+      }
+      .barcode .title {
+        max-height: 30px;
+      }
+      .barcode .footer {
+        max-height: 10px;
+      }
+      `,
+    });
+    svg.remove();
+  }
 };

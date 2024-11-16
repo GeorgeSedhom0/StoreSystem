@@ -210,3 +210,92 @@ app.on("before-quit", () => {
 
 // In this file you can include the rest of your app"s specific main process
 // code. You can also put them in separate files and require them here.
+
+function getPrinters() {
+  const mainWindow = BrowserWindow.getAllWindows()[0];
+  return mainWindow.webContents.getPrintersAsync();
+}
+
+function savePrinterSettings(printerSettings) {
+  writeFileSync("printerSettings.json", JSON.stringify(printerSettings));
+}
+
+function getPrinterSettings() {
+  if (existsSync("printerSettings.json")) {
+    return JSON.parse(readFileSync("printerSettings.json", "utf-8"));
+  }
+  return null;
+}
+
+ipcMain.handle("print", async (_event, { html, options }) => {
+  const printerSettings = getPrinterSettings();
+  if (!printerSettings) {
+    return { success: false, error: "No printer selected" };
+  }
+
+  const { deviceName, printBackground, width, copies } = options;
+  let win = null;
+  try {
+    win = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+      },
+    });
+
+    await win.loadFile("print-template.html");
+
+    await win.webContents.executeJavaScript(`
+      document.body.innerHTML = \`${html}\`;
+    `);
+
+    const height = await win.webContents.executeJavaScript(`
+      document.body.scrollHeight
+    `);
+
+    win.webContents.print(
+      {
+        silent: true,
+        printBackground: printBackground,
+        deviceName: printerSettings.deviceName,
+        margins: {
+          marginType: "custom",
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+        },
+        pageSize: {
+          width: width * 1000,
+          height: height * 1000,
+        },
+        copies,
+      },
+      (success, errorType) => {
+        if (!success) {
+          console.error("Printing failed:", errorType);
+          return { success: false, error: errorType };
+        } else {
+          console.log("Printed successfully");
+          return { success: true };
+        }
+      },
+    );
+  } catch (error) {
+    console.error("Printing failed:", error);
+    return { success: false, error: error.toString() };
+  }
+});
+
+ipcMain.handle("getPrinters", async () => {
+  return getPrinters();
+});
+
+ipcMain.handle("savePrinterSettings", (_event, printerSettings) => {
+  savePrinterSettings(printerSettings);
+});
+
+ipcMain.handle("getPrinterSettings", () => {
+  return getPrinterSettings();
+});
