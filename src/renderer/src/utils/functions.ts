@@ -2,6 +2,14 @@ import { AlertMsg } from "../pages/Shared/AlertMessage";
 import JsBarcode from "jsbarcode";
 import printJS from "print-js";
 
+export const handlePrintError = (
+  error: string,
+  setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>,
+) => {
+  console.error(error);
+  setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+};
+
 export const printBill = async (
   billRef: React.RefObject<HTMLDivElement>,
   setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>,
@@ -9,49 +17,43 @@ export const printBill = async (
 ) => {
   try {
     if (!billRef.current) return;
-    // Check if running in Electron
+
     if (window?.electron?.ipcRenderer) {
-      // Use IPC to communicate with main process for printing
-      try {
-        const data = await window.electron.ipcRenderer.invoke("print", {
-          html: billRef.current.outerHTML,
-          deviceName: "HP LaserJet Professional P1102",
-        });
-        if (!data.success) {
-          console.error(data.error);
-          setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
-        }
-      } catch (error) {
-        console.error(error);
-        setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+      const result = await window.electron.ipcRenderer.invoke("print", {
+        html: billRef.current.outerHTML,
+        type: "bill",
+      });
+
+      if (!result.success) {
+        handlePrintError(result.error, setMsg);
+      } else if (setBillPreviewOpen) {
+        setBillPreviewOpen(false);
       }
     } else {
-      // Fallback to printJS for web browser
+      // Fallback for web browser
       printJS({
         printable: billRef.current.outerHTML,
         type: "raw-html",
         targetStyles: ["*"],
-        scanStyles: true,
-        maxWidth: 800,
       });
       if (setBillPreviewOpen) setBillPreviewOpen(false);
     }
   } catch (e) {
-    setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
+    handlePrintError(e as string, setMsg);
   }
 };
 
-export const printCode = (
+export const printCode = async (
   code: string,
   title: string,
   footer: string,
   lang: "ar" | "en",
 ) => {
-  const containter = document.createElement("div");
+  const container = document.createElement("div");
   const svg = document.createElement("svg");
   const titleSpan = document.createElement("span");
   const footerSpan = document.createElement("span");
-  containter.classList.add("barcode");
+  container.classList.add("barcode");
   titleSpan.classList.add("title");
   footerSpan.classList.add("footer");
   titleSpan.innerText = title;
@@ -62,39 +64,51 @@ export const printCode = (
     height: 35,
     fontSize: 20,
   });
-  containter.appendChild(titleSpan);
-  containter.appendChild(svg);
-  containter.appendChild(footerSpan);
-  const containterHtml = containter.outerHTML;
-  printJS({
-    printable: containterHtml,
-    type: "raw-html",
-    targetStyles: ["*"],
-    scanStyles: false,
-    style: `
-    .barcode {
-      display: flex;
-      flex-direction: column;
-      align-items: center
-      justify-content: flex-start;
+  container.appendChild(titleSpan);
+  container.appendChild(svg);
+  container.appendChild(footerSpan);
+  const containerHtml = container.outerHTML;
+
+  if (window?.electron?.ipcRenderer) {
+    const result = await window.electron.ipcRenderer.invoke("print", {
+      html: containerHtml,
+      type: "barcode",
+    });
+
+    if (!result.success) {
+      console.error(result.error);
     }
-    .barcode svg {
-      width: 100%;
-      height: 40px;
-    }
-    .barcode span {
-      display: block;
-      font-size: 12px;
-      text-align: center;
-      direction: ${lang === "ar" ? "rtl" : "ltr"};
-    }
-    .barcode .title {
-      max-height: 30px;
-    }
-    .barcode .footer {
-      max-height: 10px;
-    }
-    `,
-  });
-  svg.remove();
+  } else {
+    printJS({
+      printable: containerHtml,
+      type: "raw-html",
+      targetStyles: ["*"],
+      scanStyles: false,
+      style: `
+      .barcode {
+        display: flex;
+        flex-direction: column;
+        align-items: center
+        justify-content: flex-start;
+      }
+      .barcode svg {
+        width: 100%;
+        height: 40px;
+      }
+      .barcode span {
+        display: block;
+        font-size: 12px;
+        text-align: center;
+        direction: ${lang === "ar" ? "rtl" : "ltr"};
+      }
+      .barcode .title {
+        max-height: 30px;
+      }
+      .barcode .footer {
+        max-height: 10px;
+      }
+      `,
+    });
+    svg.remove();
+  }
 };

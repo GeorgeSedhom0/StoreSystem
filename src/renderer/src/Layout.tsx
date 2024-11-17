@@ -6,7 +6,7 @@ import { NavLink } from "react-router-dom";
 import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
-import SetBaseUrl from "./setBaseUrl";
+import SetBaseUrl from "./SetBaseUrl";
 
 const logoutWihtoutEndingShift = async () => {
   await axios.get("/switch", {
