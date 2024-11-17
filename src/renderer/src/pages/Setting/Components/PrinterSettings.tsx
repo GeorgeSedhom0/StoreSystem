@@ -22,6 +22,8 @@ const PrinterSettings = () => {
     barcodePrinter: "",
     billPrinterWidth: "",
     billPrinterHeight: "",
+    barcodePrinterWidth: "",
+    barcodePrinterHeight: "",
   });
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<AlertMsg>({
@@ -89,7 +91,7 @@ const PrinterSettings = () => {
       </Grid2>
       <Grid2 size={6}>
         <TextField
-          label="عرض الفاتورة (مم)"
+          label="عرض الفاتورة (مم)*"
           type="number"
           value={settings.billPrinterWidth}
           onChange={handleChange("billPrinterWidth")}
@@ -121,6 +123,24 @@ const PrinterSettings = () => {
           </Select>
         </FormControl>
       </Grid2>
+      <Grid2 size={6}>
+        <TextField
+          label="عرض الباركود (مم)*"
+          type="number"
+          value={settings.barcodePrinterWidth}
+          onChange={handleChange("barcodePrinterWidth")}
+          fullWidth
+        />
+      </Grid2>
+      <Grid2 size={6}>
+        <TextField
+          label="ارتفاع الباركود (مم)*"
+          type="number"
+          value={settings.barcodePrinterHeight}
+          onChange={handleChange("barcodePrinterHeight")}
+          fullWidth
+        />
+      </Grid2>
       <Grid2 size={12}>
         <LoadingButton
           variant="contained"
@@ -130,7 +150,9 @@ const PrinterSettings = () => {
             loading ||
             !settings.billPrinter ||
             !settings.barcodePrinter ||
-            !settings.billPrinterWidth
+            !settings.billPrinterWidth ||
+            !settings.barcodePrinterWidth ||
+            !settings.billPrinterHeight
           }
         >
           حفظ الإعدادات

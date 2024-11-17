@@ -156,9 +156,14 @@ const getPrinterConfig = async (type: "bill" | "barcode") => {
   return {
     deviceName:
       type === "bill" ? settings.billPrinter : settings.barcodePrinter,
-    width: type === "bill" ? Number(settings.billPrinterWidth) : 80,
+    width:
+      type === "bill"
+        ? Number(settings.billPrinterWidth) || 80
+        : Number(settings.barcodePrinterWidth) || 40,
     height:
-      type === "bill" ? Number(settings.billPrinterHeight) || undefined : 40,
+      type === "bill"
+        ? Number(settings.billPrinterHeight) || undefined
+        : Number(settings.barcodePrinterHeight) || undefined,
   };
 };
 
@@ -195,7 +200,7 @@ ipcMain.handle("print", async (_event, { html, type }) => {
           margins: { marginType: "none" },
           pageSize: {
             width: config.width * 1000,
-            height: height * 1000,
+            height: config.height ? config.height * 1000 : height * 1000,
           },
         },
         (success, error) => {
