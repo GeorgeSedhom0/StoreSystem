@@ -1,7 +1,7 @@
 import {
   FormControl,
   FormControlLabel,
-  Grid,
+  Grid2,
   InputLabel,
   MenuItem,
   Select,
@@ -104,10 +104,10 @@ const Scopes = () => {
   });
 
   return (
-    <Grid container spacing={3}>
+    <Grid2 container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
 
-      <Grid item xs={12}>
+      <Grid2 size={12}>
         <Typography variant="h5">ادارة الصلاحيات</Typography>
         <Typography variant="h6">
           يمكن اختيار اى صلاحية لتعديلها او حذفها اما لاضافة صلاحية جديدة يمكنك
@@ -117,8 +117,8 @@ const Scopes = () => {
           يرجى العلم انه ان تم حذف الصلاحيات التى يملكها احد المستخدمين فلن
           يتمكن من الوصول الى الصفحات المعنية بعد ذلك
         </Typography>
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <FormControl fullWidth>
           <InputLabel>الصلاحية</InputLabel>
           <Select
@@ -145,15 +145,15 @@ const Scopes = () => {
             <MenuItem value={-1}>اضافة صلاحية جديدة</MenuItem>
           </Select>
         </FormControl>
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <Typography variant="h6">الصفحات</Typography>
-      </Grid>
-      <Grid item container gap={3} xs={12}>
+      </Grid2>
+      <Grid2 container gap={3} size={12}>
         {selectedScope &&
           pages &&
           pages.map((page) => (
-            <Grid item key={page.id}>
+            <Grid2 key={page.id}>
               <FormControlLabel
                 control={
                   <Switch
@@ -178,10 +178,10 @@ const Scopes = () => {
                 }
                 label={page.name}
               />
-            </Grid>
+            </Grid2>
           ))}
-      </Grid>
-      <Grid item container gap={3} xs={12}>
+      </Grid2>
+      <Grid2 container gap={3} size={12}>
         <TextField
           label="اسم الصلاحية"
           value={selectedScope.name}
@@ -213,8 +213,8 @@ const Scopes = () => {
             حذف الصلاحيات
           </LoadingButton>
         )}
-      </Grid>
-    </Grid>
+      </Grid2>
+    </Grid2>
   );
 };
 

@@ -3,7 +3,7 @@ import {
   Card,
   CardActions,
   CardContent,
-  Grid,
+  Grid2,
   TextField,
   Typography,
 } from "@mui/material";
@@ -82,7 +82,7 @@ const PayInstallment = ({
   });
 
   return (
-    <Grid item xs={12}>
+    <Grid2 size={12}>
       <Card elevation={3}>
         <CardContent>
           {!selectedInstallment.ended && (
@@ -126,9 +126,7 @@ const PayInstallment = ({
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(parseFloat(e.target.value))}
-                inputProps={{
-                  inputMode: "decimal",
-                }}
+                inputMode="decimal"
               />
             </>
           )}
@@ -158,7 +156,7 @@ const PayInstallment = ({
           </Button>
         </CardActions>
       </Card>
-    </Grid>
+    </Grid2>
   );
 };
 

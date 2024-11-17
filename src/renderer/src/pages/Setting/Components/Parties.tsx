@@ -4,7 +4,7 @@ import {
   Autocomplete,
   Divider,
   FormControl,
-  Grid,
+  Grid2,
   InputLabel,
   MenuItem,
   Select,
@@ -32,18 +32,18 @@ const Parties = () => {
   } = useParties(setMsg);
 
   return (
-    <Grid item container xs={12} spacing={3}>
+    <Grid2 container size={12} spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid item xs={12}>
+      <Grid2 size={12}>
         <Typography variant="h4">العملاء والموردين</Typography>
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <Typography variant="h6">
           قم باختيار عميل او مورد لعرض و تعديل بياناته لأضافة عميل او مورد جديد
           قم باختيار اضافة جديد
         </Typography>
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <Autocomplete
           options={
             [
@@ -107,8 +107,8 @@ const Parties = () => {
             <TextField {...params} label="العملاء والموردين" />
           )}
         />
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <Divider
           flexItem
           sx={{
@@ -116,8 +116,8 @@ const Parties = () => {
               theme.palette.mode === "light" ? "#000000" : "#ffffff",
           }}
         />
-      </Grid>
-      <Grid item container xs={12} gap={3} direction="column">
+      </Grid2>
+      <Grid2 container size={12} gap={3} direction="column">
         <TextField
           label="الاسم"
           value={partyName}
@@ -181,8 +181,8 @@ const Parties = () => {
         >
           حفظ
         </LoadingButton>
-      </Grid>
-    </Grid>
+      </Grid2>
+    </Grid2>
   );
 };
 

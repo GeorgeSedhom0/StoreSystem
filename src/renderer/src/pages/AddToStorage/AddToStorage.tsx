@@ -1,7 +1,7 @@
 import {
   Button,
   Card,
-  Grid,
+  Grid2,
   InputAdornment,
   TextField,
   Typography,
@@ -52,16 +52,16 @@ const Storage = () => {
   }, [product, setProduct]);
 
   return (
-    <Grid container spacing={3}>
+    <Grid2 container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid item xs={12}>
+      <Grid2 size={12}>
         <Card
           elevation={3}
           sx={{
             p: 3,
           }}
         >
-          <Grid container direction="column" gap={3}>
+          <Grid2 container direction="column" gap={3}>
             <Typography variant="h6">اضافة منتج</Typography>
             <TextField
               label="اسم المنتج"
@@ -142,10 +142,10 @@ const Storage = () => {
             >
               اضافة
             </Button>
-          </Grid>
+          </Grid2>
         </Card>
-      </Grid>
-    </Grid>
+      </Grid2>
+    </Grid2>
   );
 };
 

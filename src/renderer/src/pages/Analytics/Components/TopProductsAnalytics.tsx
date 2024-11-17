@@ -6,7 +6,7 @@ import {
   Button,
   ButtonGroup,
   Card,
-  Grid,
+  Grid2,
   Typography,
   useTheme,
 } from "@mui/material";
@@ -148,17 +148,17 @@ const TopProductsAnalytics = () => {
   );
 
   return (
-    <Grid item xs={12}>
+    <Grid2 size={12}>
       <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
+        <Grid2 container spacing={2}>
+          <Grid2 size={12}>
             <Typography variant="h4">المنتجات الاكثر مبيعا</Typography>
             <Typography variant="body1">
               قم بتحديد الفترة لعرض الاحصائيات
             </Typography>
-          </Grid>
+          </Grid2>
 
-          <Grid item container gap={3} xs={12}>
+          <Grid2 container gap={3} size={12}>
             <LocalizationProvider
               dateAdapter={AdapterDayjs}
               adapterLocale="ar-sa"
@@ -189,25 +189,25 @@ const TopProductsAnalytics = () => {
                 disabled={isFetching}
               />
             </LocalizationProvider>
-          </Grid>
-          <Grid item xs={12}>
+          </Grid2>
+          <Grid2 size={12}>
             <ButtonGroup>
               <Button onClick={() => setRange("day")}>اليوم</Button>
               <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
               <Button onClick={() => setRange("month")}>هذا الشهر</Button>
             </ButtonGroup>
-          </Grid>
-          <Grid item xs={12}>
+          </Grid2>
+          <Grid2 size={12}>
             <EChartsReact
               option={options}
               style={{ height: 500 }}
               theme={mode}
               notMerge={true}
             />
-          </Grid>
-        </Grid>
+          </Grid2>
+        </Grid2>
       </Card>
-    </Grid>
+    </Grid2>
   );
 };
 

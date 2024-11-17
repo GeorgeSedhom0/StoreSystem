@@ -1,4 +1,4 @@
-import { Grid, TextField, Typography } from "@mui/material";
+import { Grid2, TextField, Typography } from "@mui/material";
 
 const Installments = ({
   installments,
@@ -21,7 +21,7 @@ const Installments = ({
 }) => {
   return (
     <>
-      <Grid item container xs={12} gap={3}>
+      <Grid2 container size={12} gap={3}>
         <TextField
           label="عدد الاقساط"
           type="number"
@@ -48,8 +48,8 @@ const Installments = ({
             inputMode: "decimal",
           }}
         />
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <Typography variant="h6">
           المتبقي:{" "}
           {shoppingCart.reduce(
@@ -78,7 +78,7 @@ const Installments = ({
             installments}{" "}
           جنيه
         </Typography>
-      </Grid>
+      </Grid2>
     </>
   );
 };

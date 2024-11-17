@@ -5,7 +5,7 @@ import {
   MenuItem,
   Select,
   TextField,
-  Grid,
+  Grid2,
   Typography,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
@@ -59,11 +59,11 @@ const PrinterSettings = () => {
   };
 
   return (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
+    <Grid2 container spacing={3}>
+      <Grid2 size={12}>
         <Typography variant="h6">إعدادات الطابعة</Typography>
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <FormControl fullWidth>
           <InputLabel>طابعة الفواتير</InputLabel>
           <Select
@@ -78,8 +78,8 @@ const PrinterSettings = () => {
             ))}
           </Select>
         </FormControl>
-      </Grid>
-      <Grid item xs={6}>
+      </Grid2>
+      <Grid2 size={6}>
         <TextField
           label="عرض الفاتورة (مم)"
           type="number"
@@ -87,8 +87,8 @@ const PrinterSettings = () => {
           onChange={handleChange("billPrinterWidth")}
           fullWidth
         />
-      </Grid>
-      <Grid item xs={6}>
+      </Grid2>
+      <Grid2 size={6}>
         <TextField
           label="ارتفاع الفاتورة (مم)"
           type="number"
@@ -96,8 +96,8 @@ const PrinterSettings = () => {
           onChange={handleChange("billPrinterHeight")}
           fullWidth
         />
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <FormControl fullWidth>
           <InputLabel>طابعة الباركود</InputLabel>
           <Select
@@ -112,8 +112,8 @@ const PrinterSettings = () => {
             ))}
           </Select>
         </FormControl>
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <LoadingButton
           variant="contained"
           onClick={saveSettings}
@@ -121,8 +121,8 @@ const PrinterSettings = () => {
         >
           حفظ الإعدادات
         </LoadingButton>
-      </Grid>
-    </Grid>
+      </Grid2>
+    </Grid2>
   );
 };
 

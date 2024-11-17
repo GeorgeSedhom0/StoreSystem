@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
-  Grid,
+  Grid2,
   Button,
   Card,
   TextField,
@@ -209,11 +209,11 @@ const Cash = () => {
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <LoadingScreen loading={loading} />
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
+      <Grid2 container spacing={3}>
+        <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 3 }}>
-            <Grid container spacing={3}>
-              <Grid item container xs={12} justifyContent="space-between">
+            <Grid2 container spacing={3}>
+              <Grid2 container size={12} justifyContent="space-between">
                 <Box display="flex" alignItems="center" gap={3}>
                   <TextField
                     label="المبلغ"
@@ -255,9 +255,9 @@ const Cash = () => {
                   checked={localTotal}
                   label="إظهار الإجمالى المحلي"
                 />
-              </Grid>
+              </Grid2>
 
-              <Grid item container gap={3} xs={12}>
+              <Grid2 container gap={3} size={12}>
                 <LocalizationProvider
                   dateAdapter={AdapterDayjs}
                   adapterLocale="ar-sa"
@@ -299,18 +299,18 @@ const Cash = () => {
                     minWidth: 250,
                   }}
                 />
-              </Grid>
+              </Grid2>
 
-              <Grid item xs={12}>
+              <Grid2 size={12}>
                 <ButtonGroup>
                   <Button onClick={() => setRange("shift")}>اخر شيفت</Button>
                   <Button onClick={() => setRange("day")}>اليوم</Button>
                   <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
                   <Button onClick={() => setRange("month")}>هذا الشهر</Button>
                 </ButtonGroup>
-              </Grid>
+              </Grid2>
 
-              <Grid item xs={12}>
+              <Grid2 size={12}>
                 <Autocomplete
                   options={
                     [
@@ -366,9 +366,9 @@ const Cash = () => {
                     <TextField {...params} label="اسم الطرف الثانى" />
                   )}
                 />
-              </Grid>
+              </Grid2>
               {addingParty && (
-                <Grid item container xs={12} gap={3}>
+                <Grid2 container size={12} gap={3}>
                   <TextField
                     label="اسم الطرف الثانى"
                     value={newParty.name}
@@ -406,12 +406,12 @@ const Cash = () => {
                       <MenuItem value="مورد">مورد</MenuItem>
                     </Select>
                   </FormControl>
-                </Grid>
+                </Grid2>
               )}
-            </Grid>
+            </Grid2>
           </Card>
-        </Grid>
-        <Grid item xs={12}>
+        </Grid2>
+        <Grid2 size={12}>
           <Card
             elevation={3}
             sx={{
@@ -449,8 +449,8 @@ const Cash = () => {
               )}
             />
           </Card>
-        </Grid>
-      </Grid>
+        </Grid2>
+      </Grid2>
     </>
   );
 };

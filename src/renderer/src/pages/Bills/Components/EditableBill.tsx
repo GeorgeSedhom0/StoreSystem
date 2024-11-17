@@ -3,7 +3,7 @@ import {
   Button,
   Dialog,
   DialogActions,
-  Grid,
+  Grid2,
   IconButton,
   Table,
   TableBody,
@@ -143,7 +143,7 @@ const EditableBill = ({
 
   return (
     <Dialog open={true} onClose={() => setEditing(false)} maxWidth="lg">
-      <Grid
+      <Grid2
         container
         spacing={3}
         sx={{
@@ -153,10 +153,8 @@ const EditableBill = ({
       >
         <LoadingScreen loading={loading} />
         <AlertMessage message={msg} setMessage={setMsg} />
-        <Grid item xs={12}>
-          اجمالى الفاتورة : {editedBill.total}
-        </Grid>
-        <Grid item xs={12}>
+        <Grid2 size={12}>اجمالى الفاتورة : {editedBill.total}</Grid2>
+        <Grid2 size={12}>
           <TextField
             label="الخصم"
             value={editedBill.discount}
@@ -171,8 +169,8 @@ const EditableBill = ({
               })
             }
           />
-        </Grid>
-        <Grid item xs={12}>
+        </Grid2>
+        <Grid2 size={12}>
           <TableContainer>
             <Table>
               <TableHead>
@@ -263,8 +261,8 @@ const EditableBill = ({
               </TableBody>
             </Table>
           </TableContainer>
-        </Grid>
-        <Grid item xs={12}>
+        </Grid2>
+        <Grid2 size={12}>
           <Autocomplete
             options={options}
             getOptionLabel={(option) => option.name}
@@ -310,8 +308,8 @@ const EditableBill = ({
               />
             )}
           />
-        </Grid>
-      </Grid>
+        </Grid2>
+      </Grid2>
       <DialogActions>
         <Button variant="contained" onClick={submitBill}>
           حفظ التعديلات

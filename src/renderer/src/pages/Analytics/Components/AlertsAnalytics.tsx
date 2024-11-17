@@ -1,4 +1,4 @@
-import { Card, Grid, Typography } from "@mui/material";
+import { Card, Grid2, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 
@@ -20,23 +20,23 @@ const AlertsAnalytics = () => {
   });
 
   return (
-    <Grid item xs={12}>
+    <Grid2 size={12}>
       <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
+        <Grid2 container spacing={2}>
+          <Grid2 size={12}>
             <Typography variant="h4">تحذيرات الاقتراب من الانتهاء</Typography>
             <Typography variant="body1">
               تم تصميم هذة الاشعارات للتنبيه عند اقتراب بعض المنتجات من الانتهاء
               يتم الاخذ بعين الاعتبار جميع المنتجات المباعة خلال اخر 30 يوم يرجى
               الانتباه الى الاشعارات المحددة باللون الاحمر بشكل خاص
             </Typography>
-          </Grid>
-          <Grid item container gap={3} xs={12}>
+          </Grid2>
+          <Grid2 container gap={3} size={12}>
             {data.length === 0 && (
               <Typography variant="body1">لا يوجد اشعارات</Typography>
             )}
             {data.map((alert) => (
-              <Grid item xs={12}>
+              <Grid2 size={12}>
                 <Card
                   elevation={3}
                   sx={{
@@ -53,12 +53,12 @@ const AlertsAnalytics = () => {
                     الايام المتبقية: {alert.days_left}
                   </Typography>
                 </Card>
-              </Grid>
+              </Grid2>
             ))}
-          </Grid>
-        </Grid>
+          </Grid2>
+        </Grid2>
       </Card>
-    </Grid>
+    </Grid2>
   );
 };
 

@@ -1,4 +1,4 @@
-import { Button, Card, Grid, TextField, Typography } from "@mui/material";
+import { Button, Card, Grid2, TextField, Typography } from "@mui/material";
 import { ViewContainer } from "../Shared/Utils";
 import { useCallback, useState } from "react";
 import axios from "axios";
@@ -28,7 +28,7 @@ const Login = () => {
 
   return (
     <ViewContainer>
-      <Grid
+      <Grid2
         container
         justifyContent="center"
         alignItems="center"
@@ -39,13 +39,13 @@ const Login = () => {
       >
         <AlertMessage message={msg} setMessage={setMsg} />
         <Card elevation={3} sx={{ px: 3, py: 2 }}>
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
+          <Grid2 container spacing={3}>
+            <Grid2 size={12}>
               <Typography variant="h4" align="center">
                 مرحبا مرة اخرى! يرجى تسجيل الدخول للمتابعة
               </Typography>
-            </Grid>
-            <Grid item container gap={3}>
+            </Grid2>
+            <Grid2 container gap={3} size={12}>
               <TextField
                 id="loginUserName"
                 value={username}
@@ -61,15 +61,15 @@ const Login = () => {
                 label="كلمة المرور"
                 fullWidth
               />
-            </Grid>
-            <Grid item xs={12}>
+            </Grid2>
+            <Grid2 size={12}>
               <Button onClick={login} variant="contained" id="loginBtn">
                 تسجيل الدخول
               </Button>
-            </Grid>
-          </Grid>
+            </Grid2>
+          </Grid2>
         </Card>
-      </Grid>
+      </Grid2>
     </ViewContainer>
   );
 };

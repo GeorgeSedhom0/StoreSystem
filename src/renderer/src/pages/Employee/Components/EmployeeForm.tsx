@@ -9,7 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Grid,
+  Grid2,
   TextField,
   Typography,
 } from "@mui/material";
@@ -100,8 +100,8 @@ const EmployeeForm = ({
         </Typography>
       </DialogTitle>
       <DialogContent>
-        <Grid container direction="column" spacing={3} py={3}>
-          <Grid item>
+        <Grid2 container direction="column" spacing={3} py={3}>
+          <Grid2 item>
             <TextField
               value={name}
               label="الاسم"
@@ -110,8 +110,8 @@ const EmployeeForm = ({
               onChange={(e) => setName(e.target.value)}
               fullWidth
             />
-          </Grid>
-          <Grid item>
+          </Grid2>
+          <Grid2 item>
             <TextField
               value={phone}
               label="رقم الهاتف"
@@ -120,8 +120,8 @@ const EmployeeForm = ({
               onChange={(e) => setPhone(e.target.value)}
               fullWidth
             />
-          </Grid>
-          <Grid item>
+          </Grid2>
+          <Grid2 item>
             <TextField
               value={address}
               label="Address"
@@ -130,8 +130,8 @@ const EmployeeForm = ({
               onChange={(e) => setAddress(e.target.value)}
               fullWidth
             />
-          </Grid>
-          <Grid item>
+          </Grid2>
+          <Grid2 item>
             <TextField
               type="number"
               value={salary}
@@ -144,8 +144,8 @@ const EmployeeForm = ({
                 inputMode: "decimal",
               }}
             />
-          </Grid>
-          <Grid item>
+          </Grid2>
+          <Grid2 item>
             <LocalizationProvider
               dateAdapter={AdapterDayjs}
               adapterLocale="ar-sa"
@@ -158,8 +158,8 @@ const EmployeeForm = ({
                 }}
               />
             </LocalizationProvider>
-          </Grid>
-        </Grid>
+          </Grid2>
+        </Grid2>
       </DialogContent>
       <DialogActions>
         <Button

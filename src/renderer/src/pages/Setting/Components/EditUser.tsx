@@ -1,6 +1,6 @@
 import {
   FormControl,
-  Grid,
+  Grid2,
   InputLabel,
   MenuItem,
   Select,
@@ -109,13 +109,13 @@ const UpdateUser = () => {
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
+      <Grid2 container spacing={3}>
+        <Grid2 size={12}>
           <Typography variant="h6">
             تعديل بيانات المستخدم {selectedUser?.username}
           </Typography>
-        </Grid>
-        <Grid item xs={12}>
+        </Grid2>
+        <Grid2 size={12}>
           <FormControl fullWidth>
             <InputLabel>المستخدم</InputLabel>
             <Select
@@ -136,11 +136,11 @@ const UpdateUser = () => {
               ))}
             </Select>
           </FormControl>
-        </Grid>
+        </Grid2>
 
         {selectedUser && (
           <>
-            <Grid item container gap={3}>
+            <Grid2 container gap={3}>
               <TextField
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -181,8 +181,8 @@ const UpdateUser = () => {
                   ))}
                 </Select>
               </FormControl>
-            </Grid>
-            <Grid item xs={12}>
+            </Grid2>
+            <Grid2 size={12}>
               <LoadingButton
                 variant="contained"
                 onClick={() =>
@@ -199,10 +199,10 @@ const UpdateUser = () => {
               >
                 حفظ التعديلات
               </LoadingButton>
-            </Grid>
+            </Grid2>
           </>
         )}
-      </Grid>
+      </Grid2>
     </>
   );
 };

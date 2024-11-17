@@ -2,7 +2,7 @@ import {
   Autocomplete,
   Button,
   Card,
-  Grid,
+  Grid2,
   TableCell,
   TableContainer,
   TableHead,
@@ -137,15 +137,15 @@ const Buy = () => {
   );
 
   return (
-    <Grid container spacing={3}>
+    <Grid2 container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
 
       <LoadingScreen loading={isProductsLoading} />
 
-      <Grid item xs={12}>
+      <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 3 }}>
-          <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} sm={4}>
+          <Grid2 container spacing={3} alignItems="center">
+            <Grid2 size={12}>
               <Typography variant="h6">
                 اختار منتج ليتم اضافته الى الفاتورة
               </Typography>
@@ -153,9 +153,9 @@ const Buy = () => {
                 يمكنك اضافة منتج الى الفاتورة و جعل الكمية 0 لتغير سعر الشراء او
                 البيع للمنتج
               </Typography>
-            </Grid>
+            </Grid2>
 
-            <Grid item xs={12} sm={3}>
+            <Grid2 size={6}>
               <Button
                 variant="contained"
                 onClick={() => submitBill(shoppingCart, 0)}
@@ -164,29 +164,28 @@ const Buy = () => {
               >
                 اضافة فاتورة
               </Button>
-            </Grid>
+            </Grid2>
 
-            <Grid item xs={12} sm={3}>
+            <Grid2 size={6}>
               <Typography variant="h6" align="center">
-                الاجمالي
-              </Typography>
-              <Typography variant="body1" align="center">
+                الاجمالي:{" "}
                 {shoppingCart.reduce(
                   (acc, item) => acc + item.wholesale_price * item.quantity,
                   0,
                 )}{" "}
                 جنيه
               </Typography>
-            </Grid>
+              <Typography variant="body1" align="center"></Typography>
+            </Grid2>
 
-            <Grid item xs={12}>
+            <Grid2 size={12}>
               <ProductAutocomplete
                 onProductSelect={addToCart}
                 products={products}
                 setMsg={setMsg}
               />
-            </Grid>
-            <Grid item xs={12}>
+            </Grid2>
+            <Grid2 size={12}>
               <Autocomplete
                 options={
                   [
@@ -227,9 +226,9 @@ const Buy = () => {
                   <TextField {...params} label="اسم المورد" />
                 )}
               />
-            </Grid>
+            </Grid2>
             {addingParty && (
-              <Grid item container xs={12} gap={3}>
+              <Grid2 container size={12} gap={3}>
                 <TextField
                   label="اسم المورد"
                   value={newParty.name}
@@ -251,13 +250,13 @@ const Buy = () => {
                     setNewParty({ ...newParty, address: e.target.value })
                   }
                 />
-              </Grid>
+              </Grid2>
             )}
-          </Grid>
+          </Grid2>
         </Card>
-      </Grid>
+      </Grid2>
 
-      <Grid item xs={12}>
+      <Grid2 size={12}>
         <Card elevation={3}>
           <TableContainer
             sx={{
@@ -297,8 +296,8 @@ const Buy = () => {
             </Table>
           </TableContainer>
         </Card>
-      </Grid>
-    </Grid>
+      </Grid2>
+    </Grid2>
   );
 };
 

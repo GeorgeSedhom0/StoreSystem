@@ -5,7 +5,7 @@ import {
   Button,
   Card,
   FormControlLabel,
-  Grid,
+  Grid2,
   Switch,
   TextField,
   Typography,
@@ -131,11 +131,11 @@ const Products = () => {
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
+      <Grid2 container spacing={3}>
+        <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 2 }}>
-            <Grid container spacing={3}>
-              <Grid item container xs={12} justifyContent="space-between">
+            <Grid2 container spacing={3}>
+              <Grid2 container size={12} justifyContent="space-between">
                 <Typography variant="h4">المنتجات</Typography>
                 <FormControlLabel
                   control={
@@ -146,8 +146,8 @@ const Products = () => {
                   }
                   label="عرض المنتجات المحذوفة"
                 />
-              </Grid>
-              <Grid item xs={12}>
+              </Grid2>
+              <Grid2 size={12}>
                 <Typography variant="subtitle1">
                   عند الانتهاء من التعديل يرجى الضغط على "عرض المعدلة فقط"
                   للتأكد من الحفظ بشكل صحيح
@@ -166,9 +166,9 @@ const Products = () => {
                     صفحة الشراء
                   </Link>
                 </Typography>
-              </Grid>
+              </Grid2>
 
-              <Grid item container xs={12} gap={3}>
+              <Grid2 container size={12} gap={3}>
                 <Button onClick={submitProducts} variant="contained">
                   حفظ التعديلات
                 </Button>
@@ -181,21 +181,21 @@ const Products = () => {
                 <Button onClick={getInventory} variant="contained">
                   تحميل جرد المنتجات
                 </Button>
-              </Grid>
+              </Grid2>
 
-              <Grid item xs={12}>
+              <Grid2 size={12}>
                 <TextField
                   label="بحث"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   fullWidth
                 />
-              </Grid>
-            </Grid>
+              </Grid2>
+            </Grid2>
           </Card>
-        </Grid>
+        </Grid2>
 
-        <Grid item xs={12}>
+        <Grid2 size={12}>
           <Card
             elevation={3}
             sx={{
@@ -222,8 +222,8 @@ const Products = () => {
               )}
             />
           </Card>
-        </Grid>
-      </Grid>
+        </Grid2>
+      </Grid2>
     </>
   );
 };

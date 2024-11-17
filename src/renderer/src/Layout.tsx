@@ -1,4 +1,4 @@
-import { AppBar, Button, Toolbar, Grid } from "@mui/material";
+import { AppBar, Button, Toolbar, Grid2 } from "@mui/material";
 import { Profile, ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useContext, useEffect } from "react";
@@ -66,11 +66,10 @@ const Layout = ({
         }}
       >
         <Toolbar>
-          <Grid container justifyContent="space-between">
-            <Grid
-              item
+          <Grid2 container justifyContent="space-between" width="100%">
+            <Grid2
               container
-              gap={5}
+              gap={3}
               sx={{
                 ".active > Button": {
                   borderBottom: 1,
@@ -88,11 +87,10 @@ const Layout = ({
                     <Button>{page}</Button>
                   </NavLink>
                 ))}
-            </Grid>
-            <Grid
-              item
+            </Grid2>
+            <Grid2
               container
-              gap={5}
+              gap={2}
               sx={{
                 width: "fit-content",
               }}
@@ -108,8 +106,8 @@ const Layout = ({
               >
                 +
               </Button>
-            </Grid>
-          </Grid>
+            </Grid2>
+          </Grid2>
         </Toolbar>
       </AppBar>
       <ViewContainer

@@ -1,17 +1,17 @@
-import { Grid } from "@mui/material";
+import { Grid2 } from "@mui/material";
 import UpdateUser from "./EditUser";
 import SignUp from "./SignUp";
 
 const Users = () => {
   return (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
+    <Grid2 container spacing={3}>
+      <Grid2 size={12}>
         <SignUp />
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <UpdateUser />
-      </Grid>
-    </Grid>
+      </Grid2>
+    </Grid2>
   );
 };
 

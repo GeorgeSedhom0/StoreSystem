@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Grid, Card, Typography, Button } from "@mui/material";
+import { Grid2, Card, Typography, Button } from "@mui/material";
 import { themes } from "../../../themes";
 
 const Themes = () => {
@@ -13,9 +13,9 @@ const Themes = () => {
   }, [selectedTheme]);
 
   return (
-    <Grid container spacing={2}>
+    <Grid2 container spacing={2}>
       {themes.map((theme) => (
-        <Grid item xs={6} key={theme.name}>
+        <Grid2 size={6} key={theme.name}>
           <Card
             style={{
               backgroundColor: theme.background,
@@ -50,9 +50,9 @@ const Themes = () => {
               Select
             </Button>
           </Card>
-        </Grid>
+        </Grid2>
       ))}
-    </Grid>
+    </Grid2>
   );
 };
 

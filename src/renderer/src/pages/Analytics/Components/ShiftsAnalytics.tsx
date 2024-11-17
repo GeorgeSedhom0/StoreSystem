@@ -7,7 +7,7 @@ import {
   ButtonGroup,
   Card,
   FormControl,
-  Grid,
+  Grid2,
   InputLabel,
   MenuItem,
   Select,
@@ -164,10 +164,10 @@ const ShiftsAnalytics = () => {
   );
 
   return (
-    <Grid item xs={12}>
+    <Grid2 size={12}>
       <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
+        <Grid2 container spacing={2}>
+          <Grid2 size={12}>
             <Typography variant="h4">احصائيات الشفتات</Typography>
             <Typography variant="body1">
               قم بتحديد الفترة لعرض الاحصائيات
@@ -175,9 +175,9 @@ const ShiftsAnalytics = () => {
             <Typography variant="body1">
               الشيفت الحالى غير مضمون فى التقرير حتى اغلاقة
             </Typography>
-          </Grid>
+          </Grid2>
 
-          <Grid item container gap={3} xs={12}>
+          <Grid2 container gap={3} size={12}>
             <LocalizationProvider
               dateAdapter={AdapterDayjs}
               adapterLocale="ar-sa"
@@ -232,28 +232,28 @@ const ShiftsAnalytics = () => {
                 <MenuItem value="return">مرتجع</MenuItem>
               </Select>
             </FormControl>
-          </Grid>
-          <Grid item xs={12}>
+          </Grid2>
+          <Grid2 size={12}>
             <ButtonGroup>
               <Button onClick={() => setRange("day")}>اليوم</Button>
               <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
               <Button onClick={() => setRange("month")}>هذا الشهر</Button>
             </ButtonGroup>
-          </Grid>
-          <Grid item xs={12}>
+          </Grid2>
+          <Grid2 size={12}>
             الأجمالى: {data.reduce((acc, { total }) => acc + total, 0)}
-          </Grid>
-          <Grid item xs={12}>
+          </Grid2>
+          <Grid2 size={12}>
             <EChartsReact
               option={options}
               style={{ height: 500 }}
               theme={mode}
               notMerge={true}
             />
-          </Grid>
-        </Grid>
+          </Grid2>
+        </Grid2>
       </Card>
-    </Grid>
+    </Grid2>
   );
 };
 

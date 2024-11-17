@@ -5,7 +5,7 @@ import {
   Card,
   FormControl,
   FormControlLabel,
-  Grid,
+  Grid2,
   InputLabel,
   MenuItem,
   Select,
@@ -263,7 +263,7 @@ const Sell = () => {
   }, [shoppingCart, discount, submitBill]);
 
   return (
-    <Grid container spacing={3}>
+    <Grid2 container spacing={3}>
       <BillView
         bill={lastBill}
         open={lastBillOpen}
@@ -281,10 +281,10 @@ const Sell = () => {
         shift={shift}
       />
 
-      <Grid item xs={12}>
+      <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 3 }}>
-          <Grid container spacing={3} alignItems="center">
-            <Grid item container xs={12} justifyContent="space-between">
+          <Grid2 container spacing={3} alignItems="center">
+            <Grid2 container size={12} justifyContent="space-between">
               <Button variant="contained" onClick={() => setShiftDialog(true)}>
                 الشيفتات
               </Button>
@@ -300,9 +300,9 @@ const Sell = () => {
                 }}
                 label="اظهار العملاء"
               />
-            </Grid>
+            </Grid2>
 
-            <Grid item xs={12} sm={3}>
+            <Grid2 size={3}>
               <FormControl fullWidth>
                 <InputLabel>نوع الفاتورة</InputLabel>
                 <Select
@@ -320,9 +320,9 @@ const Sell = () => {
                   <MenuItem value="installment">تقسيط</MenuItem>
                 </Select>
               </FormControl>
-            </Grid>
+            </Grid2>
 
-            <Grid item xs={12} sm={3}>
+            <Grid2 size={3}>
               <TextField
                 label="الخصم"
                 type="number"
@@ -331,13 +331,11 @@ const Sell = () => {
                 fullWidth
                 size="small"
                 disabled={["return", "installment"].includes(billPayment)}
-                inputProps={{
-                  inputMode: "decimal",
-                }}
+                inputMode="decimal"
               />
-            </Grid>
+            </Grid2>
 
-            <Grid item xs={12} sm={3}>
+            <Grid2 size={3}>
               <ButtonGroup fullWidth>
                 <Button
                   variant="contained"
@@ -363,20 +361,19 @@ const Sell = () => {
                   حفظ و طباعة الفاتورة (F1)
                 </Button>
               </ButtonGroup>
-            </Grid>
+            </Grid2>
 
-            <Grid item xs={12} sm={3}>
+            <Grid2 size={3}>
               <Typography variant="h6" align="center">
-                الاجمالي
-              </Typography>
-              <Typography variant="body1" align="center">
+                الاجمالي{": "}
                 {shoppingCart.reduce(
                   (acc, item) => acc + item.price * item.quantity,
                   0,
                 ) - discount}{" "}
                 جنيه
               </Typography>
-            </Grid>
+              <Typography variant="body1" align="center"></Typography>
+            </Grid2>
             {billPayment === "installment" && (
               <Installments
                 installments={installments}
@@ -390,15 +387,15 @@ const Sell = () => {
               />
             )}
 
-            <Grid item xs={12}>
+            <Grid2 size={12}>
               <ProductAutocomplete
                 onProductSelect={addToCart}
                 products={products}
                 setMsg={setMsg}
               />
-            </Grid>
+            </Grid2>
             {usingThirdParties && (
-              <Grid item xs={12}>
+              <Grid2 size={12}>
                 <Autocomplete
                   options={
                     [
@@ -439,11 +436,11 @@ const Sell = () => {
                     <TextField {...params} label="اسم العميل" />
                   )}
                 />
-              </Grid>
+              </Grid2>
             )}
 
             {addingParty && (
-              <Grid item container xs={12} gap={3}>
+              <Grid2 container size={12} gap={3}>
                 <TextField
                   label="اسم العميل"
                   value={newParty.name}
@@ -465,18 +462,18 @@ const Sell = () => {
                     setNewParty({ ...newParty, address: e.target.value })
                   }
                 />
-              </Grid>
+              </Grid2>
             )}
             {partyId && (
-              <Grid item container xs={12} gap={3}>
+              <Grid2 container size={12} gap={3}>
                 <PartyDetails partyId={partyId} />
-              </Grid>
+              </Grid2>
             )}
-          </Grid>
+          </Grid2>
         </Card>
-      </Grid>
+      </Grid2>
 
-      <Grid item xs={12}>
+      <Grid2 size={12}>
         <Card elevation={3}>
           <TableContainer
             sx={{
@@ -515,8 +512,8 @@ const Sell = () => {
             </Table>
           </TableContainer>
         </Card>
-      </Grid>
-    </Grid>
+      </Grid2>
+    </Grid2>
   );
 };
 

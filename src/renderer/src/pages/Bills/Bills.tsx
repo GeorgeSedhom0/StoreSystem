@@ -1,6 +1,6 @@
 import {
   Card,
-  Grid,
+  Grid2,
   Typography,
   FormControl,
   InputLabel,
@@ -175,16 +175,16 @@ const Bills = () => {
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
+      <Grid2 container spacing={3}>
+        <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 2 }}>
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <Grid container xs={12} justifyContent="space-between">
-                  <Grid item>
+            <Grid2 container spacing={3}>
+              <Grid2 size={12}>
+                <Grid2 container size={12} justifyContent="space-between">
+                  <Grid2 item>
                     <Typography variant="h4">الفواتير</Typography>
-                  </Grid>
-                  <Grid item>
+                  </Grid2>
+                  <Grid2 item>
                     <FormControlLabel
                       control={<Switch id="showExpandedBillSwitch" />}
                       checked={showExpandedBill}
@@ -195,13 +195,13 @@ const Bills = () => {
                         setShowExpandedBill(isChecked);
                       }}
                     />
-                  </Grid>
-                </Grid>
+                  </Grid2>
+                </Grid2>
                 <Typography variant="body1">
                   قم بتحديد الفترة لعرض الفواتير
                 </Typography>
-              </Grid>
-              <Grid item container gap={3} xs={12}>
+              </Grid2>
+              <Grid2 container gap={3} size={12}>
                 <LocalizationProvider
                   dateAdapter={AdapterDayjs}
                   adapterLocale="ar-sa"
@@ -276,16 +276,16 @@ const Bills = () => {
                     <TextField {...params} label="بحث بالمنتج" />
                   )}
                 />
-              </Grid>
-              <Grid item xs={12}>
+              </Grid2>
+              <Grid2 size={12}>
                 <ButtonGroup>
                   <Button onClick={() => setRange("shift")}>اخر شيفت</Button>
                   <Button onClick={() => setRange("day")}>اليوم</Button>
                   <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
                   <Button onClick={() => setRange("month")}>هذا الشهر</Button>
                 </ButtonGroup>
-              </Grid>
-              <Grid item xs={12}>
+              </Grid2>
+              <Grid2 size={12}>
                 <Autocomplete
                   options={parties}
                   onChange={(_, value) => {
@@ -317,17 +317,17 @@ const Bills = () => {
                     return filtered;
                   }}
                 />
-              </Grid>
+              </Grid2>
 
-              <Grid item xs={12}>
+              <Grid2 size={12}>
                 <Typography variant="body2">
                   المجموع: {total.toFixed(2)}
                 </Typography>
-              </Grid>
-            </Grid>
+              </Grid2>
+            </Grid2>
           </Card>
-        </Grid>
-        <Grid item xs={12}>
+        </Grid2>
+        <Grid2 size={12}>
           <Card
             elevation={3}
             sx={{
@@ -346,8 +346,8 @@ const Bills = () => {
               }}
             />
           </Card>
-        </Grid>
-      </Grid>
+        </Grid2>
+      </Grid2>
     </>
   );
 };

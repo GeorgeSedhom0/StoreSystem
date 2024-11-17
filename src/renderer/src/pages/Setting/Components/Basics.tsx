@@ -1,5 +1,5 @@
 import { LoadingButton } from "@mui/lab";
-import { ButtonGroup, Grid, TextField, Typography } from "@mui/material";
+import { ButtonGroup, Grid2, TextField, Typography } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import axios from "axios";
@@ -122,12 +122,12 @@ const Basics = () => {
   }, [storeInfo]);
 
   return (
-    <Grid item container xs={12} spacing={3}>
+    <Grid2 container size={12} spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid item xs={12}>
+      <Grid2 size={12}>
         <Typography variant="h4">الاعدادات الاساسية</Typography>
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <ButtonGroup>
           <LoadingButton loading={loading} onClick={backUp}>
             نسخ احطياتى
@@ -136,11 +136,11 @@ const Basics = () => {
             استعادة
           </LoadingButton>
         </ButtonGroup>
-      </Grid>
-      <Grid item xs={12}>
+      </Grid2>
+      <Grid2 size={12}>
         <Typography variant="h6">معلومات تظهر فى الفاتورة</Typography>
-      </Grid>
-      <Grid item container xs={12} gap={3}>
+      </Grid2>
+      <Grid2 container size={12} gap={3}>
         <TextField
           size="small"
           label="الاسم"
@@ -166,8 +166,8 @@ const Basics = () => {
         >
           حفظ
         </LoadingButton>
-      </Grid>
-    </Grid>
+      </Grid2>
+    </Grid2>
   );
 };
 

@@ -1,6 +1,6 @@
 import {
   FormControl,
-  Grid,
+  Grid2,
   InputLabel,
   MenuItem,
   Select,
@@ -75,11 +75,11 @@ const SignUp = () => {
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
+      <Grid2 container spacing={3}>
+        <Grid2 size={12}>
           <Typography variant="h6">تسجيل مستخدم جديد</Typography>
-        </Grid>
-        <Grid item container gap={3}>
+        </Grid2>
+        <Grid2 container gap={3}>
           <TextField
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -120,8 +120,8 @@ const SignUp = () => {
               ))}
             </Select>
           </FormControl>
-        </Grid>
-        <Grid item xs={12}>
+        </Grid2>
+        <Grid2 size={12}>
           <LoadingButton
             variant="contained"
             onClick={() =>
@@ -138,8 +138,8 @@ const SignUp = () => {
           >
             تسجيل المستخدم
           </LoadingButton>
-        </Grid>
-      </Grid>
+        </Grid2>
+      </Grid2>
     </>
   );
 };

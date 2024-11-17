@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { TableVirtuoso } from "react-virtuoso";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Grid,
+  Grid2,
   Card,
   Typography,
   Button,
@@ -106,40 +106,47 @@ export default function Employee() {
   }, [selectedEmployee]);
 
   return (
-    <>
-      <Button
-        id="addEmployeeBtn"
-        variant="contained"
-        onClick={() => handleSelectEmployee(null, true)}
-      >
-        إضافة موظف جديد
-      </Button>
+    <Grid2 container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid container spacing={3} sx={{ marginTop: "10px" }}>
-        <Grid item xs={12}>
-          <Card
-            elevation={3}
+      <Grid2 size={12}>
+        <Card elevation={3} sx={{ p: 3 }}>
+          <Typography variant="h6">الموظفين</Typography>
+          <Typography variant="subtitle1">
+            يمكنك اضافة او تعديل او حذف الموظفين
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => handleSelectEmployee(null, true)}
             sx={{
-              position: "relative",
-              height: 600,
+              mt: 2,
             }}
           >
-            <LoadingScreen loading={isLoading} />
-            <TableVirtuoso
-              fixedHeaderContent={fixedHeaderContent}
-              components={VirtuosoTableComponents}
-              data={employee}
-              itemContent={(_, employee) => (
-                <EmployeeRow
-                  employee={employee}
-                  selectEmployee={handleSelectEmployee}
-                />
-              )}
-            />
-          </Card>
-        </Grid>
-      </Grid>
-
+            إضافة موظف جديد
+          </Button>
+        </Card>
+      </Grid2>
+      <Grid2 size={12}>
+        <Card
+          elevation={3}
+          sx={{
+            position: "relative",
+            height: 600,
+          }}
+        >
+          <LoadingScreen loading={isLoading} />
+          <TableVirtuoso
+            fixedHeaderContent={fixedHeaderContent}
+            components={VirtuosoTableComponents}
+            data={employee}
+            itemContent={(_, employee) => (
+              <EmployeeRow
+                employee={employee}
+                selectEmployee={handleSelectEmployee}
+              />
+            )}
+          />
+        </Card>
+      </Grid2>
       <Dialog open={isEditModalOpen} onClose={closeEditModal}>
         <EmployeeForm
           employee={selectedEmployee}
@@ -169,11 +176,10 @@ export default function Employee() {
           </Typography>
         </DialogTitle>
         <DialogContent>
-          <Grid container columnGap={2} sx={{ marginTop: "20px" }}>
+          <Grid2 container columnGap={2}>
             <Button
               color="error"
               variant="contained"
-              id="employeeDelConfirmBtn"
               onClick={handleDelEmployee}
             >
               تاكيد
@@ -181,9 +187,9 @@ export default function Employee() {
             <Button color="info" variant="contained" onClick={closeDeleteModal}>
               إلغاء
             </Button>
-          </Grid>
+          </Grid2>
         </DialogContent>
       </Dialog>
-    </>
+    </Grid2>
   );
 }

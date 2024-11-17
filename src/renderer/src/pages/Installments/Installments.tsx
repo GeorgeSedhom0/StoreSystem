@@ -3,7 +3,7 @@ import {
   Card,
   CardActions,
   CardContent,
-  Grid,
+  Grid2,
   Paper,
   Table,
   TableBody,
@@ -75,19 +75,19 @@ const Installments = () => {
 
   return (
     <>
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
+      <Grid2 container spacing={2}>
+        <Grid2 size={12}>
           <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
             <LoadingScreen loading={isFetching && isPlaceholderData} />
             <AlertMessage message={msg} setMessage={setMsg} />
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
+            <Grid2 container spacing={2}>
+              <Grid2 size={12}>
                 <Typography variant="h4">الاقساط</Typography>
                 <Typography variant="body1">
                   قم بالتحكم في الاقساط الخاصة بالمتجر
                 </Typography>
-              </Grid>
-              <Grid item xs={12}>
+              </Grid2>
+              <Grid2 size={12}>
                 <Button
                   variant="contained"
                   color="primary"
@@ -99,12 +99,12 @@ const Installments = () => {
                     ? "اخفاء الاقساط المنتهية"
                     : "عرض الاقساط المنتهية"}
                 </Button>
-              </Grid>
-              <Grid
+              </Grid2>
+              <Grid2
                 item
                 container
                 gap={3}
-                xs={12}
+                size={12}
                 sx={{
                   maxHeight: "80vh",
                   overflowY: "auto",
@@ -126,7 +126,7 @@ const Installments = () => {
                   />
                 ) : (
                   data.map((installment) => (
-                    <Grid item xs={12}>
+                    <Grid2 size={12}>
                       <Card elevation={3}>
                         <CardContent>
                           <Typography variant="h4">
@@ -190,14 +190,14 @@ const Installments = () => {
                           </Button>
                         </CardActions>
                       </Card>
-                    </Grid>
+                    </Grid2>
                   ))
                 )}
-              </Grid>
-            </Grid>
+              </Grid2>
+            </Grid2>
           </Card>
-        </Grid>
-      </Grid>
+        </Grid2>
+      </Grid2>
     </>
   );
 };

@@ -4,7 +4,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
-  Grid,
+  Grid2,
   TextField,
 } from "@mui/material";
 import { Employee } from "../../../utils/types";
@@ -67,7 +67,7 @@ const PaySalary = ({
       <DialogTitle>دفع الراتب</DialogTitle>
       <DialogContent>
         <FormControl>
-          <Grid container gap={2} direction="column" mt={2}>
+          <Grid2 container gap={2} direction="column" mt={2}>
             <TextField
               label="الحافذ"
               type="number"
@@ -101,7 +101,7 @@ const PaySalary = ({
                 openTo="month"
               />
             </LocalizationProvider>
-          </Grid>
+          </Grid2>
         </FormControl>
       </DialogContent>
       <DialogActions>
