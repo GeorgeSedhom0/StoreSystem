@@ -9,6 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
+import AlertMessage, { AlertMsg } from "@renderer/pages/Shared/AlertMessage";
 
 const PrinterSettings = () => {
   const [printers, setPrinters] = useState<
@@ -19,10 +20,14 @@ const PrinterSettings = () => {
   const [settings, setSettings] = useState({
     billPrinter: "",
     barcodePrinter: "",
-    billPrinterWidth: "80",
+    billPrinterWidth: "",
     billPrinterHeight: "",
   });
   const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState<AlertMsg>({
+    type: "",
+    text: "",
+  });
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -48,9 +53,11 @@ const PrinterSettings = () => {
     try {
       await window.electron.ipcRenderer.invoke("savePrinterSettings", settings);
       // Show success message
+      setMsg({ type: "success", text: "تم حفظ الإعدادات بنجاح" });
     } catch (error) {
       // Show error message
       console.error("Failed to save settings:", error);
+      setMsg({ type: "error", text: "فشل حفظ الإعدادات" });
     }
   };
 
@@ -60,6 +67,7 @@ const PrinterSettings = () => {
 
   return (
     <Grid2 container spacing={3}>
+      <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 size={12}>
         <Typography variant="h6">إعدادات الطابعة</Typography>
       </Grid2>
@@ -118,6 +126,12 @@ const PrinterSettings = () => {
           variant="contained"
           onClick={saveSettings}
           loading={loading}
+          disabled={
+            loading ||
+            !settings.billPrinter ||
+            !settings.barcodePrinter ||
+            !settings.billPrinterWidth
+          }
         >
           حفظ الإعدادات
         </LoadingButton>

@@ -1,30 +1,25 @@
-import { app } from "electron";
+import { app, dialog } from "electron";
 import tree from "tree-kill";
 import path from "path";
 import { is } from "@electron-toolkit/utils";
 import { ChildProcess, spawn } from "child_process";
-import { writeFileSync, readFileSync, existsSync } from "fs";
+import { existsSync } from "fs";
+import { settingsManager } from "./settings_manager";
 
 export class ServerManager {
   private serverProcess: ChildProcess | null = null;
   private serverPid: number | null = null;
 
   constructor() {
-    // create file settings.json if it doesn't exist
-    if (!existsSync("settings.json")) {
-      writeFileSync("settings.json", "{}");
-    } else {
-      const settings = JSON.parse(readFileSync("settings.json", "utf-8"));
-      if (settings.serverPid) {
-        this.serverPid = settings.serverPid;
-      }
+    // Check for existing serverPid in settings
+    const savedPid = settingsManager.getSetting("serverPid");
+    if (savedPid) {
+      this.serverPid = savedPid;
     }
   }
 
   private getServerPath(): string {
-    const rootDir = is.dev
-      ? process.cwd()
-      : path.join(app.getPath("exe"), "..");
+    const rootDir = is.dev ? process.cwd() : app.getAppPath();
 
     const sslPath = path.join(rootDir, "server", "localhost.pem");
     const serverFile = existsSync(sslPath)
@@ -38,36 +33,47 @@ export class ServerManager {
     if (this.serverProcess) return;
     if (this.serverPid) return;
 
-    const serverPath = this.getServerPath();
-    console.log("Server path:", serverPath);
+    try {
+      const serverPath = this.getServerPath();
+      console.log("Server path:", serverPath);
 
-    const serverDir = path.dirname(serverPath);
+      // Use cmd.exe with proper path escaping
+      this.serverProcess = spawn("cmd.exe", ["/c", `"${serverPath}"`], {
+        windowsHide: true,
+        cwd: path.dirname(serverPath),
+        shell: true,
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: "1",
+        },
+      });
 
-    this.serverProcess = spawn("cmd.exe", ["/c", serverPath], {
-      detached: true, // Change to true to create process group
-      windowsHide: true,
-      cwd: serverDir,
-      env: {
-        ...process.env,
-        PYTHONUNBUFFERED: "1",
-      },
-    });
+      this.serverPid = this.serverProcess.pid || null;
 
-    this.serverPid = this.serverProcess.pid || null;
+      this.serverProcess.on("error", (err) => {
+        console.error("Failed to start server:", err);
+      });
 
-    this.serverProcess.stdout?.on("data", (data) => {
-      console.log(`Server stdout: ${data}`);
-    });
+      this.serverProcess.stdout?.on("data", (data) => {
+        console.log(`Server stdout: ${data}`);
+      });
 
-    this.serverProcess.stderr?.on("data", (data) => {
-      console.error(`Server stderr: ${data}`);
-    });
+      this.serverProcess.stderr?.on("data", (data) => {
+        console.error(`Server stderr: ${data}`);
+      });
 
-    if (this.serverPid) {
-      // Save the serverPid to settings.json
-      const settings = JSON.parse(readFileSync("settings.json", "utf-8"));
-      settings.serverPid = this.serverPid;
-      writeFileSync("settings.json", JSON.stringify(settings));
+      if (this.serverPid) {
+        // Save the serverPid using settings manager
+        settingsManager.setSetting("serverPid", this.serverPid);
+      }
+    } catch (error) {
+      console.error("Error spawning server process:", error);
+      // show dialog with error message
+      dialog.showErrorBox(
+        "Application Error",
+        `Failed to start the server. The application will now quit.
+          ${error}`,
+      );
     }
   }
 
@@ -85,10 +91,8 @@ export class ServerManager {
       } catch (error) {
         console.error("Error stopping server:", error);
       }
-      // Remove the serverPid from settings.json
-      const settings = JSON.parse(readFileSync("settings.json", "utf-8"));
-      delete settings.serverPid;
-      writeFileSync("settings.json", JSON.stringify(settings));
+      // Remove the serverPid from settings
+      settingsManager.setSetting("serverPid", null);
     }
   }
 }

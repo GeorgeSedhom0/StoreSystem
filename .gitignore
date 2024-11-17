@@ -13,5 +13,4 @@ dist
 out
 .DS_Store
 *.log*
-settings.json
-printerSettings.json
+/settings

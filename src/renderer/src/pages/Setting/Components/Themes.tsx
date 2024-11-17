@@ -3,13 +3,30 @@ import { Grid2, Card, Typography, Button } from "@mui/material";
 import { themes } from "../../../themes";
 
 const Themes = () => {
-  const [selectedTheme, setSelectedTheme] = useState(() => {
-    const savedTheme = localStorage.getItem("themeName");
-    return savedTheme ? savedTheme : themes[0].name;
-  });
+  const [selectedTheme, setSelectedTheme] = useState(themes[1].name!);
 
   useEffect(() => {
-    localStorage.setItem("themeName", selectedTheme);
+    const getThemeName = async () => {
+      const themeName = await window.electron.ipcRenderer.invoke(
+        "get",
+        "themeName",
+      );
+      if (themeName) setSelectedTheme(themeName);
+    };
+
+    getThemeName();
+  }, []);
+
+  useEffect(() => {
+    const setTheme = async () => {
+      await window.electron.ipcRenderer.invoke(
+        "set",
+        "themeName",
+        selectedTheme,
+      );
+    };
+
+    setTheme();
   }, [selectedTheme]);
 
   return (

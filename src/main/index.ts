@@ -1,9 +1,9 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
 import { ServerManager } from "./server_manager";
-import { writeFileSync, readFileSync, existsSync } from "fs";
+import { settingsManager } from "./settings_manager";
 
 function createChildWindow(url: string): void {
   const childWindow = new BrowserWindow({
@@ -33,76 +33,64 @@ function createChildWindow(url: string): void {
 let serverManager: ServerManager;
 
 function createWindow(): void {
-  // Run the server before creating the window
   serverManager = new ServerManager();
-  serverManager.startServer();
+  try {
+    serverManager.startServer();
+    // Create the browser window.
+    const mainWindow = new BrowserWindow({
+      width: 900,
+      height: 670,
+      show: false,
+      autoHideMenuBar: true,
+      ...(process.platform === "linux" ? { icon } : {}),
+      webPreferences: {
+        preload: join(__dirname, "../preload/index.js"),
+        sandbox: false,
+      },
+    });
 
-  // create file settings.json if it doesn't exist
-  if (!existsSync("settings.json")) {
-    writeFileSync("settings.json", "{}");
-  }
+    mainWindow.on("ready-to-show", async () => {
+      // Check that localhost:8000 aka the server is running before showing the window
+      mainWindow.maximize();
+      mainWindow.show();
+    });
 
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
-    show: false,
-    autoHideMenuBar: true,
-    ...(process.platform === "linux" ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
-      sandbox: false,
-    },
-  });
-
-  mainWindow.on("ready-to-show", async () => {
-    // Check that localhost:8000 aka the server is running before showing the window
-    mainWindow.maximize();
-    mainWindow.show();
-  });
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    // Check if URL is external (you can customize this check)
-    if (
-      details.url.startsWith("http://localhost:5173") ||
-      details.url.startsWith("https://localhost:5173")
-    ) {
-      // For external URLs, open in new Electron window
-      createChildWindow(details.url);
+    mainWindow.webContents.setWindowOpenHandler((details) => {
+      // Check if URL is external (you can customize this check)
+      if (
+        details.url.startsWith("http://localhost:5173") ||
+        details.url.startsWith("https://localhost:5173")
+      ) {
+        // For external URLs, open in new Electron window
+        createChildWindow(details.url);
+        return { action: "deny" };
+      }
+      // For other cases, deny and let the app handle it
       return { action: "deny" };
+    });
+
+    ipcMain.handle("open-new-window", () => {
+      const url =
+        is.dev && process.env["ELECTRON_RENDERER_URL"]
+          ? process.env["ELECTRON_RENDERER_URL"]
+          : `file://${join(__dirname, "../renderer/index.html")}`;
+      createChildWindow(url);
+    });
+
+    // HMR for renderer base on electron-vite cli.
+    // Load the remote URL for development or the local html file for production.
+    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+      mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+    } else {
+      mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
     }
-    // For other cases, deny and let the app handle it
-    return { action: "deny" };
-  });
-
-  ipcMain.handle("open-new-window", () => {
-    const url =
-      is.dev && process.env["ELECTRON_RENDERER_URL"]
-        ? process.env["ELECTRON_RENDERER_URL"]
-        : `file://${join(__dirname, "../renderer/index.html")}`;
-    createChildWindow(url);
-  });
-
-  ipcMain.handle("set", (_event, key, value) => {
-    // Set the key value pair in a settings.json file
-    const current = JSON.parse(readFileSync("settings.json", "utf-8"));
-    // check of the key exists
-    current[key] = value;
-    writeFileSync("settings.json", JSON.stringify(current));
-  });
-
-  ipcMain.handle("get", (_event, key) => {
-    // Get the value of the key from the settings.json file
-    const current = JSON.parse(readFileSync("settings.json", "utf-8"));
-    return current[key] ? current[key] : null;
-  });
-
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-    mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-  } else {
-    mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+  } catch (e) {
+    dialog.showErrorBox(
+      "Application Error",
+      `Failed to start the server. The application will now quit ${e}`,
+    );
+    app.quit();
+    return;
   }
 }
 
@@ -154,14 +142,11 @@ function getPrinters() {
 }
 
 function savePrinterSettings(printerSettings) {
-  writeFileSync("printerSettings.json", JSON.stringify(printerSettings));
+  settingsManager.writePrinterSettings(printerSettings);
 }
 
 function getPrinterSettings() {
-  if (existsSync("printerSettings.json")) {
-    return JSON.parse(readFileSync("printerSettings.json", "utf-8"));
-  }
-  return null;
+  return settingsManager.readPrinterSettings();
 }
 
 const getPrinterConfig = async (type: "bill" | "barcode") => {
@@ -196,7 +181,6 @@ const createPrintWindow = async (html: string, config: any) => {
   return { win, height };
 };
 
-// Keep these IPC handlers grouped together at the end
 ipcMain.handle("print", async (_event, { html, type }) => {
   try {
     const config = await getPrinterConfig(type);
@@ -216,12 +200,19 @@ ipcMain.handle("print", async (_event, { html, type }) => {
         },
         (success, error) => {
           win.close();
+          if (!success) {
+            dialog.showErrorBox(
+              "Print Error",
+              `Failed to print: ${error || "Unknown error"}`,
+            );
+          }
           resolve({ success, error: error || undefined });
         },
       );
     });
   } catch (error) {
-    return { success: false, error: error as string };
+    dialog.showErrorBox("Print Error", `Print operation failed: ${error}`);
+    return { success: false, error: error };
   }
 });
 
@@ -235,4 +226,12 @@ ipcMain.handle("savePrinterSettings", (_event, printerSettings) => {
 
 ipcMain.handle("getPrinterSettings", () => {
   return getPrinterSettings();
+});
+
+ipcMain.handle("set", (_event, key, value) => {
+  settingsManager.setSetting(key, value);
+});
+
+ipcMain.handle("get", (_event, key) => {
+  return settingsManager.getSetting(key);
 });

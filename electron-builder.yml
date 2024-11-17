@@ -15,6 +15,7 @@ files:
   - "!server/__pycache__/**"
   - "build/installer.nsh"
   - "out/**/*"
+  - "print-template.html"
 extraFiles:
   - from: "server"
     to: "server"
