@@ -101,7 +101,7 @@ const EmployeeForm = ({
       </DialogTitle>
       <DialogContent>
         <Grid2 container direction="column" spacing={3} py={3}>
-          <Grid2 item>
+          <Grid2>
             <TextField
               value={name}
               label="الاسم"
@@ -111,7 +111,7 @@ const EmployeeForm = ({
               fullWidth
             />
           </Grid2>
-          <Grid2 item>
+          <Grid2>
             <TextField
               value={phone}
               label="رقم الهاتف"
@@ -121,7 +121,7 @@ const EmployeeForm = ({
               fullWidth
             />
           </Grid2>
-          <Grid2 item>
+          <Grid2>
             <TextField
               value={address}
               label="Address"
@@ -131,7 +131,7 @@ const EmployeeForm = ({
               fullWidth
             />
           </Grid2>
-          <Grid2 item>
+          <Grid2>
             <TextField
               type="number"
               value={salary}
@@ -145,7 +145,7 @@ const EmployeeForm = ({
               }}
             />
           </Grid2>
-          <Grid2 item>
+          <Grid2>
             <LocalizationProvider
               dateAdapter={AdapterDayjs}
               adapterLocale="ar-sa"

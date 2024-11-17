@@ -101,7 +101,6 @@ const Installments = () => {
                 </Button>
               </Grid2>
               <Grid2
-                item
                 container
                 gap={3}
                 size={12}

@@ -181,10 +181,10 @@ const Bills = () => {
             <Grid2 container spacing={3}>
               <Grid2 size={12}>
                 <Grid2 container size={12} justifyContent="space-between">
-                  <Grid2 item>
+                  <Grid2>
                     <Typography variant="h4">الفواتير</Typography>
                   </Grid2>
-                  <Grid2 item>
+                  <Grid2>
                     <FormControlLabel
                       control={<Switch id="showExpandedBillSwitch" />}
                       checked={showExpandedBill}
