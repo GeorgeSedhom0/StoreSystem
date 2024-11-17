@@ -2,12 +2,24 @@ import { app } from "electron";
 import tree from "tree-kill";
 import path from "path";
 import { is } from "@electron-toolkit/utils";
-import { existsSync } from "fs";
 import { ChildProcess, spawn } from "child_process";
+import { writeFileSync, readFileSync, existsSync } from "fs";
 
 export class ServerManager {
   private serverProcess: ChildProcess | null = null;
   private serverPid: number | null = null;
+
+  constructor() {
+    // create file settings.json if it doesn't exist
+    if (!existsSync("settings.json")) {
+      writeFileSync("settings.json", "{}");
+    } else {
+      const settings = JSON.parse(readFileSync("settings.json", "utf-8"));
+      if (settings.serverPid) {
+        this.serverPid = settings.serverPid;
+      }
+    }
+  }
 
   private getServerPath(): string {
     const rootDir = is.dev
@@ -24,6 +36,7 @@ export class ServerManager {
 
   startServer(): void {
     if (this.serverProcess) return;
+    if (this.serverPid) return;
 
     const serverPath = this.getServerPath();
     console.log("Server path:", serverPath);
@@ -49,6 +62,13 @@ export class ServerManager {
     this.serverProcess.stderr?.on("data", (data) => {
       console.error(`Server stderr: ${data}`);
     });
+
+    if (this.serverPid) {
+      // Save the serverPid to settings.json
+      const settings = JSON.parse(readFileSync("settings.json", "utf-8"));
+      settings.serverPid = this.serverPid;
+      writeFileSync("settings.json", JSON.stringify(settings));
+    }
   }
 
   stopServer(): void {
@@ -65,9 +85,10 @@ export class ServerManager {
       } catch (error) {
         console.error("Error stopping server:", error);
       }
+      // Remove the serverPid from settings.json
+      const settings = JSON.parse(readFileSync("settings.json", "utf-8"));
+      delete settings.serverPid;
+      writeFileSync("settings.json", JSON.stringify(settings));
     }
-
-    this.serverProcess = null;
-    this.serverPid = null;
   }
 }

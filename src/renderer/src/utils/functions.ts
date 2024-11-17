@@ -4,7 +4,7 @@ import printJS from "print-js";
 
 export const handlePrintError = (
   error: string,
-  setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>
+  setMsg: React.Dispatch<React.SetStateAction<AlertMsg>>,
 ) => {
   console.error(error);
   setMsg({ type: "error", text: "حدث خطأ أثناء الطباعة" });
@@ -17,28 +17,24 @@ export const printBill = async (
 ) => {
   try {
     if (!billRef.current) return;
-    // Check if running in Electron
+
     if (window?.electron?.ipcRenderer) {
-      // Use IPC to communicate with main process for printing
-      try {
-        const data = await window.electron.ipcRenderer.invoke("print", {
-          html: billRef.current.outerHTML,
-          deviceName: "HP LaserJet Professional P1102",
-        });
-        if (!data.success) {
-          handlePrintError(data.error, setMsg);
-        }
-      } catch (error) {
-        handlePrintError(error as string, setMsg);
+      const result = await window.electron.ipcRenderer.invoke("print", {
+        html: billRef.current.outerHTML,
+        type: "bill",
+      });
+
+      if (!result.success) {
+        handlePrintError(result.error, setMsg);
+      } else if (setBillPreviewOpen) {
+        setBillPreviewOpen(false);
       }
     } else {
-      // Fallback to printJS for web browser
+      // Fallback for web browser
       printJS({
         printable: billRef.current.outerHTML,
         type: "raw-html",
         targetStyles: ["*"],
-        scanStyles: true,
-        maxWidth: 800,
       });
       if (setBillPreviewOpen) setBillPreviewOpen(false);
     }
@@ -53,11 +49,11 @@ export const printCode = async (
   footer: string,
   lang: "ar" | "en",
 ) => {
-  const containter = document.createElement("div");
+  const container = document.createElement("div");
   const svg = document.createElement("svg");
   const titleSpan = document.createElement("span");
   const footerSpan = document.createElement("span");
-  containter.classList.add("barcode");
+  container.classList.add("barcode");
   titleSpan.classList.add("title");
   footerSpan.classList.add("footer");
   titleSpan.innerText = title;
@@ -68,31 +64,23 @@ export const printCode = async (
     height: 35,
     fontSize: 20,
   });
-  containter.appendChild(titleSpan);
-  containter.appendChild(svg);
-  containter.appendChild(footerSpan);
-  const containterHtml = containter.outerHTML;
+  container.appendChild(titleSpan);
+  container.appendChild(svg);
+  container.appendChild(footerSpan);
+  const containerHtml = container.outerHTML;
 
   if (window?.electron?.ipcRenderer) {
-    try {
-      const data = await window.electron.ipcRenderer.invoke("print", {
-        html: containterHtml,
-        options: {
-          deviceName: "Barcode Printer",
-          printBackground: true,
-          width: 100,
-          copies: 1,
-        },
-      });
-      if (!data.success) {
-        console.error(data.error);
-      }
-    } catch (error) {
-      console.error(error);
+    const result = await window.electron.ipcRenderer.invoke("print", {
+      html: containerHtml,
+      type: "barcode",
+    });
+
+    if (!result.success) {
+      console.error(result.error);
     }
   } else {
     printJS({
-      printable: containterHtml,
+      printable: containerHtml,
       type: "raw-html",
       targetStyles: ["*"],
       scanStyles: false,

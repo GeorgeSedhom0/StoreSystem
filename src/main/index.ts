@@ -75,69 +75,6 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
-  ipcMain.handle(
-    "print",
-    async (
-      _event,
-      { html, options },
-    ): Promise<{ success: boolean; error?: string } | void> => {
-      const { deviceName, printBackground, width, copies } = options;
-      let win: BrowserWindow | null = null;
-      try {
-        win = new BrowserWindow({
-          show: false,
-          webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-          },
-        });
-
-        await win.loadFile("print-template.html");
-
-        await win.webContents.executeJavaScript(`
-          document.body.innerHTML = \`${html}\`;
-        `);
-
-        // get hight of the content
-        const height = await win.webContents.executeJavaScript(`
-        document.body.scrollHeight
-      `);
-
-        win.webContents.print(
-          {
-            silent: true,
-            printBackground: printBackground,
-            deviceName,
-            margins: {
-              marginType: "custom",
-              top: 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-            },
-            pageSize: {
-              width: width * 1000, // convert to microns
-              height: height * 1000, // convert to microns
-            },
-            copies,
-          },
-          (success, errorType) => {
-            if (!success) {
-              console.error("Printing failed:", errorType);
-              return { success: false, error: errorType };
-            } else {
-              console.log("Printed successfully");
-              return { success: true };
-            }
-          },
-        );
-      } catch (error) {
-        console.error("Printing failed:", error);
-        return { success: false, error: error as string };
-      }
-    },
-  );
-
   ipcMain.handle("open-new-window", () => {
     const url =
       is.dev && process.env["ELECTRON_RENDERER_URL"]
@@ -227,64 +164,64 @@ function getPrinterSettings() {
   return null;
 }
 
-ipcMain.handle("print", async (_event, { html, options }) => {
-  const printerSettings = getPrinterSettings();
-  if (!printerSettings) {
-    return { success: false, error: "No printer selected" };
-  }
+const getPrinterConfig = async (type: "bill" | "barcode") => {
+  const settings = await getPrinterSettings();
+  if (!settings) throw new Error("Printer settings not found");
 
-  const { deviceName, printBackground, width, copies } = options;
-  let win = null;
+  return {
+    deviceName:
+      type === "bill" ? settings.billPrinter : settings.barcodePrinter,
+    width: type === "bill" ? Number(settings.billPrinterWidth) : 80,
+    height:
+      type === "bill" ? Number(settings.billPrinterHeight) || undefined : 40,
+  };
+};
+
+const createPrintWindow = async (html: string, config: any) => {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { nodeIntegration: true },
+  });
+  await win.loadFile("print-template.html");
+  await win.webContents.executeJavaScript(
+    `document.body.innerHTML = \`${html}\`;`,
+  );
+
+  const height =
+    config.height ||
+    (await win.webContents.executeJavaScript(`
+    document.body.scrollHeight
+  `));
+
+  return { win, height };
+};
+
+// Keep these IPC handlers grouped together at the end
+ipcMain.handle("print", async (_event, { html, type }) => {
   try {
-    win = new BrowserWindow({
-      show: false,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-      },
+    const config = await getPrinterConfig(type);
+    const { win, height } = await createPrintWindow(html, config);
+
+    return new Promise((resolve) => {
+      win.webContents.print(
+        {
+          silent: true,
+          printBackground: true,
+          deviceName: config.deviceName,
+          margins: { marginType: "none" },
+          pageSize: {
+            width: config.width * 1000,
+            height: height * 1000,
+          },
+        },
+        (success, error) => {
+          win.close();
+          resolve({ success, error: error || undefined });
+        },
+      );
     });
-
-    await win.loadFile("print-template.html");
-
-    await win.webContents.executeJavaScript(`
-      document.body.innerHTML = \`${html}\`;
-    `);
-
-    const height = await win.webContents.executeJavaScript(`
-      document.body.scrollHeight
-    `);
-
-    win.webContents.print(
-      {
-        silent: true,
-        printBackground: printBackground,
-        deviceName: printerSettings.deviceName,
-        margins: {
-          marginType: "custom",
-          top: 0,
-          bottom: 0,
-          left: 0,
-          right: 0,
-        },
-        pageSize: {
-          width: width * 1000,
-          height: height * 1000,
-        },
-        copies,
-      },
-      (success, errorType) => {
-        if (!success) {
-          console.error("Printing failed:", errorType);
-          return { success: false, error: errorType };
-        } else {
-          console.log("Printed successfully");
-          return { success: true };
-        }
-      },
-    );
   } catch (error) {
-    console.error("Printing failed:", error);
-    return { success: false, error: error.toString() };
+    return { success: false, error: error as string };
   }
 });
 

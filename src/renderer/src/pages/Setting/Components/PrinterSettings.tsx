@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
-  Button,
   FormControl,
   InputLabel,
   MenuItem,
@@ -9,36 +8,54 @@ import {
   Grid,
   Typography,
 } from "@mui/material";
+import { LoadingButton } from "@mui/lab";
 
 const PrinterSettings = () => {
-  const [printers, setPrinters] = useState([]);
-  const [billPrinter, setBillPrinter] = useState("");
-  const [barcodePrinter, setBarcodePrinter] = useState("");
-  const [billPrinterWidth, setBillPrinterWidth] = useState("");
-  const [billPrinterHeight, setBillPrinterHeight] = useState("");
+  const [printers, setPrinters] = useState<
+    {
+      name: string;
+    }[]
+  >([]);
+  const [settings, setSettings] = useState({
+    billPrinter: "",
+    barcodePrinter: "",
+    billPrinterWidth: "80",
+    billPrinterHeight: "",
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchPrinters = async () => {
-      const availablePrinters = await window.electron.ipcRenderer.invoke(
-        "getPrinters"
-      );
-      setPrinters(availablePrinters);
+    const loadSettings = async () => {
+      try {
+        const [availablePrinters, savedSettings] = await Promise.all([
+          window.electron.ipcRenderer.invoke("getPrinters"),
+          window.electron.ipcRenderer.invoke("getPrinterSettings"),
+        ]);
+        setPrinters(availablePrinters);
+        if (savedSettings) {
+          setSettings(savedSettings);
+        }
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+      } finally {
+        setLoading(false);
+      }
     };
-
-    fetchPrinters();
+    loadSettings();
   }, []);
 
   const saveSettings = async () => {
-    const printerSettings = {
-      billPrinter,
-      barcodePrinter,
-      billPrinterWidth,
-      billPrinterHeight,
-    };
-    await window.electron.ipcRenderer.invoke(
-      "savePrinterSettings",
-      printerSettings
-    );
+    try {
+      await window.electron.ipcRenderer.invoke("savePrinterSettings", settings);
+      // Show success message
+    } catch (error) {
+      // Show error message
+      console.error("Failed to save settings:", error);
+    }
+  };
+
+  const handleChange = (field: string) => (event: any) => {
+    setSettings((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
   return (
@@ -50,8 +67,9 @@ const PrinterSettings = () => {
         <FormControl fullWidth>
           <InputLabel>طابعة الفواتير</InputLabel>
           <Select
-            value={billPrinter}
-            onChange={(e) => setBillPrinter(e.target.value)}
+            value={settings.billPrinter}
+            onChange={handleChange("billPrinter")}
+            label="طابعة الفواتير"
           >
             {printers.map((printer) => (
               <MenuItem key={printer.name} value={printer.name}>
@@ -61,19 +79,21 @@ const PrinterSettings = () => {
           </Select>
         </FormControl>
       </Grid>
-      <Grid item xs={12}>
+      <Grid item xs={6}>
         <TextField
-          label="عرض الفاتورة"
-          value={billPrinterWidth}
-          onChange={(e) => setBillPrinterWidth(e.target.value)}
+          label="عرض الفاتورة (مم)"
+          type="number"
+          value={settings.billPrinterWidth}
+          onChange={handleChange("billPrinterWidth")}
           fullWidth
         />
       </Grid>
-      <Grid item xs={12}>
+      <Grid item xs={6}>
         <TextField
-          label="ارتفاع الفاتورة (اختياري)"
-          value={billPrinterHeight}
-          onChange={(e) => setBillPrinterHeight(e.target.value)}
+          label="ارتفاع الفاتورة (مم)"
+          type="number"
+          value={settings.billPrinterHeight}
+          onChange={handleChange("billPrinterHeight")}
           fullWidth
         />
       </Grid>
@@ -81,8 +101,9 @@ const PrinterSettings = () => {
         <FormControl fullWidth>
           <InputLabel>طابعة الباركود</InputLabel>
           <Select
-            value={barcodePrinter}
-            onChange={(e) => setBarcodePrinter(e.target.value)}
+            value={settings.barcodePrinter}
+            onChange={handleChange("barcodePrinter")}
+            label="طابعة الباركود"
           >
             {printers.map((printer) => (
               <MenuItem key={printer.name} value={printer.name}>
@@ -93,9 +114,13 @@ const PrinterSettings = () => {
         </FormControl>
       </Grid>
       <Grid item xs={12}>
-        <Button variant="contained" onClick={saveSettings}>
+        <LoadingButton
+          variant="contained"
+          onClick={saveSettings}
+          loading={loading}
+        >
           حفظ الإعدادات
-        </Button>
+        </LoadingButton>
       </Grid>
     </Grid>
   );
