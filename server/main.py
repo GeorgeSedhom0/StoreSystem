@@ -874,7 +874,7 @@ def add_cash_flow(
                 (
                     store_id,
                     datetime.now().isoformat(),
-                    amount,
+                    move_type == "in" and amount or -amount,
                     move_type,
                     description,
                     party_id,

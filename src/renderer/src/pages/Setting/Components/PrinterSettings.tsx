@@ -152,7 +152,7 @@ const PrinterSettings = () => {
             !settings.barcodePrinter ||
             !settings.billPrinterWidth ||
             !settings.barcodePrinterWidth ||
-            !settings.billPrinterHeight
+            !settings.barcodePrinterHeight
           }
         >
           حفظ الإعدادات

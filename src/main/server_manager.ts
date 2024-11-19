@@ -19,7 +19,9 @@ export class ServerManager {
   }
 
   private getServerPath(): string {
-    const rootDir = is.dev ? process.cwd() : app.getAppPath();
+    const rootDir = is.dev
+      ? process.cwd()
+      : path.join(app.getPath("exe"), "..");
 
     const sslPath = path.join(rootDir, "server", "localhost.pem");
     const serverFile = existsSync(sslPath)

@@ -9,25 +9,20 @@ function createChildWindow(url: string): void {
   const childWindow = new BrowserWindow({
     width: 900,
     height: 670,
-    // Remove parent property to make window independent
+    show: false,
+    autoHideMenuBar: true,
+    ...(process.platform === "linux" ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
-      nodeIntegration: true,
-      contextIsolation: false,
+      sandbox: false,
     },
-    // Add these properties to make window independent
-    show: false,
-    skipTaskbar: false,
-    title: "Store System",
   });
 
   childWindow.maximize();
-  childWindow.show();
-
   childWindow.loadURL(url);
-
   childWindow.setAutoHideMenuBar(true);
   childWindow.setMenuBarVisibility(false);
+  childWindow.show();
 }
 
 let serverManager: ServerManager;
