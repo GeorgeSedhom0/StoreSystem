@@ -38,12 +38,16 @@ const BillView = forwardRef(
         <div
           ref={ref}
           style={{
-            width: open ? "120mm" : "80mm",
+            width: open ? "120mm" : "98%",
+            marginLeft: open ? "0" : "1%",
+            marginRight: open ? "0" : "1%",
             flexDirection: "column",
             direction: "rtl",
             backgroundColor: "white",
             color: "black",
             fontSize: "10px",
+            overflow: "hidden",
+            maxWidth: "100%",
           }}
           id={`bill-${bill.id}`}
         >
@@ -51,8 +55,10 @@ const BillView = forwardRef(
             <h2
               style={{
                 textAlign: "center",
-                fontSize: "2rem",
+                fontSize: "1.5rem",
                 margin: "0.15rem 0",
+                wordBreak: "break-word",
+                whiteSpace: "normal",
               }}
             >
               {store.name}
@@ -128,6 +134,7 @@ const BillView = forwardRef(
             style={{
               width: "100%",
               borderCollapse: "collapse",
+              tableLayout: "fixed",
             }}
           >
             <thead
@@ -143,36 +150,42 @@ const BillView = forwardRef(
               >
                 <th
                   style={{
-                    fontSize: "1.5em",
+                    fontSize: "1.2em",
                     textAlign: "center",
-                    padding: "12px",
+                    padding: "4px",
+                    wordBreak: "break-word",
+                    whiteSpace: "normal",
+                    width: "30%",
                   }}
                 >
                   المنتج
                 </th>
                 <th
                   style={{
-                    fontSize: "1.5em",
+                    fontSize: "1.2em",
                     textAlign: "center",
-                    padding: "12px",
+                    padding: "4px",
+                    width: "20%",
                   }}
                 >
                   الكمية
                 </th>
                 <th
                   style={{
-                    fontSize: "1.5em",
+                    fontSize: "1.2em",
                     textAlign: "center",
-                    padding: "12px",
+                    padding: "4px",
+                    width: "25%",
                   }}
                 >
                   السعر
                 </th>
                 <th
                   style={{
-                    fontSize: "1.5em",
+                    fontSize: "1.2em",
                     textAlign: "center",
-                    padding: "12px",
+                    padding: "4px",
+                    width: "25%",
                   }}
                 >
                   ألاجمالى
@@ -190,28 +203,29 @@ const BillView = forwardRef(
                 >
                   <td
                     style={{
-                      fontSize: "1.5em",
+                      fontSize: "1.2em",
                       textAlign: "center",
-                      padding: "12px",
-                      wordWrap: "break-word",
+                      padding: "4px",
+                      wordBreak: "break-word",
+                      whiteSpace: "normal",
                     }}
                   >
                     {product.name}
                   </td>
                   <td
                     style={{
-                      fontSize: "1.5em",
+                      fontSize: "1.2em",
                       textAlign: "center",
-                      padding: "12px",
+                      padding: "4px",
                     }}
                   >
                     {Math.abs(product.amount)}
                   </td>
                   <td
                     style={{
-                      fontSize: "1.5em",
+                      fontSize: "1.2em",
                       textAlign: "center",
-                      padding: "12px",
+                      padding: "4px",
                     }}
                   >
                     {bill.type === "buy"
@@ -220,9 +234,9 @@ const BillView = forwardRef(
                   </td>
                   <td
                     style={{
-                      fontSize: "1.5em",
+                      fontSize: "1.2em",
                       textAlign: "center",
-                      padding: "12px",
+                      padding: "4px",
                     }}
                   >
                     {Math.abs(product.amount) *
@@ -264,11 +278,12 @@ const BillView = forwardRef(
             }}
           />
 
-          <div style={{ width: "100%", overflowX: "auto" }}>
+          <div style={{ width: "100%" }}>
             <table
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
+                tableLayout: "fixed",
               }}
             >
               <tbody>
