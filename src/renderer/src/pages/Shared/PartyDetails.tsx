@@ -1,7 +1,6 @@
 import { Button, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { Link } from "react-router-dom";
 
 interface PartyDetails {
   id: number;
@@ -37,26 +36,30 @@ const PartyDetails = ({ partyId }: { partyId: number | null }) => {
         اجمالى المبلغ المستهلك : {partyDetails.total_amount} {" | "}
         اجمالى التعاملات المالية : {partyDetails.total_cash}
       </Typography>
-      <Link
-        to={"/bills/" + partyDetails.id.toString()}
-        style={{
-          textDecoration: "none",
-          color: "inherit",
+
+      <Button
+        variant="contained"
+        onClick={() => {
+          window.electron.ipcRenderer.invoke(
+            "open-new-window",
+            "#bills/" + partyDetails.id.toString(),
+          );
         }}
-        target="_blank"
       >
-        <Button variant="contained">الفواتير </Button>
-      </Link>
-      <Link
-        to={"/cash/" + partyDetails.id.toString()}
-        style={{
-          textDecoration: "none",
-          color: "inherit",
+        الفواتير{" "}
+      </Button>
+
+      <Button
+        variant="contained"
+        onClick={() => {
+          window.electron.ipcRenderer.invoke(
+            "open-new-window",
+            "#cash/" + partyDetails.id.toString(),
+          );
         }}
-        target="_blank"
       >
-        <Button variant="contained">التعاملات المالية </Button>
-      </Link>
+        التعاملات المالية{" "}
+      </Button>
     </>
   );
 };

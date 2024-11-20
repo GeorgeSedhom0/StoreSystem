@@ -5,6 +5,7 @@ import { is } from "@electron-toolkit/utils";
 import { ChildProcess, spawn } from "child_process";
 import { existsSync } from "fs";
 import { settingsManager } from "./settings_manager";
+import axios from "axios";
 
 export class ServerManager {
   private serverProcess: ChildProcess | null = null;
@@ -31,9 +32,25 @@ export class ServerManager {
     return path.join(rootDir, "server", serverFile);
   }
 
-  startServer(): void {
+  async isServerRunning() {
+    // If no server url is set, do the check using pid
+    const serverUrl = settingsManager.getSetting("baseUrl");
+    if (!serverUrl) {
+      return this.serverPid ? true : false;
+    }
+
+    const { data } = await axios.get(serverUrl + "/test");
+    return data === "Hello, World!";
+  }
+
+  async startServer() {
     if (this.serverProcess) return;
-    if (this.serverPid) return;
+
+    const isServerRunning = await this.isServerRunning();
+    if (isServerRunning) {
+      console.log("Server is already running");
+      return;
+    }
 
     try {
       const serverPath = this.getServerPath();
@@ -68,6 +85,13 @@ export class ServerManager {
         // Save the serverPid using settings manager
         settingsManager.setSetting("serverPid", this.serverPid);
       }
+
+      let tries = 0;
+      while (!(await this.isServerRunning()) && tries < 10) {
+        tries++;
+        console.log("Waiting for server to start...");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     } catch (error) {
       console.error("Error spawning server process:", error);
       // show dialog with error message
@@ -79,7 +103,7 @@ export class ServerManager {
     }
   }
 
-  stopServer(): void {
+  async stopServer() {
     if (this.serverPid) {
       try {
         // Use tree-kill to kill the entire process tree

@@ -7,10 +7,19 @@ import {
   TextField,
 } from "@mui/material";
 import { ViewContainer } from "./pages/Shared/Utils";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const SetBaseUrl = () => {
   const [baseUrl, setBaseUrl] = useState("");
+
+  useEffect(() => {
+    const getBaseUrl = async () => {
+      const url = await window.electron.ipcRenderer.invoke("get", "baseUrl");
+      setBaseUrl(url);
+    };
+    getBaseUrl();
+  }, []);
+
   return (
     <ViewContainer>
       <Dialog open={true}>

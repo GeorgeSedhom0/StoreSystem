@@ -101,7 +101,7 @@ const Layout = ({
               <Button
                 variant="contained"
                 onClick={() => {
-                  window.electron!.ipcRenderer.invoke("open-new-window");
+                  window.electron.ipcRenderer.invoke("open-new-window");
                 }}
               >
                 +

@@ -18,11 +18,12 @@ function createChildWindow(url: string): void {
     },
   });
 
-  childWindow.maximize();
-  childWindow.loadURL(url);
   childWindow.setAutoHideMenuBar(true);
   childWindow.setMenuBarVisibility(false);
+  childWindow.maximize();
+  childWindow.loadURL(url);
   childWindow.show();
+  childWindow.focus();
 }
 
 let serverManager: ServerManager;
@@ -50,26 +51,12 @@ function createWindow(): void {
       mainWindow.show();
     });
 
-    mainWindow.webContents.setWindowOpenHandler((details) => {
-      // Check if URL is external (you can customize this check)
-      if (
-        details.url.startsWith("http://localhost:5173") ||
-        details.url.startsWith("https://localhost:5173")
-      ) {
-        // For external URLs, open in new Electron window
-        createChildWindow(details.url);
-        return { action: "deny" };
-      }
-      // For other cases, deny and let the app handle it
-      return { action: "deny" };
-    });
-
-    ipcMain.handle("open-new-window", () => {
+    ipcMain.handle("open-new-window", (_event, path = "") => {
       const url =
         is.dev && process.env["ELECTRON_RENDERER_URL"]
           ? process.env["ELECTRON_RENDERER_URL"]
           : `file://${join(__dirname, "../renderer/index.html")}`;
-      createChildWindow(url);
+      createChildWindow(url + path);
     });
 
     // HMR for renderer base on electron-vite cli.
