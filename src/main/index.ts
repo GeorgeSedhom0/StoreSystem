@@ -168,10 +168,37 @@ const createPrintWindow = async (html: string, config: any) => {
   return { win, height };
 };
 
+async function showCopiesDialog() {
+  const { response, checkboxChecked } = await dialog.showMessageBox({
+    type: "question",
+    buttons: ["Cancel", "OK"],
+    defaultId: 1,
+    title: "Number of Copies",
+    message: "Please enter the number of copies:",
+    checkboxLabel: "Remember my answer",
+    checkboxChecked: false,
+    input: {
+      type: "number",
+      placeholder: "Number of copies",
+    },
+  });
+
+  if (response === 1) {
+    return checkboxChecked ? parseInt(checkboxChecked) : 1;
+  } else {
+    throw new Error("User cancelled the dialog");
+  }
+}
+
 ipcMain.handle("print", async (_event, { html, type }) => {
   try {
     const config = await getPrinterConfig(type);
     const { win, height } = await createPrintWindow(html, config);
+
+    if (type === "barcode") {
+      const copies = await showCopiesDialog();
+      config.copies = copies;
+    }
 
     return new Promise((resolve) => {
       win.webContents.print(
@@ -184,6 +211,7 @@ ipcMain.handle("print", async (_event, { html, type }) => {
             width: config.width * 1000,
             height: config.height ? config.height * 1000 : height * 1000,
           },
+          copies: config.copies || 1,
         },
         (success, error) => {
           win.close();
