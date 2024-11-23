@@ -168,7 +168,7 @@ const createPrintWindow = async (html: string, config: any) => {
   return { win, height };
 };
 
-ipcMain.handle("print", async (_event, { html, type }) => {
+ipcMain.handle("print", async (_event, { html, type, copies }) => {
   try {
     const config = await getPrinterConfig(type);
     const { win, height } = await createPrintWindow(html, config);
@@ -184,6 +184,7 @@ ipcMain.handle("print", async (_event, { html, type }) => {
             width: config.width * 1000,
             height: config.height ? config.height * 1000 : height * 1000,
           },
+          copies: copies || 1,
         },
         (success, error) => {
           win.close();

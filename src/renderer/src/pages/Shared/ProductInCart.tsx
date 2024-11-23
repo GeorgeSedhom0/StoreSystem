@@ -1,6 +1,7 @@
 import { Button, TextField, TableRow, TableCell } from "@mui/material";
 import { SCProduct } from "../../utils/types";
-import { printCode } from "../../utils/functions";
+import { Dispatch, SetStateAction, useState } from "react";
+import PrintBarCode from "./PrintBarCode";
 
 const NameColumn = ({ name }: { name: string }) => {
   return <TableCell>{name}</TableCell>;
@@ -143,20 +144,29 @@ const StockColumn = ({ stock }: { stock: number }) => {
   return <TableCell>{stock}</TableCell>;
 };
 
-const PrintBarCodeColumn = ({ product }: { product: SCProduct }) => {
+const PrintBarCodeColumn = ({
+  product,
+  isPrintingCode,
+  setIsPrintingCode,
+}: {
+  product: SCProduct;
+  isPrintingCode: boolean;
+  setIsPrintingCode: Dispatch<SetStateAction<boolean>>;
+}) => {
   return (
     <TableCell>
+      {isPrintingCode && (
+        <PrintBarCode
+          code={product.barCode || ""}
+          name={product.name}
+          price={product.price}
+          setOpen={setIsPrintingCode}
+        />
+      )}
       <Button
         variant="contained"
         color="primary"
-        onClick={() => {
-          printCode(
-            product.barCode ?? "",
-            `فحم المهندس \n ${product.name}`,
-            product.price.toString() + " " + "جنية ",
-            "ar",
-          );
-        }}
+        onClick={() => setIsPrintingCode(true)}
       >
         طباعة باركود
       </Button>
@@ -195,11 +205,15 @@ const Column = ({
   product,
   setShoppingCart,
   type,
+  isPrintingCode,
+  setIsPrintingCode,
 }: {
   column: availableColumns;
   product: SCProduct;
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
   type: "buy" | "sell";
+  isPrintingCode: boolean;
+  setIsPrintingCode: Dispatch<SetStateAction<boolean>>;
 }) => {
   if (column === "name") {
     return <NameColumn name={product.name} />;
@@ -234,7 +248,13 @@ const Column = ({
   } else if (column === "stock") {
     return <StockColumn stock={product.stock} />;
   } else if (column === "printBarCode") {
-    return <PrintBarCodeColumn product={product} />;
+    return (
+      <PrintBarCodeColumn
+        product={product}
+        isPrintingCode={isPrintingCode}
+        setIsPrintingCode={setIsPrintingCode}
+      />
+    );
   } else {
     return null;
   }
@@ -249,6 +269,7 @@ const ProductInCart = ({
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
   type: "buy" | "sell";
 }) => {
+  const [isPrintingCode, setIsPrintingCode] = useState(false);
   return (
     <TableRow>
       {typeToColumns[type].map((column, index) => (
@@ -258,6 +279,8 @@ const ProductInCart = ({
           product={product}
           setShoppingCart={setShoppingCart}
           type={type}
+          isPrintingCode={isPrintingCode}
+          setIsPrintingCode={setIsPrintingCode}
         />
       ))}
     </TableRow>

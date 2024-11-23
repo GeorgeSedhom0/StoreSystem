@@ -33,14 +33,18 @@ export class ServerManager {
   }
 
   async isServerRunning() {
-    // If no server url is set, do the check using pid
-    const serverUrl = settingsManager.getSetting("baseUrl");
-    if (!serverUrl) {
-      return this.serverPid ? true : false;
-    }
+    try {
+      // If no server url is set, do the check using pid
+      const serverUrl = settingsManager.getSetting("baseUrl");
+      if (!serverUrl) {
+        return this.serverPid ? true : false;
+      }
 
-    const { data } = await axios.get(serverUrl + "/test");
-    return data === "Hello, World!";
+      const { data } = await axios.get(serverUrl + "/test");
+      return data === "Hello, World!";
+    } catch (error) {
+      return false;
+    }
   }
 
   async startServer() {

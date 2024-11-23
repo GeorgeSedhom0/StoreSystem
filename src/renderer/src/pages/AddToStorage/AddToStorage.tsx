@@ -10,7 +10,7 @@ import { useCallback, useState } from "react";
 import { Product } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import { printCode } from "../../utils/functions";
+import PrintBarCode from "../Shared/PrintBarCode";
 
 const Storage = () => {
   const [product, setProduct] = useState<Product>({
@@ -22,6 +22,7 @@ const Storage = () => {
     bar_code: "",
   });
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+  const [isPrintingCode, setIsPrintingCode] = useState(false);
 
   const addProduct = useCallback(async () => {
     try {
@@ -54,6 +55,14 @@ const Storage = () => {
   return (
     <Grid2 container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
+      {isPrintingCode && (
+        <PrintBarCode
+          code={product.bar_code}
+          name={product.name}
+          price={product.price}
+          setOpen={setIsPrintingCode}
+        />
+      )}
       <Grid2 size={12}>
         <Card
           elevation={3}
@@ -104,14 +113,7 @@ const Storage = () => {
                 endAdornment: (
                   <InputAdornment position="end">
                     <Button
-                      onClick={() => {
-                        printCode(
-                          product.bar_code,
-                          `فحم المهندس \n ${product.name}`,
-                          product.price.toString() + " " + "جنية ",
-                          "ar",
-                        );
-                      }}
+                      onClick={() => setIsPrintingCode(true)}
                       disabled={product.bar_code === ""}
                     >
                       طباعة باركود

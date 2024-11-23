@@ -1,7 +1,7 @@
 import { Button, InputAdornment, TableCell, TextField } from "@mui/material";
 import { Product } from "../../../utils/types";
-import { useMemo } from "react";
-import { printCode } from "../../../utils/functions";
+import { useMemo, useState } from "react";
+import PrintBarCode from "@renderer/pages/Shared/PrintBarCode";
 
 interface ProductCardProps {
   product: Product;
@@ -22,6 +22,8 @@ const ProductCard = ({
   restoreProduct,
   isShowingDeleted,
 }: ProductCardProps) => {
+  const [isPrintingCode, setIsPrintingCode] = useState(false);
+
   const productInCart = useMemo(
     () => editedProducts.find((p) => p.id === product.id),
     [editedProducts, product.id],
@@ -34,6 +36,14 @@ const ProductCard = ({
 
   return (
     <>
+      {isPrintingCode && (
+        <PrintBarCode
+          code={product.bar_code}
+          name={product.name}
+          price={product.price}
+          setOpen={setIsPrintingCode}
+        />
+      )}
       <TableCell>
         <TextField
           disabled={false}
@@ -78,18 +88,7 @@ const ProductCard = ({
           InputProps={{
             endAdornment: (
               <InputAdornment position="end">
-                <Button
-                  onClick={() =>
-                    printCode(
-                      product.bar_code,
-                      `فحم المهندس \n ${product.name}`,
-                      product.price.toString() + " " + "جنية ",
-                      "ar",
-                    )
-                  }
-                >
-                  طباعة
-                </Button>
+                <Button onClick={() => setIsPrintingCode(true)}>طباعة</Button>
               </InputAdornment>
             ),
           }}
