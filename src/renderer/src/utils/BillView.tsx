@@ -26,7 +26,9 @@ const BillView = forwardRef(
           top: 0,
           left: 0,
           width: "100%",
-          height: "100%",
+          overflowY: "auto",
+          height: "100vh",
+          padding: "1rem",
           display: open ? "flex" : "none",
           justifyContent: "center",
           alignItems: "center",
@@ -34,7 +36,7 @@ const BillView = forwardRef(
           backgroundColor: "rgba(0, 0, 0, 0.5)",
           zIndex: 9999999999999,
         }}
-      >
+        >
         <div
           ref={ref}
           style={{
