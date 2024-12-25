@@ -182,7 +182,6 @@ const Buy = () => {
               <ProductAutocomplete
                 onProductSelect={addToCart}
                 products={products}
-                setMsg={setMsg}
               />
             </Grid2>
             <Grid2 size={12}>

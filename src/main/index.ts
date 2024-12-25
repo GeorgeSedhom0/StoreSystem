@@ -28,6 +28,8 @@ function createChildWindow(url: string): void {
 
 let serverManager: ServerManager;
 
+app.commandLine.appendSwitch("ignore-certificate-errors", "true");
+
 function createWindow(): void {
   serverManager = new ServerManager();
   try {
@@ -43,6 +45,10 @@ function createWindow(): void {
         preload: join(__dirname, "../preload/index.js"),
         sandbox: false,
       },
+    });
+
+    mainWindow.webContents.session.setCertificateVerifyProc((_request, callback) => {
+      callback(0);
     });
 
     mainWindow.on("ready-to-show", async () => {
@@ -76,6 +82,7 @@ function createWindow(): void {
   }
 }
 
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -98,6 +105,11 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+app.on('certificate-error', (event, _webContents, _url, _error, _certificate, callback) => {
+  event.preventDefault()
+  callback(true) // Trust the certificate
+})
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

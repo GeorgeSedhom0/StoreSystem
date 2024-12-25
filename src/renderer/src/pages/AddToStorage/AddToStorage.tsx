@@ -79,6 +79,7 @@ const Storage = () => {
             />
             <TextField
               label="السعر"
+              type="number"
               value={product.price}
               onChange={(e) =>
                 setProduct({
@@ -86,12 +87,11 @@ const Storage = () => {
                   price: parseFloat(e.target.value) || 0,
                 })
               }
-              inputProps={{
-                inputMode: "decimal",
-              }}
+              inputMode="decimal"
             />
             <TextField
               label="سعر الشراء"
+              type="number"
               value={product.wholesale_price}
               onChange={(e) =>
                 setProduct({
@@ -99,9 +99,7 @@ const Storage = () => {
                   wholesale_price: parseFloat(e.target.value) || 0,
                 })
               }
-              inputProps={{
-                inputMode: "decimal",
-              }}
+              inputMode="decimal"
             />
             <TextField
               label="الباركود"

@@ -47,11 +47,13 @@ const Products = () => {
     }
     if (changedOnly) {
       return editedProducts.filter((product) =>
-        product.name.toLowerCase().includes(query.toLowerCase()),
+        product.name.toLowerCase().includes(query.toLowerCase()) ||
+        product.bar_code.toLowerCase().includes(query.toLowerCase()),
       );
     }
     return products.filter((product) =>
-      product.name.toLowerCase().includes(query.toLowerCase()),
+      product.name.toLowerCase().includes(query.toLowerCase()) ||
+      product.bar_code.toLowerCase().includes(query.toLowerCase()),
     );
   }, [products, editedProducts, query, changedOnly]);
 

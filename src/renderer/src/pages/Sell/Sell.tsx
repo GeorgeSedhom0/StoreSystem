@@ -391,7 +391,6 @@ const Sell = () => {
               <ProductAutocomplete
                 onProductSelect={addToCart}
                 products={products}
-                setMsg={setMsg}
               />
             </Grid2>
             {usingThirdParties && (
