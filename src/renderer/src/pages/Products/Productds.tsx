@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useContext } from "react";
 import { Product } from "../../utils/types";
 import {
   Button,
@@ -20,6 +20,7 @@ import {
 import LoadingScreen from "../Shared/LoadingScreen";
 import { Link } from "react-router-dom";
 import useProducts from "../Shared/hooks/useProducts";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const Products = () => {
   const [editedProducts, setEditedProducts] = useState<Product[]>([]);
@@ -37,6 +38,8 @@ const Products = () => {
     reservedProducts,
     updateProducts: getProds,
   } = useProducts(showDeleted);
+
+  const { storeId } = useContext(StoreContext);
 
   const filteredProducts = useMemo(() => {
     if (query === "") {
@@ -83,7 +86,7 @@ const Products = () => {
     try {
       await axios.put("/products", editedProducts, {
         params: {
-          store_id: import.meta.env.VITE_STORE_ID,
+          store_id: storeId,
         },
       });
       setMsg({ type: "success", text: "تم تعديل المنتجات بنجاح" });
@@ -104,7 +107,7 @@ const Products = () => {
       await axios.put("/product/delete", null, {
         params: {
           product_id: productId,
-          store_id: import.meta.env.VITE_STORE_ID,
+          store_id: storeId,
         },
       });
       setMsg({ type: "success", text: "تم ازالة المنتج بنجاح" });
@@ -122,7 +125,7 @@ const Products = () => {
       await axios.put("/product/restore", null, {
         params: {
           product_id: productId,
-          store_id: import.meta.env.VITE_STORE_ID,
+          store_id: storeId,
         },
       });
       setMsg({ type: "success", text: "تم استعادة المنتج بنجاح" });

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useContext } from "react";
 import {
   Button,
   ButtonGroup,
@@ -19,6 +19,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import EChartsReact from "echarts-for-react";
 import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 type SalesAnalyticsType = [string, number][];
 const getAnalytics = async (
@@ -33,7 +34,7 @@ const getAnalytics = async (
       params: {
         start_date: startDate,
         end_date: endDate,
-        store_id: import.meta.env.VITE_STORE_ID,
+        store_id: storeId,
       },
     },
   );
@@ -46,6 +47,7 @@ const SalesAnalytics = () => {
   );
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
   const [types, setTypes] = useState<string[]>(["sell", "return"]);
+  const { storeId } = useContext(StoreContext);
 
   const {
     palette: { mode },

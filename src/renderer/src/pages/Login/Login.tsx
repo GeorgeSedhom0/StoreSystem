@@ -14,7 +14,7 @@ const Login = () => {
   const [loggingIn, setLoggingIn] = useState(false);
 
   const navigate = useNavigate();
-  const { refreshProfile } = useContext(StoreContext);
+  const { refreshProfile, storeId } = useContext(StoreContext);
 
   const login = useCallback(async () => {
     if (loggingIn) return;
@@ -26,7 +26,7 @@ const Login = () => {
 
       await axios.post("/login", formdata, {
         params: {
-          store_id: import.meta.env.VITE_STORE_ID,
+          store_id: storeId,
         },
       });
 
@@ -37,7 +37,7 @@ const Login = () => {
       console.error(e);
     }
     setLoggingIn(false);
-  }, [username, password, navigate, loggingIn, refreshProfile]);
+  }, [username, password, navigate, loggingIn, refreshProfile, storeId]);
 
   const handleKeyPress = useCallback(
     (event: React.KeyboardEvent) => {

@@ -1,19 +1,22 @@
 import { LoadingButton } from "@mui/lab";
 import { ButtonGroup, Grid2, TextField, Typography } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useContext } from "react";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import axios from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Profile } from "../../Shared/Utils";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const saveStoreData = async ({
   name,
   phone,
   address,
+  storeId,
 }: {
   name: string;
   phone: string;
   address: string;
+  storeId: number;
 }) => {
   await axios.put(
     "/store-data",
@@ -23,16 +26,16 @@ const saveStoreData = async ({
         name,
         phone,
         address,
-        store_id: import.meta.env.VITE_STORE_ID,
+        store_id: storeId,
       },
     },
   );
 };
 
-const getStoreData = async () => {
+const getStoreData = async (storeId: number) => {
   const { data } = await axios.get<Profile["store"]>("/store-data", {
     params: {
-      store_id: import.meta.env.VITE_STORE_ID,
+      store_id: storeId,
     },
   });
   return data;
@@ -46,6 +49,7 @@ const Basics = () => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
 
   const queryClient = useQueryClient();
+  const { storeId } = useContext(StoreContext);
 
   const backUp = useCallback(async () => {
     setLoading(true);
@@ -115,7 +119,7 @@ const Basics = () => {
 
   const { data: storeInfo } = useQuery({
     queryKey: ["store-data"],
-    queryFn: getStoreData,
+    queryFn: () => getStoreData(storeId),
   });
 
   useEffect(() => {
@@ -167,7 +171,7 @@ const Basics = () => {
         <LoadingButton
           variant="contained"
           loading={loading}
-          onClick={() => setStoreData({ name, phone, address })}
+          onClick={() => setStoreData({ name, phone, address, storeId })}
         >
           حفظ
         </LoadingButton>
