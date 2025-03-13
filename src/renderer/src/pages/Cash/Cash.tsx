@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useContext } from "react";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
@@ -31,18 +31,20 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { useParams } from "react-router-dom";
 import FormatedNumber from "../Shared/FormatedNumber";
 import useParties from "../Shared/hooks/useParties";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const getCashFlow = async (
   startDate: Dayjs,
   endDate: Dayjs,
   partyId: number | null,
+  storeId: number,
 ) => {
   const { data } = await axios.get<CashFlow[]>("/cash-flow", {
     params: {
       start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
       end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
       party_id: partyId,
-      store_id: import.meta.env.VITE_STORE_ID,
+      store_id: storeId,
     },
   });
   return data;
@@ -75,6 +77,7 @@ const Cash = () => {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
 
   const { partyId } = useParams();
+  const { storeId } = useContext(StoreContext);
 
   useEffect(() => {
     if (partyId) setSelectedPartyId(parseInt(partyId));
@@ -93,7 +96,7 @@ const Cash = () => {
     queryFn: async () => {
       const { data } = await axios.get("/last-shift", {
         params: {
-          store_id: import.meta.env.VITE_STORE_ID,
+          store_id: storeId,
         },
       });
       return data;
@@ -108,7 +111,7 @@ const Cash = () => {
     refetch: updateCashFlow,
   } = useQuery({
     queryKey: ["cashFlow", startDate, endDate, selectedPartyId],
-    queryFn: () => getCashFlow(startDate, endDate, selectedPartyId),
+    queryFn: () => getCashFlow(startDate, endDate, selectedPartyId, storeId),
     initialData: [],
   });
 
@@ -198,7 +201,7 @@ const Cash = () => {
             amount,
             move_type: moveType,
             description,
-            store_id: import.meta.env.VITE_STORE_ID,
+            store_id: storeId,
             party_id: newPartyId,
           },
         },

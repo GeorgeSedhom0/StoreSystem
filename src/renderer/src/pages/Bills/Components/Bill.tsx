@@ -1,15 +1,16 @@
 import { Button, ButtonGroup, TableCell, TableRow } from "@mui/material";
-import { useRef, useState } from "react";
+import { useRef, useState, useContext } from "react";
 import BillView from "../../../utils/BillView";
 import { printBill } from "../../../utils/functions";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import ProductsView from "../../../utils/ProductsView";
 import FormatedNumber from "../../Shared/FormatedNumber";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
-const endReservation = async (id: string) => {
+const endReservation = async (id: string, storeId: number) => {
   await axios.get("/end-reservation", {
-    params: { bill_id: id, store_id: import.meta.env.VITE_STORE_ID },
+    params: { bill_id: id, store_id: storeId },
   });
 };
 
@@ -26,10 +27,11 @@ const Bill = ({ context, item: bill, ...props }: any) => {
   const { setMsg, getBills } = context;
   const [billPreviewOpen, setBillPreviewOpen] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
+  const { storeId } = useContext(StoreContext);
 
   const { mutate: endReservationMutation } = useMutation({
     mutationKey: ["endReservation"],
-    mutationFn: endReservation,
+    mutationFn: (id: string) => endReservation(id, storeId),
     onSuccess: () => {
       setMsg({ type: "success", text: "تم تسليم الحجز" });
       getBills();

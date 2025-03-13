@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useContext } from "react";
 import {
   Button,
   ButtonGroup,
@@ -19,6 +19,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import EChartsReact from "echarts-for-react";
 import { exportToExcel } from "../utils";
 import tableIcon from "./table.png";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 interface ShiftsAnalytics {
   start_date_time: string;
@@ -29,6 +30,7 @@ const getAnalytics = async (
   startDate: string,
   endDate: string,
   types: string[],
+  storeId: number,
 ) => {
   const { data } = await axios.post<ShiftsAnalytics[]>(
     "/shifts-analytics",
@@ -37,7 +39,7 @@ const getAnalytics = async (
       params: {
         start_date: startDate,
         end_date: endDate,
-        store_id: import.meta.env.VITE_STORE_ID,
+        store_id: storeId,
       },
     },
   );
@@ -52,18 +54,20 @@ const ShiftsAnalytics = () => {
     "sell",
     "return",
   ]);
+  const { storeId } = useContext(StoreContext);
 
   const {
     palette: { mode },
   } = useTheme();
 
   const { data, isFetching } = useQuery({
-    queryKey: ["analytics", startDate, endDate, requiredTypes],
+    queryKey: ["analytics", startDate, endDate, requiredTypes, storeId],
     queryFn: () =>
       getAnalytics(
         startDate.toISOString(),
         endDate.toISOString(),
         requiredTypes,
+        storeId,
       ),
     initialData: [],
   });
