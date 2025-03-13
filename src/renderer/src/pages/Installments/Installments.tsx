@@ -42,7 +42,11 @@ export interface Installment {
   ended: boolean;
 }
 const getInstallments = async () => {
-  const { data } = await axios.get<Installment[]>("/installments");
+  const { data } = await axios.get<Installment[]>("/installments", {
+    params: {
+      store_id: import.meta.env.VITE_STORE_ID,
+    },
+  });
   return data;
 };
 

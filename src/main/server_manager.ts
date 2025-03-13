@@ -123,6 +123,8 @@ export class ServerManager {
       }
       // Remove the serverPid from settings
       settingsManager.setSetting("serverPid", null);
+    } else {
+      console.log("Server PID not found");
     }
   }
 }

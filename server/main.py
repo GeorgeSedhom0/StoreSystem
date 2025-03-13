@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
-from typing import Literal
+from typing import Literal, Any
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -132,7 +132,7 @@ class dbProduct(BaseModel):
 class dbBill(BaseModel):
     "Define the dbBill model"
 
-    id: str
+    id: int
     time: str
     discount: float
     total: float
@@ -224,46 +224,143 @@ def get_bar_code():
 
 @app.get("/products")
 def get_products(
+    store_id: int,
     is_deleted: Optional[bool] = False,
 ):
     """
-    Get all products from the database
+    Get all products from the database for a specific store
+
+    Args:
+        is_deleted (bool): Whether to include deleted products
+        store_id (int): The store ID to get products for
 
     Returns:
         List[Dict]: A list of dictionaries containing the products
-
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get products with inventory for the specific store
             cur.execute(
                 """SELECT
-                        id, name, bar_code, wholesale_price,
-                        price, stock, category
-                        FROM products
-                        WHERE is_deleted = %s
-                        ORDER BY name;
-                        """,
-                (is_deleted,),
+                    p.id, p.name, p.bar_code, p.wholesale_price,
+                    p.price, pi.stock, p.category
+                FROM products p
+                JOIN product_inventory pi ON p.id = pi.product_id
+                WHERE pi.is_deleted = %s
+                AND pi.store_id = %s
+                ORDER BY p.name;
+                """,
+                (is_deleted, store_id),
             )
             products = cur.fetchall()
 
-            # Get reserved products
-            cur.execute("""
+            # Get reserved products for the specific store
+            cur.execute(
+                """
                 SELECT
-                    products.id,
-                    products.name,
-                    products.bar_code,
-                    SUM(reserved_products.amount) AS stock,
-                    products.wholesale_price,
-                    products.price,
-                    products.category
-                FROM reserved_products
-                JOIN products ON reserved_products.product_id = products.id
-                GROUP BY products.id, products.name, products.bar_code,
-                    products.wholesale_price, products.price, products.category
-                """)
+                    p.id,
+                    p.name,
+                    p.bar_code,
+                    SUM(rp.amount) AS stock,
+                    p.wholesale_price,
+                    p.price,
+                    p.category
+                FROM reserved_products rp
+                JOIN products p ON rp.product_id = p.id
+                WHERE rp.store_id = %s
+                GROUP BY p.id, p.name, p.bar_code,
+                    p.wholesale_price, p.price, p.category
+                """,
+                (store_id,),
+            )
 
             reserved_products = cur.fetchall()
+            reserved_products = {
+                product["id"]: product for product in reserved_products
+            }
+
+        return JSONResponse(
+            content={"products": products, "reserved_products": reserved_products}
+        )
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/admin/products")
+def get_products_as_admin():
+    """
+    Get all products from the database for all stores as admin
+
+    Returns:
+        List[Dict]: A dictionary containing products with their stocks across all stores
+                    and any reserved products
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get products with inventory for all stores
+            cur.execute(
+                """WITH all_stores AS (
+                SELECT id, name FROM store_data
+                ),
+                product_stocks AS (
+                    SELECT 
+                        p.id,
+                        p.name,
+                        p.bar_code,
+                        p.wholesale_price,
+                        p.price,
+                        p.category,
+                        jsonb_object_agg(
+                            CASE 
+                                WHEN s.name IS NOT NULL AND s.name != '' THEN s.name 
+                                ELSE s.id::text 
+                            END, 
+                            COALESCE(pi.stock, 0)
+                        ) AS stock_by_store
+                    FROM products p
+                    CROSS JOIN all_stores s
+                    LEFT JOIN product_inventory pi ON p.id = pi.product_id AND s.id = pi.store_id
+                    GROUP BY p.id, p.name, p.bar_code, p.wholesale_price, p.price, p.category
+                )
+                SELECT * FROM product_stocks
+                ORDER BY name;
+                """
+            )
+            products = cur.fetchall()
+
+            # Get reserved products across all stores with store names
+            cur.execute(
+                """
+                SELECT
+                    rp.product_id,
+                    rp.store_id,
+                    sd.name AS store_name,
+                    rp.amount
+                FROM reserved_products rp
+                JOIN store_data sd ON rp.store_id = sd.id
+                """
+            )
+
+            reserved_products_raw = cur.fetchall()
+
+            # Create a structure where reserved_products is {product_id: {store_key: amount}}
+            reserved_products = {}
+            for record in reserved_products_raw:
+                product_id = record["product_id"]
+                store_id = record["store_id"]
+                store_name = record["store_name"]
+                amount = record["amount"]
+
+                # Use store name if available, otherwise use store_id as string
+                store_key = (
+                    store_name if store_name and store_name != "" else str(store_id)
+                )
+
+                if product_id not in reserved_products:
+                    reserved_products[product_id] = {}
+
+                reserved_products[product_id][store_key] = amount
 
         return JSONResponse(
             content={"products": products, "reserved_products": reserved_products}
@@ -274,26 +371,27 @@ def get_products(
 
 
 @app.post("/product")
-def add_product(product: Product):
+def add_product(product: Product, store_id: int):
     """
     Add a product to the database
 
     Args:
         product (Product): The product to add
+        store_id (int): The store ID to add the product to
 
     Returns:
         Dict: The product added to the database
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            print(product)
+            # First add to the central products table
             cur.execute(
                 """
                 INSERT INTO products (
                     name, bar_code, wholesale_price,
-                    price, stock, category
+                    price, category
                 )
-                VALUES (%s, %s, %s, %s, 0, %s)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -304,7 +402,28 @@ def add_product(product: Product):
                     product.category,
                 ),
             )
-            return cur.fetchone()
+            new_product = cur.fetchone()
+
+            # Then add to the product_inventory for this store with initial stock of 0
+            cur.execute(
+                """
+                INSERT INTO product_inventory (
+                    store_id, product_id, stock, is_deleted
+                )
+                VALUES (%s, %s, %s, %s)
+                """,
+                (
+                    store_id,
+                    new_product["id"],
+                    0,
+                    False,
+                ),
+            )
+
+            # Return product with store-specific inventory data
+            result = dict(new_product)
+            result["stock"] = 0
+            return result
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -313,60 +432,93 @@ def add_product(product: Product):
 @app.put("/products")
 def update_product(products: list[Product], store_id: int):
     """
-    Update a product in the database
+    Update products in the database
 
     Args:
         products (list[Product]): The products to update
+        store_id (int): The store ID for the products
 
     Returns:
-        Dict: The updated product
+        Dict: A message indicating successful update
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            db_products = []
-            db_products_flow = []
             for product in products:
-                db_products.append(
-                    (product.name, product.bar_code, product.category, product.id)
-                )
-                db_products_flow.append(
+                # Update product basic information in the central products table
+                cur.execute(
+                    """
+                    UPDATE products
+                    SET
+                        name = %s,
+                        bar_code = %s,
+                        wholesale_price = %s,
+                        price = %s,
+                        category = %s
+                    WHERE id = %s
+                    """,
                     (
-                        store_id,
-                        f"{store_id}_-1",
-                        product.id,
-                        product.stock,
+                        product.name,
+                        product.bar_code,
                         product.wholesale_price,
                         product.price,
+                        product.category,
                         product.id,
+                    ),
+                )
+
+                # If stock is provided, update the store-specific inventory
+                if product.stock is not None:
+                    # First, check if an inventory entry exists for this product in this store
+                    cur.execute(
+                        """
+                        SELECT stock FROM product_inventory
+                        WHERE product_id = %s AND store_id = %s
+                        """,
+                        (product.id, store_id),
                     )
-                )
+                    inventory = cur.fetchone()
 
-            cur.executemany(
-                """
-                UPDATE products
-                SET
-                    name = %s, bar_code = %s,
-                    category = %s
-                WHERE id = %s
-                RETURNING *
-                """,
-                db_products,
-            )
+                    if inventory:
+                        current_stock = inventory["stock"]
+                        # Calculate stock difference
+                        stock_difference = product.stock - current_stock
 
-            cur.executemany(
-                """
-                INSERT INTO products_flow (
-                    store_id, bill_id, product_id,
-                    amount, wholesale_price, price
-                )
-                SELECT %s, %s, %s,
-                    %s - products.stock,
-                    %s, %s
-                FROM products
-                WHERE id = %s
-                """,
-                db_products_flow,
-            )
+                        if stock_difference != 0:
+                            # Create a products_flow entry to update stock
+                            # Using special bill_id with store_id prefix to indicate inventory adjustment
+                            cur.execute(
+                                """
+                                INSERT INTO products_flow (
+                                    store_id, bill_id, product_id,
+                                    amount, wholesale_price, price
+                                )
+                                VALUES (%s, %s, %s, %s, %s, %s)
+                                """,
+                                (
+                                    store_id,
+                                    f"{store_id}_adjust",
+                                    product.id,
+                                    stock_difference,
+                                    product.wholesale_price,
+                                    product.price,
+                                ),
+                            )
+                    else:
+                        # If no inventory entry exists, create one
+                        cur.execute(
+                            """
+                            INSERT INTO product_inventory (
+                                store_id, product_id, stock, is_deleted
+                            )
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (
+                                store_id,
+                                product.id,
+                                product.stock,
+                                False,
+                            ),
+                        )
 
             return JSONResponse(content={"message": "Products updated successfully"})
     except Exception as e:
@@ -375,12 +527,13 @@ def update_product(products: list[Product], store_id: int):
 
 
 @app.put("/product/delete")
-def delete_product(product_id: int):
+def delete_product(product_id: int, store_id: int):
     """
-    Mark a product as deleted in the database
+    Mark a product as deleted in a specific store
 
     Args:
         product_id (int): The ID of the product to mark as deleted
+        store_id (int): The store ID where the product should be marked as deleted
 
     Returns:
         Dict: A message indicating the result of the operation
@@ -389,14 +542,16 @@ def delete_product(product_id: int):
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                UPDATE products
+                UPDATE product_inventory
                 SET is_deleted = TRUE
-                WHERE id = %s
+                WHERE product_id = %s AND store_id = %s
                 """,
-                (product_id,),
+                (product_id, store_id),
             )
             return JSONResponse(
-                content={"message": "Product marked as deleted successfully"}
+                content={
+                    "message": "Product marked as deleted successfully in this store"
+                }
             )
     except Exception as e:
         print(f"Error: {e}")
@@ -404,12 +559,13 @@ def delete_product(product_id: int):
 
 
 @app.put("/product/restore")
-def restore_product(product_id: int):
+def restore_product(product_id: int, store_id: int):
     """
-    Restore a product that was marked as deleted in the database
+    Restore a product that was marked as deleted in a specific store
 
     Args:
         product_id (int): The ID of the product to restore
+        store_id (int): The store ID where the product should be restored
 
     Returns:
         Dict: A message indicating the result of the operation
@@ -418,13 +574,15 @@ def restore_product(product_id: int):
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                UPDATE products
+                UPDATE product_inventory
                 SET is_deleted = FALSE
-                WHERE id = %s
+                WHERE product_id = %s AND store_id = %s
                 """,
-                (product_id,),
+                (product_id, store_id),
             )
-            return JSONResponse(content={"message": "Product restored successfully"})
+            return JSONResponse(
+                content={"message": "Product restored successfully in this store"}
+            )
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -432,6 +590,7 @@ def restore_product(product_id: int):
 
 @app.get("/bills")
 def get_bills(
+    store_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     party_id: Optional[int] = None,
@@ -447,6 +606,7 @@ def get_bills(
     params: tuple = (
         start_date if start_date else "1970-01-01",
         end_date if end_date else datetime.now().isoformat(),
+        store_id,
     )
     if party_id:
         extra_condition = "AND party_id = %s"
@@ -454,12 +614,13 @@ def get_bills(
             start_date if start_date else "1970-01-01",
             end_date if end_date else datetime.now().isoformat(),
             party_id,
+            store_id,
         )
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 f"""SELECT
-                    bills.ref_id AS id,
+                    bills.id,
                     bills.time,
                     bills.discount,
                     bills.total,
@@ -476,13 +637,14 @@ def get_bills(
                         )
                     ) AS products
                 FROM bills
-                JOIN products_flow ON bills.ref_id = products_flow.bill_id
+                JOIN products_flow ON bills.id = products_flow.bill_id
                 JOIN products ON products_flow.product_id = products.id
                 LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
                 WHERE bills.time >= %s
                 AND bills.time <= %s
                 {extra_condition}
-                GROUP BY bills.ref_id, bills.time, bills.discount,
+                AND bills.store_id = %s
+                GROUP BY bills.id, bills.time, bills.discount,
                     bills.total, bills.type, bills.party_id, assosiated_parties.name
                 ORDER BY bills.time DESC
                     """,
@@ -502,9 +664,10 @@ def update_bill(bill: dbBill, store_id: int):
 
     To update the bill successfully, you MUST follow these steps:
         1. Update the bill total, discount
-        2. Set all the old products_flow assosiated with the bill to ref_id {id}_-1
-        3. Insert the new products_flow with the "-1" ref_id that reverts the old products_flow
-        4. Insert the new products_flow with the correct ref_id
+        2. Insert a bill with id -(the original id) to revert the old bill
+        3. Set all the old products_flow associated with the bill to id to -(the original id)
+        3. Insert the new products_flow with the -(the original id) that reverts the old products_flow
+        4. Insert the new products_flow with the correct original id
 
     Args:
         bill (Bill): The bill to update
@@ -512,7 +675,7 @@ def update_bill(bill: dbBill, store_id: int):
     Returns:
         Dict: The updated bill
     """
-    # minuplate the bill to be able to update it
+    # manipulate the bill to be able to update it
     # 1. set the total to a negative value in case of return or buy bills
     bill.total = -bill.total if bill.type in ["buy", "return"] else bill.total
     # 2. set the amount in the products to a negative value in case of return or buy bills
@@ -522,58 +685,81 @@ def update_bill(bill: dbBill, store_id: int):
             -product.amount if bill.type in ["buy", "return"] else product.amount
         )
 
-    bill_id = bill.id.split("_")[1]
-
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Update the bill details
             cur.execute(
                 """
                 UPDATE bills
                 SET
                     discount = %s,
                     total = %s
-                WHERE ref_id = %s
+                WHERE id = %s
                 RETURNING *
                 """,
                 (bill.discount, bill.total, bill.id),
             )
+            negative_bill_id = f"-{bill.id}"
 
             cur.execute(
                 """
+                INSERT INTO bills (id, store_id)
+                VALUES (%s, %s)
+                """,
+                (negative_bill_id, store_id),
+            )
+
+            # Get the products_flow entries associated with this bill
+            cur.execute(
+                """
+                SELECT * FROM products_flow
+                WHERE bill_id = %s
+                """,
+                (bill.id,),
+            )
+            old_products_flow = cur.fetchall()
+
+            # Create a negative bill ID for reversal entries
+
+            # Update the old products_flow entries to use
+            #  the negative bill ID
+            cur.execute(
+                """
                 UPDATE products_flow
-                SET
-                    bill_id = %s
+                SET bill_id = %s
                 WHERE bill_id = %s
                 RETURNING *
                 """,
-                (f"{store_id}_-{bill_id}", bill.id),
+                (negative_bill_id, bill.id),
             )
 
-            values_to_reverse = cur.fetchall()
-            values = [
+            # Create reversal entries for the old products
+            values: Any = [
                 (
                     store_id,
-                    f"{store_id}_-{bill_id}",
+                    negative_bill_id,
                     product["product_id"],
                     -product["amount"],
                     product["wholesale_price"],
                     product["price"],
                 )
-                for product in values_to_reverse
+                for product in old_products_flow
             ]
 
+            # Create entries for the new products
             values += [
                 (
                     store_id,
                     bill.id,
                     product_flow.id,
-                    -product_flow.amount,
+                    product_flow.amount,
                     product_flow.wholesale_price,
                     product_flow.price,
                 )
                 for product_flow in bill.products
             ]
 
+            # Insert all product flow entries
             cur.executemany(
                 """
                 INSERT INTO products_flow (
@@ -656,7 +842,7 @@ def add_bill(
             values = [
                 (
                     store_id,
-                    f"{store_id}_{bill_id}",
+                    bill_id,
                     product_flow.id,
                     -product_flow.quantity
                     if move_type in ["sell", "BNPL", "installment", "reserve"]
@@ -674,52 +860,23 @@ def add_bill(
                     amount, wholesale_price, price
                 )
                 VALUES (%s, %s, %s, %s, %s, %s)
-
                 """,
                 values,
             )
+
             if cur.rowcount != len(values):
                 raise HTTPException(
                     status_code=400, detail="Insert into products_flow failed"
                 )
 
-            # get last bill for returnig
-            cur.execute(
-                """
-                SELECT
-                    bills.ref_id AS id,
-                    bills.time,
-                    bills.discount,
-                    bills.total,
-                    bills.type,
-                    json_agg(
-                        json_build_object(
-                            'name', products.name,
-                            'amount', products_flow.amount,
-                            'wholesale_price', products_flow.wholesale_price,
-                            'price', products_flow.price
-                        )
-                    ) AS products
-                FROM bills
-                JOIN products_flow ON bills.ref_id = products_flow.bill_id
-                JOIN products ON products_flow.product_id = products.id
-                WHERE bills.id = %s
-                AND bills.store_id = %s
-                GROUP BY bills.ref_id, bills.time, bills.discount, bills.total, bills.type
-                    """,
-                (bill_id, store_id),
-            )
-
-            ret_bill = cur.fetchone()
-
             if move_type == "reserve":
                 cur.executemany(
                     """
-                    INSERT INTO reserved_products (product_id, amount)
-                    VALUES (%s, %s)
+                    INSERT INTO reserved_products (product_id, amount, store_id)
+                    VALUES (%s, %s, %s)
                     """,
                     [
-                        (product_flow.id, product_flow.quantity)
+                        (product_flow.id, product_flow.quantity, store_id)
                         for product_flow in bill.products_flow
                     ],
                 )
@@ -733,16 +890,47 @@ def add_bill(
                     (bill_id, store_id, paid, installments, installment_interval),
                 )
 
-        return {"message": "Bill added successfully", "bill": ret_bill}
+            # get the inserted bill to return it
+            cur.execute(
+                """
+                SELECT
+                    bills.id,
+                    bills.time,
+                    bills.discount,
+                    bills.total,
+                    bills.type,
+                    assosiated_parties.name AS party_name,
+                    json_agg(
+                        json_build_object(
+                            'id', products_flow.product_id,
+                            'name', products.name,
+                            'bar_code', products.bar_code,
+                            'amount', products_flow.amount,
+                            'wholesale_price', products_flow.wholesale_price,
+                            'price', products_flow.price
+                        )
+                    ) AS products
+                FROM bills
+                JOIN products_flow ON bills.id = products_flow.bill_id
+                JOIN products ON products_flow.product_id = products.id
+                LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
+                WHERE bills.id = %s
+                GROUP BY bills.id, bills.time, bills.discount,
+                    bills.total, bills.type, bills.party_id, assosiated_parties.name
+                """,
+                (bill_id,),
+            )
+
+            bill = cur.fetchone()
+
+        return {"message": "Bill added successfully", "bill": bill}
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/end-reservation")
-def end_reservation(
-    bill_id: str,
-):
+def end_reservation(bill_id: str, store_id: int):
     """
     End a reservation for all products in a reservation bill
     """
@@ -753,8 +941,9 @@ def end_reservation(
                 SELECT product_id, amount
                 FROM products_flow
                 WHERE bill_id = %s
+                AND store_id = %s
                 """,
-                (bill_id,),
+                (bill_id, store_id),
             )
             products = cur.fetchall()
 
@@ -762,9 +951,10 @@ def end_reservation(
                 """
                 UPDATE bills
                 SET type = 'sell'
-                WHERE ref_id = %s
+                WHERE id = %s
+                AND store_id = %s
                 """,
-                (bill_id,),
+                (bill_id, store_id),
             )
 
             cur.executemany(
@@ -775,11 +965,12 @@ def end_reservation(
                     FROM reserved_products
                     WHERE product_id = %s
                     AND amount = %s
+                    AND store_id = %s
                     LIMIT 1
                 )
                 """,
                 [
-                    (product["product_id"], product["amount"] * -1)
+                    (product["product_id"], product["amount"] * -1, store_id)
                     for product in products
                 ],
             )
@@ -792,6 +983,7 @@ def end_reservation(
 
 @app.get("/cash-flow")
 def get_cash_flow(
+    store_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     party_id: Optional[int] = None,
@@ -808,6 +1000,7 @@ def get_cash_flow(
     params: tuple = (
         start_date if start_date else "1970-01-01",
         end_date if end_date else datetime.now().isoformat(),
+        store_id,
     )
     if party_id:
         extra_condition = "AND party_id = %s"
@@ -815,6 +1008,7 @@ def get_cash_flow(
             start_date if start_date else "1970-01-01",
             end_date if end_date else datetime.now().isoformat(),
             party_id,
+            store_id,
         )
 
     try:
@@ -831,6 +1025,7 @@ def get_cash_flow(
                 LEFT JOIN assosiated_parties ON cash_flow.party_id = assosiated_parties.id
                 WHERE time >= %s
                 AND time <= %s
+                AND store_id = %s
                 {extra_condition}
                 ORDER BY cash_flow.time DESC
                 """,
@@ -887,16 +1082,21 @@ def add_cash_flow(
 
 
 @app.get("/current-shift")
-def current_shift():
+def current_shift(
+    store_id: int,
+):
     """
     Get the current shift
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT start_date_time FROM shifts
-                WHERE current = True
-                """)
+                WHERE current = True AND store_id = %s
+                """,
+                (store_id,),
+            )
             current_shift = cur.fetchone()
             if not current_shift:
                 return {"message": "No current shift"}
@@ -907,20 +1107,26 @@ def current_shift():
 
 
 @app.get("/last-shift")
-def last_shift():
+def last_shift(
+    store_id: int,
+):
     """
     Get the last shift
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
                     start_date_time,
                     COALESCE(end_date_time, CURRENT_TIMESTAMP)
                 FROM shifts
+                WHERE store_id = %s
                 ORDER BY start_date_time DESC
                 LIMIT 1
-                """)
+                """,
+                (store_id,),
+            )
             last_shift = cur.fetchone()
             if not last_shift:
                 return {"message": "No last shift"}
@@ -931,21 +1137,27 @@ def last_shift():
 
 
 @app.get("/shift-total")
-def shift_total():
+def shift_total(
+    store_id: int,
+):
     """
     Get the total sales for the current shift
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT type, COALESCE(SUM(total), 0) AS total
                 FROM bills
                 WHERE time >= (
                     SELECT start_date_time FROM shifts
                     WHERE current = True
                 )
+                AND store_id = %s
                 GROUP BY type
-                """)
+                """,
+                (store_id,),
+            )
             data = cur.fetchall()
 
         totals = {"sell_total": 0, "buy_total": 0, "return_total": 0}
@@ -992,20 +1204,31 @@ def generate_xlsx(data):
 
 
 @app.get("/inventory")
-async def inventory():
+async def inventory(store_id: int):
     """
-    Get the products in the inventory and their total value
+    Get the products in the inventory and their total value for a specific store
+
+    Args:
+        store_id (int): The store ID to get inventory for
+
+    Returns:
+        StreamingResponse: Excel file with inventory data
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
-                    name,
-                    stock,
-                    wholesale_price,
-                    stock * wholesale_price AS total_value
-                FROM products
-                """)
+                    p.name,
+                    pi.stock,
+                    p.wholesale_price,
+                    pi.stock * p.wholesale_price AS total_value
+                FROM products p
+                JOIN product_inventory pi ON p.id = pi.product_id
+                WHERE pi.store_id = %s AND pi.is_deleted = FALSE
+                """,
+                (store_id,),
+            )
             # make an .xlsx file and return it
             data = cur.fetchall()
 
@@ -1014,7 +1237,7 @@ async def inventory():
             return StreamingResponse(
                 output,
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={"Content-Disposition": "attachment;filename=inv.xlsx"},
+                headers={"Content-Disposition": "attachment;filename=inventory.xlsx"},
             )
 
     except Exception as e:

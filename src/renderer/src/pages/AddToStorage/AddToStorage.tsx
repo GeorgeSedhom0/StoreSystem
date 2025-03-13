@@ -6,11 +6,12 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useCallback, useState } from "react";
+import { useCallback, useContext, useState } from "react";
 import { Product } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import PrintBarCode from "../Shared/PrintBarCode";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const Storage = () => {
   const [product, setProduct] = useState<Product>({
@@ -23,11 +24,15 @@ const Storage = () => {
   });
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [isPrintingCode, setIsPrintingCode] = useState(false);
+  const { storeId } = useContext(StoreContext);
 
   const addProduct = useCallback(async () => {
     try {
-      const { data } = await axios.post("/product", product);
-      console.log(data);
+      await axios.post("/product", product, {
+        params: {
+          store_id: storeId,
+        },
+      });
       setProduct({
         name: "",
         category: "",

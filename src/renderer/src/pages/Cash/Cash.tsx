@@ -42,6 +42,7 @@ const getCashFlow = async (
       start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
       end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
       party_id: partyId,
+      store_id: import.meta.env.VITE_STORE_ID,
     },
   });
   return data;
@@ -90,7 +91,11 @@ const Cash = () => {
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
     queryFn: async () => {
-      const { data } = await axios.get("/last-shift");
+      const { data } = await axios.get("/last-shift", {
+        params: {
+          store_id: import.meta.env.VITE_STORE_ID,
+        },
+      });
       return data;
     },
   });
@@ -199,6 +204,10 @@ const Cash = () => {
         },
       );
       await updateCashFlow();
+      setAmount(0);
+      setDescription("");
+      setMoveType("in");
+      setSelectedPartyId(null);
       setMsg({ type: "success", text: "تمت إضافة سجل التدفق النقدي بنجاح" });
     } catch (error) {
       setMsg({ type: "error", text: "لم تتم الإضافة بنجاح" });

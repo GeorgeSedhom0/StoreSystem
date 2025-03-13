@@ -1,6 +1,8 @@
 import { Card, Grid2, Typography } from "@mui/material";
+import { StoreContext } from "@renderer/StoreDataProvider";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
+import { useContext } from "react";
 
 interface AlertAnalytics {
   name: string;
@@ -8,13 +10,21 @@ interface AlertAnalytics {
   days_left: number;
   urgent: boolean;
 }
-const getAnalytics = async () => {
-  const { data } = await axios.get<AlertAnalytics[]>("/analytics/alerts");
+const getAnalytics = async ({ queryKey }) => {
+  const [_analytics, _alerts, storeId] = queryKey;
+  const { data } = await axios.get<AlertAnalytics[]>("/analytics/alerts", {
+    params: {
+      store_id: storeId,
+    },
+  });
   return data;
 };
+
 const AlertsAnalytics = () => {
+  const { storeId } = useContext(StoreContext);
+
   const { data } = useQuery({
-    queryKey: ["analytics", "alerts"],
+    queryKey: ["analytics", "alerts", storeId],
     queryFn: getAnalytics,
     initialData: [],
   });
@@ -31,12 +41,12 @@ const AlertsAnalytics = () => {
               الانتباه الى الاشعارات المحددة باللون الاحمر بشكل خاص
             </Typography>
           </Grid2>
-          <Grid2 container gap={3} size={12}>
+          <Grid2 container spacing={3} size={12}>
             {data.length === 0 && (
               <Typography variant="body1">لا يوجد اشعارات</Typography>
             )}
             {data.map((alert) => (
-              <Grid2 size={12}>
+              <Grid2 size={4}>
                 <Card
                   elevation={3}
                   sx={{

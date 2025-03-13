@@ -29,9 +29,11 @@ origins = [
     "http://localhost:5173",
 ]
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s [%(levelname)s] - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 class Database:
@@ -45,12 +47,15 @@ class Database:
         self.real_dict_cursor = real_dict_cursor
 
     def __enter__(self):
-        self.conn = psycopg2.connect(host=self.host,
-                                     database=self.database,
-                                     user=self.user,
-                                     password=self.password)
+        self.conn = psycopg2.connect(
+            host=self.host,
+            database=self.database,
+            user=self.user,
+            password=self.password,
+        )
         return self.conn.cursor(
-            cursor_factory=RealDictCursor if self.real_dict_cursor else None)
+            cursor_factory=RealDictCursor if self.real_dict_cursor else None
+        )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
@@ -79,15 +84,16 @@ def get_user_profile(access_token=Cookie()) -> JSONResponse:
                 JOIN pages ON pages.id = ANY(scopes.pages)
                 WHERE username = %s
                 GROUP BY username
-                """, (user["sub"], ))
+                """,
+                (user["sub"],),
+            )
             user = cur.fetchone()
-            cur.execute("SELECT * FROM store_data WHERE id = %s", (1, ))
+            cur.execute("SELECT * FROM store_data WHERE id = %s", (1,))
             store = cur.fetchone()
             cur.execute("SELECT * FROM shifts WHERE current = True")
             shift = cur.fetchone()
             if not shift:
-                raise HTTPException(status_code=401,
-                                    detail="Shift not started")
+                raise HTTPException(status_code=401, detail="Shift not started")
             return JSONResponse(content={"user": user, "store": store})
     except Exception as e:
         logging.error(f"Error: {e}")
@@ -96,34 +102,34 @@ def get_user_profile(access_token=Cookie()) -> JSONResponse:
 
 @router.post("/login")
 def auth_user(
-        username: str = Form(...),
-        password: str = Form(...),
+    store_id: int,
+    username: str = Form(...),
+    password: str = Form(...),
 ) -> JSONResponse:
     """
     Authenticate the user and start a new shift if not already started
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("SELECT * FROM users WHERE username = %s",
-                        (username, ))
+            cur.execute("SELECT * FROM users WHERE username = %s", (username,))
             user = cur.fetchone()
 
             if user is None:
-                return JSONResponse(content={"error": "Incorrect username"},
-                                    status_code=401)
+                return JSONResponse(
+                    content={"error": "Incorrect username"}, status_code=401
+                )
 
             if bcrypt.checkpw(
-                    password.encode('utf-8'),
-                    user["password"].encode('utf-8'),
+                password.encode("utf-8"),
+                user["password"].encode("utf-8"),
             ):
-                access_token = jwt.encode({"sub": username},
-                                          SECRET,
-                                          algorithm=ALGORITHM)
+                access_token = jwt.encode(
+                    {"sub": username}, SECRET, algorithm=ALGORITHM
+                )
                 del user["password"]
-                response = JSONResponse({
-                    "message": "Logged in successfully",
-                    "user": user
-                })
+                response = JSONResponse(
+                    {"message": "Logged in successfully", "user": user}
+                )
 
                 response.set_cookie(
                     key="access_token",
@@ -136,9 +142,11 @@ def auth_user(
                 # Start a new shift
                 cur.execute(
                     """
-                    SELECT start_date_time, "user" FROM shifts
+                    SELECT start_date_time, user_id FROM shifts
                     WHERE current = True
-                    """, (user['id'], ))
+                    """,
+                    (user["id"],),
+                )
                 cur_shift = cur.fetchone()
 
                 if cur_shift:
@@ -146,15 +154,18 @@ def auth_user(
 
                 cur.execute(
                     """
-                    INSERT INTO shifts (start_date_time, current, "user")
-                    VALUES (%s, %s, %s)
+                    INSERT INTO shifts (start_date_time, current, user_id, store_id)
+                    VALUES (%s, %s, %s, %s)
                     RETURNING start_date_time
-                    """, (datetime.now(), True, user['id']))
+                    """,
+                    (datetime.now(), True, user["id"], store_id),
+                )
                 return response
 
             else:
-                return JSONResponse(content={"error": "Incorrect password"},
-                                    status_code=401)
+                return JSONResponse(
+                    content={"error": "Incorrect password"}, status_code=401
+                )
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -169,15 +180,15 @@ def logout_user(access_token=Cookie()) -> JSONResponse:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             # Get the user from the access token
             payload = jwt.decode(access_token, SECRET, algorithms=[ALGORITHM])
-            username = payload.get('sub')
+            username = payload.get("sub")
 
-            cur.execute("SELECT * FROM users WHERE username = %s",
-                        (username, ))
+            cur.execute("SELECT * FROM users WHERE username = %s", (username,))
             user = cur.fetchone()
 
             if user is None:
-                return JSONResponse(content={"error": "User not found"},
-                                    status_code=401)
+                return JSONResponse(
+                    content={"error": "User not found"}, status_code=401
+                )
 
             # End the current shift
             cur.execute(
@@ -185,9 +196,10 @@ def logout_user(access_token=Cookie()) -> JSONResponse:
                 UPDATE shifts
                 SET end_date_time = %s, current = False
                 WHERE current = True
-                """, (datetime.now(), ))
-            response = JSONResponse(
-                content={"message": "Logged out successfully"})
+                """,
+                (datetime.now(),),
+            )
+            response = JSONResponse(content={"message": "Logged out successfully"})
             response.delete_cookie(key="access_token")
             return response
 
@@ -199,24 +211,23 @@ def logout_user(access_token=Cookie()) -> JSONResponse:
 @router.get("/switch")
 def switch_store(access_token=Cookie()) -> JSONResponse:
     """
-    Same as logout but without ending the shift 
+    Same as logout but without ending the shift
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             # Get the user from the access token
             payload = jwt.decode(access_token, SECRET, algorithms=[ALGORITHM])
-            username = payload.get('sub')
+            username = payload.get("sub")
 
-            cur.execute("SELECT * FROM users WHERE username = %s",
-                        (username, ))
+            cur.execute("SELECT * FROM users WHERE username = %s", (username,))
             user = cur.fetchone()
 
             if user is None:
-                return JSONResponse(content={"error": "User not found"},
-                                    status_code=401)
+                return JSONResponse(
+                    content={"error": "User not found"}, status_code=401
+                )
 
-            response = JSONResponse(
-                content={"message": "Switched successfully"})
+            response = JSONResponse(content={"message": "Switched successfully"})
             response.delete_cookie(key="access_token")
             return response
 
@@ -227,11 +238,11 @@ def switch_store(access_token=Cookie()) -> JSONResponse:
 
 @router.post("/signup")
 def add_user(
-        username: str = Form(...),
-        password: str = Form(...),
-        email: str = Form(...),
-        phone: str = Form(...),
-        scope_id: int = Form(...),
+    username: str = Form(...),
+    password: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    scope_id: int = Form(...),
 ) -> JSONResponse:
     """
     Add a user
@@ -239,9 +250,9 @@ def add_user(
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             hashed_password = bcrypt.hashpw(
-                password.encode('utf-8'),
+                password.encode("utf-8"),
                 bcrypt.gensalt(),
-            ).decode('utf-8')
+            ).decode("utf-8")
             cur.execute(
                 """
                 INSERT INTO users (
@@ -249,7 +260,9 @@ def add_user(
                 )
                 VALUES (%s, %s, %s, %s, %s)
                 RETURNING *
-                """, (username, hashed_password, email, phone, scope_id))
+                """,
+                (username, hashed_password, email, phone, scope_id),
+            )
             user = cur.fetchone()
             return JSONResponse(content=user)
     except Exception as e:
@@ -276,11 +289,11 @@ def get_users() -> JSONResponse:
 
 @router.put("/user")
 def update_user(
-        username: str = Form(...),
-        password: str = Form(...),
-        email: str = Form(...),
-        phone: str = Form(...),
-        scope_id: int = Form(...),
+    username: str = Form(...),
+    password: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    scope_id: int = Form(...),
 ) -> JSONResponse:
     """
     Update a user
@@ -288,16 +301,18 @@ def update_user(
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             hashed_password = bcrypt.hashpw(
-                password.encode('utf-8'),
+                password.encode("utf-8"),
                 bcrypt.gensalt(),
-            ).decode('utf-8')
+            ).decode("utf-8")
             cur.execute(
                 """
                 UPDATE users
                 SET password = %s, email = %s, phone = %s, scope_id = %s
                 WHERE username = %s
                 RETURNING *
-                """, (hashed_password, email, phone, scope_id, username))
+                """,
+                (hashed_password, email, phone, scope_id, username),
+            )
             user = cur.fetchone()
 
             cur.execute(
@@ -305,7 +320,9 @@ def update_user(
                 UPDATE users
                 SET username = %s
                 WHERE id = %s
-                """, (username, user['id']))
+                """,
+                (username, user["id"]),
+            )
 
             return JSONResponse(content=user)
     except Exception as e:

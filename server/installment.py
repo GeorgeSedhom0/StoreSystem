@@ -6,8 +6,6 @@ import logging
 from dotenv import load_dotenv
 from os import getenv
 from fastapi import APIRouter
-from typing import Any
-import json
 
 load_dotenv()
 
@@ -35,12 +33,15 @@ class Database:
         self.real_dict_cursor = real_dict_cursor
 
     def __enter__(self):
-        self.conn = psycopg2.connect(host=self.host,
-                                     database=self.database,
-                                     user=self.user,
-                                     password=self.password)
+        self.conn = psycopg2.connect(
+            host=self.host,
+            database=self.database,
+            user=self.user,
+            password=self.password,
+        )
         return self.conn.cursor(
-            cursor_factory=RealDictCursor if self.real_dict_cursor else None)
+            cursor_factory=RealDictCursor if self.real_dict_cursor else None
+        )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
@@ -51,7 +52,9 @@ class Database:
 
 
 @router.get("/installments")
-def get_installments() -> JSONResponse:
+def get_installments(
+    store_id: int,
+) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             # Fetch installments data
@@ -86,7 +89,8 @@ def get_installments() -> JSONResponse:
             flows = cur.fetchall()
 
             # Fetch products flow
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
                     installments.id,
                     SUM(products_flow.price * products_flow.amount) AS total,
@@ -100,52 +104,46 @@ def get_installments() -> JSONResponse:
                     bills.time AS time
                 FROM installments
                 LEFT JOIN bills ON installments.bill_id = bills.id
-                LEFT JOIN products_flow ON bills.ref_id = products_flow.bill_id
+                LEFT JOIN products_flow ON bills.id = products_flow.bill_id
                 LEFT JOIN products ON products_flow.product_id = products.id
+                WHERE bills.store_id = %s
                 GROUP BY installments.id, bills.time
-            """)
+            """,
+                (store_id,),
+            )
             products = cur.fetchall()
 
             # Combine all the fetched data
             result = []
             for installment in installments:
-                installment_id = installment['id']
-                party = next((p for p in parties if p['id'] == installment_id),
-                             None)
-                flow = next((f for f in flows if f['id'] == installment_id),
-                            None)
-                product = next(
-                    (p for p in products if p['id'] == installment_id), None)
+                installment_id = installment["id"]
+                party = next((p for p in parties if p["id"] == installment_id), None)
+                flow = next((f for f in flows if f["id"] == installment_id), None)
+                product = next((p for p in products if p["id"] == installment_id), None)
 
-                total_paid = sum(
-                    [f['amount'] if f["amount"] else 0
-                     for f in flow['flow']]) if flow else 0
-                total_paid += installment['paid']
+                total_paid = (
+                    sum([f["amount"] if f["amount"] else 0 for f in flow["flow"]])
+                    if flow
+                    else 0
+                )
+                total_paid += installment["paid"]
 
-                print(total_paid, product["total"])
-
-                result.append({
-                    'id':
-                    installment_id,
-                    'paid':
-                    installment['paid'],
-                    "installment_interval":
-                    installment['installment_interval'] if product else '',
-                    'installments_count':
-                    installment['installments_count'],
-                    'time':
-                    str(product['time']) if product else '',
-                    'party_name':
-                    party['party_name'] if party else '',
-                    'flow':
-                    flow['flow'] if flow else [],
-                    'total':
-                    product['total'] if product else 0,
-                    'products':
-                    product['products'] if product else [],
-                    "ended":
-                    total_paid >= -product['total'] if product else False
-                })
+                result.append(
+                    {
+                        "id": installment_id,
+                        "paid": installment["paid"],
+                        "installment_interval": installment["installment_interval"]
+                        if product
+                        else "",
+                        "installments_count": installment["installments_count"],
+                        "time": str(product["time"]) if product else "",
+                        "party_name": party["party_name"] if party else "",
+                        "flow": flow["flow"] if flow else [],
+                        "total": product["total"] if product else 0,
+                        "products": product["products"] if product else [],
+                        "ended": total_paid >= -product["total"] if product else False,
+                    }
+                )
 
             return JSONResponse(content=result)
     except psycopg2.Error as e:

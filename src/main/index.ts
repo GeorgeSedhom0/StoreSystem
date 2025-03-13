@@ -18,16 +18,18 @@ function createChildWindow(url: string): void {
     },
   });
 
-  childWindow.webContents.session.setCertificateVerifyProc((_request, callback) => {
-    callback(0);
-  });
-  
-  childWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12') {
+  childWindow.webContents.session.setCertificateVerifyProc(
+    (_request, callback) => {
+      callback(0);
+    },
+  );
+
+  childWindow.webContents.on("before-input-event", (event, input) => {
+    if (input.key === "F12") {
       childWindow.webContents.toggleDevTools();
       event.preventDefault();
     }
-    if (input.key === 'F5') {
+    if (input.key === "F5") {
       childWindow.reload();
       event.preventDefault();
     }
@@ -62,16 +64,18 @@ function createWindow(): void {
       },
     });
 
-    mainWindow.webContents.session.setCertificateVerifyProc((_request, callback) => {
-      callback(0);
-    });
+    mainWindow.webContents.session.setCertificateVerifyProc(
+      (_request, callback) => {
+        callback(0);
+      },
+    );
 
-    mainWindow.webContents.on('before-input-event', (event, input) => {
-      if (input.key === 'F12') {
+    mainWindow.webContents.on("before-input-event", (event, input) => {
+      if (input.key === "F12") {
         mainWindow.webContents.toggleDevTools();
         event.preventDefault();
       }
-      if (input.key === 'F5') {
+      if (input.key === "F5") {
         mainWindow.reload();
         event.preventDefault();
       }
@@ -108,7 +112,6 @@ function createWindow(): void {
   }
 }
 
-
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -132,10 +135,13 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('certificate-error', (event, _webContents, _url, _error, _certificate, callback) => {
-  event.preventDefault()
-  callback(true) // Trust the certificate
-})
+app.on(
+  "certificate-error",
+  (event, _webContents, _url, _error, _certificate, callback) => {
+    event.preventDefault();
+    callback(true); // Trust the certificate
+  },
+);
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

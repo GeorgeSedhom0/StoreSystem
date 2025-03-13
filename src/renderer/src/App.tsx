@@ -24,6 +24,8 @@ import Employee from "./pages/Employee/Employee";
 import { themes } from "./themes";
 import { useEffect, useState } from "react";
 import LoadingScreen from "./pages/Shared/LoadingScreen";
+import BillsAdmin from "./pages/BillsAdmin/BillsAdmin";
+import ProductsAdmin from "./pages/ProductsAdmin/ProductdsAdmin";
 
 axios.defaults.withCredentials = true;
 
@@ -178,7 +180,9 @@ const App = () => {
                   <Route path="/add-to-storage" element={<Storage />} />
                   <Route path="/buy" element={<Buy />} />
                   <Route path="/products" element={<Products />} />
+                  <Route path="/admin/products" element={<ProductsAdmin />} />
                   <Route path="/bills" element={<Bills />} />
+                  <Route path="/admin/bills" element={<BillsAdmin />} />
                   <Route path="/bills/:partyId" element={<Bills />} />
                   <Route path="/cash" element={<Cash />} />
                   <Route path="/cash/:partyId" element={<Cash />} />

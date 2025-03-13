@@ -23,13 +23,18 @@ const saveStoreData = async ({
         name,
         phone,
         address,
+        store_id: import.meta.env.VITE_STORE_ID,
       },
     },
   );
 };
 
 const getStoreData = async () => {
-  const { data } = await axios.get<Profile["store"]>("/store-data");
+  const { data } = await axios.get<Profile["store"]>("/store-data", {
+    params: {
+      store_id: import.meta.env.VITE_STORE_ID,
+    },
+  });
   return data;
 };
 

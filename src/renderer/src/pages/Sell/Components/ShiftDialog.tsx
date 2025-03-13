@@ -29,7 +29,11 @@ interface ShiftTotal {
 }
 
 const getShiftTotal = async () => {
-  const { data } = await axios.get<ShiftTotal>("/shift-total");
+  const { data } = await axios.get<ShiftTotal>("/shift-total", {
+    params: {
+      store_id: import.meta.env.VITE_STORE_ID,
+    },
+  });
   return data;
 };
 

@@ -1,30 +1,52 @@
-import { Button, Card, Grid2, TextField, Typography } from "@mui/material";
+import { Card, Grid2, TextField, Typography } from "@mui/material";
 import { ViewContainer } from "../Shared/Utils";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useContext } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
+import { StoreContext } from "../../StoreDataProvider";
+import { LoadingButton } from "@mui/lab";
 
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+  const [loggingIn, setLoggingIn] = useState(false);
 
   const navigate = useNavigate();
+  const { refreshProfile } = useContext(StoreContext);
 
   const login = useCallback(async () => {
+    if (loggingIn) return;
+    setLoggingIn(true);
     try {
       const formdata = new FormData();
       formdata.append("username", username);
       formdata.append("password", password);
 
-      await axios.post("/login", formdata);
+      await axios.post("/login", formdata, {
+        params: {
+          store_id: import.meta.env.VITE_STORE_ID,
+        },
+      });
+
+      await refreshProfile();
       navigate("/sell");
     } catch (e) {
       setMsg({ type: "error", text: "حدث خطأ ما" });
       console.error(e);
     }
-  }, [username, password]);
+    setLoggingIn(false);
+  }, [username, password, navigate, loggingIn, refreshProfile]);
+
+  const handleKeyPress = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Enter") {
+        login();
+      }
+    },
+    [login],
+  );
 
   return (
     <ViewContainer>
@@ -50,6 +72,7 @@ const Login = () => {
                 id="loginUserName"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                onKeyDown={handleKeyPress}
                 label="اسم المستخدم"
                 fullWidth
               />
@@ -58,14 +81,20 @@ const Login = () => {
                 value={password}
                 type="password"
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={handleKeyPress}
                 label="كلمة المرور"
                 fullWidth
               />
             </Grid2>
             <Grid2 size={12}>
-              <Button onClick={login} variant="contained" id="loginBtn">
+              <LoadingButton
+                loading={loggingIn}
+                onClick={login}
+                variant="contained"
+                id="loginBtn"
+              >
                 تسجيل الدخول
-              </Button>
+              </LoadingButton>
             </Grid2>
           </Grid2>
         </Card>

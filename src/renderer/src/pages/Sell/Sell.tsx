@@ -21,14 +21,12 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bill, Party, Product, SCProduct } from "../../utils/types";
-import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
 import ShiftDialog from "./Components/ShiftDialog";
 import BillView from "../../utils/BillView";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { printBill } from "../../utils/functions";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import PartyDetails from "../Shared/PartyDetails";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
@@ -37,15 +35,8 @@ import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import Installments from "./Components/Installments";
 import useParties from "../Shared/hooks/useParties";
 import useProducts from "../Shared/hooks/useProducts";
-
-const getShift = async () => {
-  const { data } = await axios.get("/current-shift");
-  if (data.start_date_time) {
-    return data.start_date_time;
-  } else {
-    throw new Error("No shift opened");
-  }
-};
+import { useShift } from "./hooks/useShifts";
+import useBills from "./hooks/useBills";
 
 const Sell = () => {
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
@@ -76,7 +67,6 @@ const Sell = () => {
   const [usingThirdParties, setUsingThirdParties] = useState<boolean>(false);
 
   const billRef = useRef<HTMLDivElement>(null);
-  const savingRef = useRef<boolean>(false);
 
   const naviagte = useNavigate();
 
@@ -86,20 +76,13 @@ const Sell = () => {
     updateProducts,
   } = useProducts();
 
-  const {
-    data: shift,
-    isLoading: isShiftLoading,
-    isError: isShiftError,
-  } = useQuery({
-    queryKey: ["shift"],
-    queryFn: getShift,
-    initialData: "",
-    retry: false,
-  });
+  const { shift, isShiftLoading, isShiftError } = useShift();
 
   const { parties, addPartyMutationAsync } = useParties(setMsg, (parties) =>
     parties.filter((party) => party.type === "عميل"),
   );
+
+  const { createBill, isCreatingBill } = useBills();
 
   useEffect(() => {
     const usingThirdParties = localStorage.getItem("usingThirdParties");
@@ -154,8 +137,8 @@ const Sell = () => {
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
-      if (savingRef.current) return;
-      savingRef.current = true;
+      if (isCreatingBill) return;
+
       if (discount >= shoppingCart.reduce((acc, item) => acc + item.price, 0)) {
         setMsg({
           type: "error",
@@ -190,15 +173,13 @@ const Sell = () => {
           });
         }
 
-        const { data } = await axios.post("/bill", bill, {
-          params: {
-            move_type: billPayment,
-            store_id: import.meta.env.VITE_STORE_ID,
-            party_id: newPartyId,
-            paid: paid,
-            installments: installments,
-            installment_interval: installmentInterval,
-          },
+        const data = await createBill({
+          bill,
+          billPayment,
+          newPartyId,
+          paid,
+          installments,
+          installmentInterval,
         });
 
         setLastBill(data.bill);
@@ -231,7 +212,6 @@ const Sell = () => {
           "حدث خطا ما اثناء اضافة الفاتورة يرجى التاكد فى صفحة الفواتير ان كانت الفاتورة محفوظة",
         );
       }
-      savingRef.current = false;
     },
     [
       billPayment,

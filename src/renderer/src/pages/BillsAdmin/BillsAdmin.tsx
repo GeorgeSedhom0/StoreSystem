@@ -13,7 +13,7 @@ import {
   FormControlLabel,
   Switch,
 } from "@mui/material";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -31,16 +31,11 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import useParties from "../Shared/hooks/useParties";
-import { StoreContext } from "@renderer/StoreDataProvider";
 
-const getProds = async ({
-  queryKey: [_, storeId],
-}: {
-  queryKey: [string, number];
-}) => {
+const getProds = async () => {
   const { data } = await axios.get<DBProducts>("/products", {
     params: {
-      store_id: storeId,
+      store_id: import.meta.env.VITE_STORE_ID,
     },
   });
   return data;
@@ -50,20 +45,18 @@ const getBills = async (
   startDate: Dayjs,
   endDate: Dayjs,
   partyId: number | null,
-  storeId: number,
 ) => {
   const { data } = await axios.get<BillType[]>("/bills", {
     params: {
       start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
       end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
       party_id: partyId,
-      store_id: storeId,
     },
   });
   return data;
 };
 
-const Bills = () => {
+const BillsAdmin = () => {
   const [showExpandedBill, setShowExpandedBill] = useState<boolean>(() => {
     const showExpandedBill = localStorage.getItem("showExpandedBill");
     if (showExpandedBill === "true") return true;
@@ -74,6 +67,7 @@ const Bills = () => {
   const [filters, setFilters] = useState<string[]>([
     "sell",
     "BNPL",
+    "buy",
     "return",
     "reserve",
     "installment",
@@ -82,12 +76,8 @@ const Bills = () => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
 
-  const { storeId } = useContext(StoreContext);
-
-  console.log("storeId", storeId);
-
   const { data: products } = useQuery({
-    queryKey: ["products", storeId],
+    queryKey: ["products"],
     queryFn: getProds,
     initialData: { products: [], reserved_products: {} },
     select: (data) => data.products,
@@ -104,7 +94,7 @@ const Bills = () => {
     queryFn: async () => {
       const { data } = await axios.get("/last-shift", {
         params: {
-          store_id: storeId,
+          store_id: import.meta.env.VITE_STORE_ID,
         },
       });
       return data;
@@ -116,8 +106,8 @@ const Bills = () => {
     isLoading: isBillsLoading,
     refetch: refetchBills,
   } = useQuery({
-    queryKey: ["bills", startDate, endDate, selectedPartyId || "", storeId],
-    queryFn: () => getBills(startDate, endDate, selectedPartyId, storeId),
+    queryKey: ["bills", startDate, endDate, selectedPartyId || ""],
+    queryFn: () => getBills(startDate, endDate, selectedPartyId),
     initialData: [],
   });
 
@@ -268,6 +258,7 @@ const Bills = () => {
                   >
                     <MenuItem value="sell">نقدي</MenuItem>
                     <MenuItem value="BNPL">آجل</MenuItem>
+                    <MenuItem value="buy">شراء</MenuItem>
                     <MenuItem value="return">مرتجع</MenuItem>
                     <MenuItem value="reserve">حجز</MenuItem>
                     <MenuItem value="installment">تقسيط</MenuItem>
@@ -369,4 +360,4 @@ const Bills = () => {
   );
 };
 
-export default Bills;
+export default BillsAdmin;

@@ -10,7 +10,24 @@ export interface Product {
 
 export interface DBProducts {
   products: Product[];
-  reserved_products: Product[];
+  reserved_products: { [key: number]: Product };
+}
+
+export interface AdminProduct {
+  id: number;
+  name: string;
+  bar_code: string;
+  wholesale_price: number;
+  price: number;
+  category: string;
+  stock_by_store: {
+    [key: string]: number;
+  };
+}
+
+export interface DBAdminProducts {
+  products: AdminProduct[];
+  reserved_products: { [key: number]: { [key: string | number]: number } };
 }
 
 export interface SCProduct {
@@ -78,3 +95,10 @@ export interface Employee {
 export type SelectedEmployeeType =
   | (Employee & { purpose: "edit" | "del" | "pay" })
   | null;
+
+export interface StoreData {
+  id: number;
+  name: string;
+  address: string;
+  phone: string;
+}

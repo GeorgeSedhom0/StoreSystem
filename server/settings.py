@@ -35,12 +35,15 @@ class Database:
         self.real_dict_cursor = real_dict_cursor
 
     def __enter__(self):
-        self.conn = psycopg2.connect(host=self.host,
-                                     database=self.database,
-                                     user=self.user,
-                                     password=self.password)
+        self.conn = psycopg2.connect(
+            host=self.host,
+            database=self.database,
+            user=self.user,
+            password=self.password,
+        )
         return self.conn.cursor(
-            cursor_factory=RealDictCursor if self.real_dict_cursor else None)
+            cursor_factory=RealDictCursor if self.real_dict_cursor else None
+        )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
@@ -77,7 +80,9 @@ def add_scope(
                 INSERT INTO scopes (name, pages)
                 VALUES (%s, %s)
                 RETURNING *
-                """, (name, pages))
+                """,
+                (name, pages),
+            )
             scope = cur.fetchone()
             return JSONResponse(content=scope)
     except Exception as e:
@@ -99,7 +104,9 @@ def update_scope(
                 SET name = %s, pages = %s
                 WHERE id = %s
                 RETURNING *
-                """, (name, pages, id))
+                """,
+                (name, pages, id),
+            )
             scope = cur.fetchone()
             return JSONResponse(content=scope)
     except Exception as e:
@@ -116,7 +123,9 @@ def delete_scope(id: int) -> JSONResponse:
                 DELETE FROM scopes
                 WHERE id = %s
                 RETURNING *
-                """, (id, ))
+                """,
+                (id,),
+            )
             scope = cur.fetchone()
             return JSONResponse(content=scope)
     except Exception as e:
@@ -137,11 +146,23 @@ def get_pages() -> JSONResponse:
 
 
 @router.get("/store-data")
-def get_store_data() -> JSONResponse:
+def get_store_data(store_id: int) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("SELECT * FROM store_data WHERE id = %s", (1, ))
+            cur.execute("SELECT * FROM store_data WHERE id = %s", (store_id,))
             store = cur.fetchone()
+            return JSONResponse(content=store)
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/admin/stores-data")
+def get_stores_data() -> JSONResponse:
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute("SELECT * FROM store_data")
+            store = cur.fetchall()
             return JSONResponse(content=store)
     except Exception as e:
         logging.error(f"Error: {e}")
@@ -150,20 +171,24 @@ def get_store_data() -> JSONResponse:
 
 @router.put("/store-data")
 def update_store_data(
-    name: str,
-    address: str,
-    phone: str,
-    extra_info: dict[str, Any],
+    name: str, address: str, phone: str, extra_info: dict[str, Any], store_id: int
 ) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                UPDATE store_data
-                SET name = %s, address = %s, phone = %s, extra_info = %s
-                WHERE id = %s
+                INSERT INTO store_data
+                (id, name, address, phone, extra_info)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                address = EXCLUDED.address,
+                phone = EXCLUDED.phone,
+                extra_info = EXCLUDED.extra_info
                 RETURNING *
-                """, (name, address, phone, json.dumps(extra_info), 1))
+                """,
+                (store_id, name, address, phone, json.dumps(extra_info)),
+            )
             store = cur.fetchone()
             return JSONResponse(content=store)
     except Exception as e:

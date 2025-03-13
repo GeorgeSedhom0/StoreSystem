@@ -32,6 +32,7 @@ const getAnalytics = async (
       params: {
         start_date: startDate,
         end_date: endDate,
+        store_id: import.meta.env.VITE_STORE_ID,
       },
     },
   );

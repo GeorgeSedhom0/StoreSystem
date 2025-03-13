@@ -27,7 +27,9 @@ import {
 import PaySalary from "./Components/PaySalary";
 
 const getEmployee = async () => {
-  const { data } = await axios.get<EmployeeType[]>("/employees");
+  const { data } = await axios.get<EmployeeType[]>("/employees", {
+    params: { store_id: import.meta.env.VITE_STORE_ID },
+  });
   return data;
 };
 

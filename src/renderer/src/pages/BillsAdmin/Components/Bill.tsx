@@ -1,15 +1,23 @@
 import { Button, ButtonGroup, TableCell, TableRow } from "@mui/material";
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import BillView from "../../../utils/BillView";
 import { printBill } from "../../../utils/functions";
+import EditableBill from "./EditableBill";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import ProductsView from "../../../utils/ProductsView";
 import FormatedNumber from "../../Shared/FormatedNumber";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
-const endReservation = async (id: string) => {
+const endReservation = async ({
+  id,
+  storeId,
+}: {
+  id: number;
+  storeId: number;
+}) => {
   await axios.get("/end-reservation", {
-    params: { bill_id: id, store_id: import.meta.env.VITE_STORE_ID },
+    params: { bill_id: id, store_id: storeId },
   });
 };
 
@@ -25,7 +33,9 @@ const billTypes = {
 const Bill = ({ context, item: bill, ...props }: any) => {
   const { setMsg, getBills } = context;
   const [billPreviewOpen, setBillPreviewOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
+  const { storeId } = useContext(StoreContext);
 
   const { mutate: endReservationMutation } = useMutation({
     mutationKey: ["endReservation"],
@@ -47,6 +57,9 @@ const Bill = ({ context, item: bill, ...props }: any) => {
         setOpen={setBillPreviewOpen}
         ref={billRef}
       />
+      {editing ? (
+        <EditableBill bill={bill} setEditing={setEditing} getBills={getBills} />
+      ) : null}
       {!bill.isExpanded && (
         <TableRow {...props}>
           <TableCell>{bill.id}</TableCell>
@@ -67,6 +80,7 @@ const Bill = ({ context, item: bill, ...props }: any) => {
                 width: "100%",
               }}
             >
+              <Button onClick={() => setEditing(true)}>تعديل</Button>
               <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
               <Button
                 onClick={() => printBill(billRef, setMsg, setBillPreviewOpen)}
@@ -74,7 +88,11 @@ const Bill = ({ context, item: bill, ...props }: any) => {
                 طباعة
               </Button>
               {bill.type === "reserve" && (
-                <Button onClick={() => endReservationMutation(bill.id)}>
+                <Button
+                  onClick={() =>
+                    endReservationMutation({ id: bill.id, storeId })
+                  }
+                >
                   تسليم
                 </Button>
               )}

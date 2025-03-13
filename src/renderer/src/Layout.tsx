@@ -1,17 +1,32 @@
-import { AppBar, Button, Toolbar, Grid2 } from "@mui/material";
-import { Profile, ViewContainer } from "./pages/Shared/Utils";
+import {
+  AppBar,
+  Button,
+  Toolbar,
+  Grid2,
+  FormControl,
+  Select,
+  MenuItem,
+  InputLabel,
+} from "@mui/material";
+import { ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ReactNode, useContext, useEffect } from "react";
+import { ReactNode, useContext, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import SetBaseUrl from "./SetBaseUrl";
+import { StoreData } from "./utils/types";
 
 const logoutWihtoutEndingShift = async () => {
   await axios.get("/switch", {
     withCredentials: true,
   });
+};
+
+const getStoresData = async () => {
+  const { data } = await axios.get<StoreData[]>("/admin/stores-data");
+  return data;
 };
 
 const Layout = ({
@@ -30,8 +45,9 @@ const Layout = ({
     return <>{children}</>;
   }
 
-  const profile = useContext(StoreContext) as Profile;
+  const { profile, storeId, setGlobalStoreId } = useContext(StoreContext);
   const navigate = useNavigate();
+  const [currentStoreId, setCurrentStoreId] = useState<number>(storeId);
 
   useEffect(() => {
     if (
@@ -51,6 +67,11 @@ const Layout = ({
       window.location.reload();
       console.log(error);
     },
+  });
+
+  const { data: storesData } = useQuery({
+    queryKey: ["storesData"],
+    queryFn: getStoresData,
   });
 
   return (
@@ -95,6 +116,26 @@ const Layout = ({
                 width: "fit-content",
               }}
             >
+              <FormControl>
+                <InputLabel size="small">المتجر</InputLabel>
+                <Select
+                  size="small"
+                  value={currentStoreId}
+                  label="المتجر"
+                  onChange={async (e) => {
+                    await setGlobalStoreId(e.target.value as number);
+                    setCurrentStoreId(e.target.value as number);
+                    window.location.reload();
+                  }}
+                >
+                  {storesData &&
+                    storesData.map((store) => (
+                      <MenuItem key={store.id} value={store.id}>
+                        {store.name}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
               <Button variant="contained" onClick={() => switchAccount()}>
                 تبديل المستخدم
               </Button>

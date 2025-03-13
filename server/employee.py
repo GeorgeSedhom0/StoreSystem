@@ -35,12 +35,15 @@ class Database:
         self.real_dict_cursor = real_dict_cursor
 
     def __enter__(self):
-        self.conn = psycopg2.connect(host=self.host,
-                                     database=self.database,
-                                     user=self.user,
-                                     password=self.password)
+        self.conn = psycopg2.connect(
+            host=self.host,
+            database=self.database,
+            user=self.user,
+            password=self.password,
+        )
         return self.conn.cursor(
-            cursor_factory=RealDictCursor if self.real_dict_cursor else None)
+            cursor_factory=RealDictCursor if self.real_dict_cursor else None
+        )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
@@ -71,7 +74,7 @@ class Employee(EmployeeBase):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 router = APIRouter()
@@ -90,34 +93,45 @@ def add_employee(employee: EmployeeBase, store_id: int) -> JSONResponse:
                     (name, phone, address, salary, started_on, stopped_on, store_id)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
-                """, (employee.name, employee.phone, employee.address,
-                      employee.salary, employee.started_on,
-                      employee.stopped_on, store_id))
+                """,
+                (
+                    employee.name,
+                    employee.phone,
+                    employee.address,
+                    employee.salary,
+                    employee.started_on,
+                    employee.stopped_on,
+                    store_id,
+                ),
+            )
             new_employee = cur.fetchone()
             if new_employee:
                 return JSONResponse(content={"status": "success"})
             else:
-                raise HTTPException(status_code=400,
-                                    detail="Employee not added")
+                raise HTTPException(status_code=400, detail="Employee not added")
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/employees")
-def get_employees() -> JSONResponse:
+def get_employees(store_id: int) -> JSONResponse:
     """
     Get all employees with started_on as ISO formatted string
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute("""
+            cur.execute(
+                """
             SELECT
                 id, name, phone, address, salary,
                 to_char(started_on, 'YYYY-MM-DD"T"HH24:MI:SS') as started_on,
                 to_char(stopped_on, 'YYYY-MM-DD"T"HH24:MI:SS') as stopped_on
             FROM employee
-            """)
+            WHERE store_id = %s
+            """,
+                (store_id,),
+            )
             employees = cur.fetchall()
 
             return JSONResponse(content=employees)
@@ -144,16 +158,23 @@ def update_employee(
                     stopped_on = %s
                 WHERE id = %s
                 RETURNING id
-            """, (employee.name, employee.phone, employee.address,
-                  employee.salary, employee.started_on, employee.stopped_on,
-                  employee_id))
+            """,
+                (
+                    employee.name,
+                    employee.phone,
+                    employee.address,
+                    employee.salary,
+                    employee.started_on,
+                    employee.stopped_on,
+                    employee_id,
+                ),
+            )
 
             updated_employee = cur.fetchone()
             if updated_employee:
                 return JSONResponse(content={"status": "success"})
             else:
-                raise HTTPException(status_code=404,
-                                    detail="Employee not found")
+                raise HTTPException(status_code=404, detail="Employee not found")
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -167,13 +188,14 @@ def delete_employee(employee_id: int) -> JSONResponse:
                 """
                 UPDATE employee SET stopped_on = NOW()
                 WHERE id = %s RETURNING id
-                """, (employee_id, ))
+                """,
+                (employee_id,),
+            )
             deleted_employee = cur.fetchone()
             if deleted_employee:
                 return JSONResponse(content={"status": "success"})
             else:
-                raise HTTPException(status_code=404,
-                                    detail="Employee not found")
+                raise HTTPException(status_code=404, detail="Employee not found")
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -181,22 +203,23 @@ def delete_employee(employee_id: int) -> JSONResponse:
 
 @router.post("/employees/{employee_id}/pay-salary")
 def pay_salary(
-        employee_id: int,
-        bonus: float = Form(...),
-        deductions: float = Form(...),
-        month: int = Form(...),
-        time: datetime = Form(...)
+    employee_id: int,
+    bonus: float = Form(...),
+    deductions: float = Form(...),
+    month: int = Form(...),
+    time: datetime = Form(...),
 ) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
                 SELECT salary FROM employee WHERE id = %s
-                """, (employee_id, ))
+                """,
+                (employee_id,),
+            )
             salary = cur.fetchone()
             if not salary:
-                raise HTTPException(status_code=404,
-                                    detail="Employee not found")
+                raise HTTPException(status_code=404, detail="Employee not found")
             salary = salary["salary"]
 
             cur.execute(
@@ -205,7 +228,9 @@ def pay_salary(
                     (employee_id, amount, bonus, deductions, time)
                 VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
-                """, (employee_id, salary, bonus, deductions, time))
+                """,
+                (employee_id, salary, bonus, deductions, time),
+            )
             salary_id = cur.fetchone()
             if salary_id:
                 return JSONResponse(content={"status": "success"})

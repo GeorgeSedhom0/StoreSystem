@@ -1,5 +1,4 @@
 import {
-  Autocomplete,
   Button,
   Dialog,
   DialogActions,
@@ -25,6 +24,7 @@ import LoadingScreen from "../../Shared/LoadingScreen";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ProductAutocomplete from "../../Shared/ProductAutocomplete";
 
 const EditableBill = ({
   bill,
@@ -45,8 +45,6 @@ const EditableBill = ({
     })),
   });
   const [products, setProducts] = useState<Product[]>([]);
-  const [options, setOptions] = useState<Product[]>([]);
-  const [query, setQuery] = useState("");
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [loading, setLoading] = useState(false);
 
@@ -54,7 +52,11 @@ const EditableBill = ({
     const getProds = async () => {
       setLoading(true);
       try {
-        const { data } = await axios.get("/products");
+        const { data } = await axios.get("/products", {
+          params: {
+            store_id: import.meta.env.VITE_STORE_ID,
+          },
+        });
         setProducts(data.products);
       } catch (error) {
         console.log(error);
@@ -65,22 +67,6 @@ const EditableBill = ({
     };
     getProds();
   }, []);
-
-  useEffect(() => {
-    if (!query) {
-      setOptions([]);
-      return;
-    }
-    setOptions(
-      products
-        .filter(
-          (prod) =>
-            prod.name.toLowerCase().includes(query.toLowerCase()) ||
-            prod.bar_code.includes(query),
-        )
-        .slice(0, 30),
-    );
-  }, [products, query]);
 
   const totalEval = useCallback((bill: Bill) => {
     let total = 0;
@@ -263,50 +249,9 @@ const EditableBill = ({
           </TableContainer>
         </Grid2>
         <Grid2 size={12}>
-          <Autocomplete
-            options={options}
-            getOptionLabel={(option) => option.name}
-            isOptionEqualToValue={(option, value) =>
-              option.id === value.id || option.bar_code === value.bar_code
-            }
-            value={null}
-            onChange={(_, value) => {
-              addToCart(value);
-              setQuery("");
-            }}
-            filterOptions={(x) => x}
-            autoHighlight
-            inputValue={query}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="اضافة منتج"
-                onChange={(e) => {
-                  const currentValue = e.target.value;
-                  setQuery(currentValue);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    // if an enter is pressed, and the query is more than or equal to 8 numbers
-                    // then search for the product with the barcode and add it to the cart
-                    if (query.length >= 8 && !isNaN(parseInt(query))) {
-                      const product = products.find(
-                        (prod) => prod.bar_code === query,
-                      );
-                      if (product) {
-                        addToCart(product);
-                      } else {
-                        setMsg({
-                          type: "error",
-                          text: "المنتج غير موجود",
-                        });
-                      }
-                      setQuery("");
-                    }
-                  }
-                }}
-              />
-            )}
+          <ProductAutocomplete
+            onProductSelect={addToCart}
+            products={products}
           />
         </Grid2>
       </Grid2>

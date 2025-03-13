@@ -1,17 +1,9 @@
 import axios from "axios";
 import { useCallback, useMemo, useState } from "react";
-import { Product } from "../../utils/types";
-import {
-  Button,
-  Card,
-  FormControlLabel,
-  Grid2,
-  Switch,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { AdminProduct } from "../../utils/types";
+import { Button, Card, Grid2, TextField, Typography } from "@mui/material";
 import { TableVirtuoso } from "react-virtuoso";
-import ProductCard from "./Components/ProductCard";
+import AdminProductCard from "./Components/AdminProductCard";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
   fixedHeaderContent,
@@ -19,10 +11,10 @@ import {
 } from "./Components/VirtualTableHelpers";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { Link } from "react-router-dom";
-import useProducts from "../Shared/hooks/useProducts";
+import useAdminProducts from "../Shared/hooks/useAdminProducts";
 
-const Products = () => {
-  const [editedProducts, setEditedProducts] = useState<Product[]>([]);
+const ProductsAdmin = () => {
+  const [editedProducts, setEditedProducts] = useState<AdminProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [msg, setMsg] = useState<AlertMsg>({
     type: "",
@@ -30,13 +22,12 @@ const Products = () => {
   });
   const [changedOnly, setChangedOnly] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
-  const [showDeleted, setShowDeleted] = useState<boolean>(false);
 
   const {
     products,
     reservedProducts,
     updateProducts: getProds,
-  } = useProducts(showDeleted);
+  } = useAdminProducts();
 
   const filteredProducts = useMemo(() => {
     if (query === "") {
@@ -98,42 +89,6 @@ const Products = () => {
     setEditedProducts([]);
   }, [editedProducts]);
 
-  const deleteProduct = useCallback(async (productId: number) => {
-    setLoading(true);
-    try {
-      await axios.put("/product/delete", null, {
-        params: {
-          product_id: productId,
-          store_id: import.meta.env.VITE_STORE_ID,
-        },
-      });
-      setMsg({ type: "success", text: "تم ازالة المنتج بنجاح" });
-    } catch (error) {
-      console.log(error);
-      setMsg({ type: "error", text: "حدث خطأ أثناء ازالة المنتج" });
-    }
-    await getProds();
-    setLoading(false);
-  }, []);
-
-  const restoreProduct = useCallback(async (productId: number) => {
-    setLoading(true);
-    try {
-      await axios.put("/product/restore", null, {
-        params: {
-          product_id: productId,
-          store_id: import.meta.env.VITE_STORE_ID,
-        },
-      });
-      setMsg({ type: "success", text: "تم استعادة المنتج بنجاح" });
-    } catch (error) {
-      console.log(error);
-      setMsg({ type: "error", text: "حدث خطأ أثناء استعادة المنتج" });
-    }
-    await getProds();
-    setLoading(false);
-  }, []);
-
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
@@ -141,17 +96,8 @@ const Products = () => {
         <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 2 }}>
             <Grid2 container spacing={3}>
-              <Grid2 container size={12} justifyContent="space-between">
+              <Grid2 container size={12}>
                 <Typography variant="h4">المنتجات</Typography>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={showDeleted}
-                      onChange={(e) => setShowDeleted(e.target.checked)}
-                    />
-                  }
-                  label="عرض المنتجات المحذوفة"
-                />
               </Grid2>
               <Grid2 size={12}>
                 <Typography variant="subtitle1">
@@ -211,19 +157,23 @@ const Products = () => {
           >
             <LoadingScreen loading={loading} />
             <TableVirtuoso
-              fixedHeaderContent={fixedHeaderContent}
+              fixedHeaderContent={() =>
+                fixedHeaderContent({
+                  stores:
+                    products.length > 0
+                      ? Object.keys(products[0].stock_by_store)
+                      : [],
+                })
+              }
               components={VirtuosoTableComponents}
               data={filteredProducts}
               itemContent={(_, product) => (
-                <ProductCard
+                <AdminProductCard
                   product={product}
-                  reserved={reservedProducts[product.id!]?.stock || 0}
+                  reserved={reservedProducts[product.id!]}
                   setEditedProducts={setEditedProducts}
                   editedProducts={editedProducts}
                   key={product.id || product.bar_code}
-                  deleteProduct={deleteProduct}
-                  restoreProduct={restoreProduct}
-                  isShowingDeleted={showDeleted}
                 />
               )}
             />
@@ -234,4 +184,4 @@ const Products = () => {
   );
 };
 
-export default Products;
+export default ProductsAdmin;
