@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useContext } from "react";
 import {
   Autocomplete,
   Button,
@@ -19,11 +19,13 @@ import { ProductsAnalyticsType } from "./TopProductsAnalytics";
 import { DBProducts } from "../../../utils/types";
 import { exportToExcel } from "../utils";
 import tableIcon from "./table.png";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const getAnalytics = async (
   startDate: string,
   endDate: string,
   selectedProducts: number[],
+  storeId: number,
 ) => {
   const { data } = await axios.post<ProductsAnalyticsType>(
     "/analytics/products",
@@ -32,15 +34,19 @@ const getAnalytics = async (
       params: {
         start_date: startDate,
         end_date: endDate,
-        store_id: import.meta.env.VITE_STORE_ID,
+        store_id: storeId,
       },
     },
   );
   return data;
 };
 
-const getProds = async () => {
-  const { data } = await axios.get<DBProducts>("/products");
+const getProds = async (storeId: number) => {
+  const { data } = await axios.get<DBProducts>("/products", {
+    params: {
+      store_id: storeId,
+    },
+  });
   return data;
 };
 
@@ -50,26 +56,28 @@ const ProductsAnalytics = () => {
   );
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
+  const { storeId } = useContext(StoreContext);
 
   const {
     palette: { mode },
   } = useTheme();
 
   const { data, isFetching } = useQuery({
-    queryKey: ["analytics", selectedProducts, startDate, endDate],
+    queryKey: ["analytics", selectedProducts, startDate, endDate, storeId],
     queryFn: () =>
       getAnalytics(
         startDate.toISOString(),
         endDate.toISOString(),
         selectedProducts,
+        storeId,
       ),
     initialData: {},
     enabled: selectedProducts.length > 0,
   });
 
   const { data: products } = useQuery({
-    queryKey: ["products"],
-    queryFn: getProds,
+    queryKey: ["products", storeId],
+    queryFn: () => getProds(storeId),
     initialData: {
       products: [],
       reserved_products: [],

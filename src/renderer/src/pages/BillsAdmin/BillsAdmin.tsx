@@ -13,7 +13,7 @@ import {
   FormControlLabel,
   Switch,
 } from "@mui/material";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useContext } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -31,11 +31,12 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import useParties from "../Shared/hooks/useParties";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
-const getProds = async () => {
+const getProds = async (storeId: number) => {
   const { data } = await axios.get<DBProducts>("/products", {
     params: {
-      store_id: import.meta.env.VITE_STORE_ID,
+      store_id: storeId,
     },
   });
   return data;
@@ -76,9 +77,11 @@ const BillsAdmin = () => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
 
+  const { storeId } = useContext(StoreContext);
+
   const { data: products } = useQuery({
     queryKey: ["products"],
-    queryFn: getProds,
+    queryFn: () => getProds(storeId),
     initialData: { products: [], reserved_products: {} },
     select: (data) => data.products,
   });
@@ -94,7 +97,7 @@ const BillsAdmin = () => {
     queryFn: async () => {
       const { data } = await axios.get("/last-shift", {
         params: {
-          store_id: import.meta.env.VITE_STORE_ID,
+          store_id: storeId,
         },
       });
       return data;

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import { TableVirtuoso } from "react-virtuoso";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -25,22 +25,24 @@ import {
   VirtuosoTableComponents,
 } from "./Components/VirtualTableHelpers";
 import PaySalary from "./Components/PaySalary";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
-const getEmployee = async () => {
+const getEmployee = async (storeId) => {
   const { data } = await axios.get<EmployeeType[]>("/employees", {
-    params: { store_id: import.meta.env.VITE_STORE_ID },
+    params: { store_id: storeId },
   });
   return data;
 };
 
 export default function Employee() {
+  const { storeId } = useContext(StoreContext);
   const {
     data: employee,
     isFetching: isLoading,
     refetch,
   } = useQuery({
     queryKey: ["employee"],
-    queryFn: getEmployee,
+    queryFn: () => getEmployee(storeId),
     initialData: [],
   });
 

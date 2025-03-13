@@ -12,7 +12,7 @@ import {
   Table,
   TableBody,
 } from "@mui/material";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useContext } from "react";
 import { Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -23,6 +23,7 @@ import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import useParties from "../Shared/hooks/useParties";
 import useProducts from "../Shared/hooks/useProducts";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const Buy = () => {
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
@@ -50,6 +51,8 @@ const Buy = () => {
   const { parties, addPartyMutationAsync } = useParties(setMsg, (data) =>
     data.filter((party) => party.type === "مورد"),
   );
+
+  const { storeId } = useContext(StoreContext);
 
   const addToCart = useCallback((product: Product | null) => {
     if (!product) return;
@@ -114,7 +117,7 @@ const Buy = () => {
         await axios.post("/bill", bill, {
           params: {
             move_type: "buy",
-            store_id: import.meta.env.VITE_STORE_ID,
+            store_id: storeId,
             party_id: newPartyId,
           },
         });
@@ -133,7 +136,7 @@ const Buy = () => {
         });
       }
     },
-    [addingParty, newParty, partyId, updateProducts],
+    [addingParty, newParty, partyId, updateProducts, storeId],
   );
 
   return (

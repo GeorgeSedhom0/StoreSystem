@@ -46,7 +46,7 @@ const Storage = () => {
       console.log(error);
       setMsg({ type: "error", text: "حدث خطأ ما" });
     }
-  }, [product]);
+  }, [product, storeId]);
 
   const getBarcode = useCallback(async () => {
     try {

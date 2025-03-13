@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useState } from "react";
+import { Dispatch, SetStateAction, useState, useContext } from "react";
 import { useMutation } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -17,11 +17,12 @@ import {
 import { Employee } from "../../../utils/types";
 import axios from "axios";
 import { AlertMsg } from "../../Shared/AlertMessage";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
-const addEmployee = async (employee: Employee) => {
+const addEmployee = async (employee: Employee, storeId: number) => {
   const { data } = await axios.post<Employee>("/employees", employee, {
     params: {
-      store_id: import.meta.env.VITE_STORE_ID,
+      store_id: storeId,
     },
   });
   return data;
@@ -51,8 +52,10 @@ const EmployeeForm = ({
     employee?.started_on ? dayjs(employee.started_on) : dayjs(),
   );
 
+  const { storeId } = useContext(StoreContext);
+
   const addMutation = useMutation({
-    mutationFn: addEmployee,
+    mutationFn: (employee: Employee) => addEmployee(employee, storeId),
     onSuccess: () => {
       setMsg({ type: "success", text: "تم اضافة الموظف بنجاح" });
       closeModal();
