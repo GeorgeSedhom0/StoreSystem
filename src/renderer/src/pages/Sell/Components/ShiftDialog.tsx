@@ -13,8 +13,9 @@ import CloseIcon from "@mui/icons-material/Close";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../../Shared/LoadingScreen";
-import { useEffect } from "react";
+import { useEffect, useContext } from "react";
 import { useNavigate } from "react-router-dom";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 interface ShiftDialogProps {
   dialogOpen: boolean;
@@ -28,10 +29,10 @@ interface ShiftTotal {
   return_total: number;
 }
 
-const getShiftTotal = async () => {
+const getShiftTotal = async (storeId: number) => {
   const { data } = await axios.get<ShiftTotal>("/shift-total", {
     params: {
-      store_id: import.meta.env.VITE_STORE_ID,
+      store_id: storeId,
     },
   });
   return data;
@@ -48,6 +49,7 @@ const ShiftDialog = ({
   };
 
   const navigate = useNavigate();
+  const { storeId } = useContext(StoreContext);
 
   const {
     data: shiftTotal,
@@ -55,7 +57,7 @@ const ShiftDialog = ({
     refetch: refetchShiftDetails,
   } = useQuery({
     queryKey: ["shiftTotal"],
-    queryFn: getShiftTotal,
+    queryFn: () => getShiftTotal(storeId),
     initialData: { sell_total: 0, buy_total: 0, return_total: 0 },
   });
 

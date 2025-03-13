@@ -19,12 +19,14 @@ import {
   useCallback,
   useEffect,
   useState,
+  useContext,
 } from "react";
 import LoadingScreen from "../../Shared/LoadingScreen";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ProductAutocomplete from "../../Shared/ProductAutocomplete";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const EditableBill = ({
   bill,
@@ -48,13 +50,15 @@ const EditableBill = ({
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [loading, setLoading] = useState(false);
 
+  const { storeId } = useContext(StoreContext);
+
   useEffect(() => {
     const getProds = async () => {
       setLoading(true);
       try {
         const { data } = await axios.get("/products", {
           params: {
-            store_id: import.meta.env.VITE_STORE_ID,
+            store_id: storeId,
           },
         });
         setProducts(data.products);
@@ -66,7 +70,7 @@ const EditableBill = ({
       setLoading(false);
     };
     getProds();
-  }, []);
+  }, [storeId]);
 
   const totalEval = useCallback((bill: Bill) => {
     let total = 0;
@@ -115,7 +119,7 @@ const EditableBill = ({
     try {
       await axios.put("/bill", editedBill, {
         params: {
-          store_id: import.meta.env.VITE_STORE_ID,
+          store_id: storeId,
         },
       });
       getBills();
@@ -125,7 +129,7 @@ const EditableBill = ({
       setMsg({ type: "error", text: "حدث خطأ" });
     }
     setLoading(false);
-  }, [editedBill]);
+  }, [editedBill, storeId]);
 
   return (
     <Dialog open={true} onClose={() => setEditing(false)} maxWidth="lg">

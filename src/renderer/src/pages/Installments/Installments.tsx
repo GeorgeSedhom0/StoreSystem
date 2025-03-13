@@ -16,9 +16,10 @@ import {
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { useState } from "react";
+import { useState, useContext } from "react";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import PayInstallment from "./Components/PayInstallment";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 export interface Installment {
   id: number;
@@ -41,10 +42,10 @@ export interface Installment {
   }[];
   ended: boolean;
 }
-const getInstallments = async () => {
+const getInstallments = async (storeId: number) => {
   const { data } = await axios.get<Installment[]>("/installments", {
     params: {
-      store_id: import.meta.env.VITE_STORE_ID,
+      store_id: storeId,
     },
   });
   return data;
@@ -60,9 +61,11 @@ const Installments = () => {
     null,
   );
 
+  const { storeId } = useContext(StoreContext);
+
   const { data, isFetching, isPlaceholderData, refetch } = useQuery({
     queryKey: ["installments"],
-    queryFn: getInstallments,
+    queryFn: () => getInstallments(storeId),
     initialData: [],
     // filter nulls in the flow array
     select: (data: Installment[]) => {
