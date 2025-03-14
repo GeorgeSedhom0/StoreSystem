@@ -26,6 +26,8 @@ import { useEffect, useState } from "react";
 import LoadingScreen from "./pages/Shared/LoadingScreen";
 import BillsAdmin from "./pages/BillsAdmin/BillsAdmin";
 import ProductsAdmin from "./pages/ProductsAdmin/ProductdsAdmin";
+import MoveProducts from "./pages/MoveProducts/MoveProducts";
+import PartiesBills from "./pages/PartiesBills/PartiesBills";
 
 axios.defaults.withCredentials = true;
 
@@ -191,6 +193,11 @@ const App = () => {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/employees" element={<Employee />} />
                   <Route path="/login" element={<Login />} />
+                  <Route path="/parties-bills" element={<PartiesBills />} />
+                  <Route
+                    path="/admin/move-products"
+                    element={<MoveProducts />}
+                  />
                   {/* if any route other than the defined go to /sell */}
                   <Route path="*" element={<Navigate to="/sell" />} />
                 </Routes>

@@ -45,8 +45,8 @@ const AlertsAnalytics = () => {
             {data.length === 0 && (
               <Typography variant="body1">لا يوجد اشعارات</Typography>
             )}
-            {data.map((alert) => (
-              <Grid2 size={4}>
+            {data.map((alert, i) => (
+              <Grid2 size={4} key={i}>
                 <Card
                   elevation={3}
                   sx={{

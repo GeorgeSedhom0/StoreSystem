@@ -58,6 +58,17 @@ export interface Bill {
   isExpanded?: boolean;
 }
 
+export interface CollectionBill {
+  collection_id: string;
+  time: string;
+  total: number;
+  party_id: number;
+  party_name: string | null;
+  bills: Bill[];
+  isExpanded?: boolean;
+  is_closed: boolean;
+}
+
 export interface CashFlow {
   time: string;
   amount: number;

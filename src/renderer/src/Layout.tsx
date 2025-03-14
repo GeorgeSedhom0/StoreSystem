@@ -17,6 +17,7 @@ import axios from "axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import SetBaseUrl from "./SetBaseUrl";
 import { StoreData } from "./utils/types";
+import LoadingScreen from "./pages/Shared/LoadingScreen";
 
 const logoutWihtoutEndingShift = async () => {
   await axios.get("/switch", {
@@ -26,6 +27,11 @@ const logoutWihtoutEndingShift = async () => {
 
 const getStoresData = async () => {
   const { data } = await axios.get<StoreData[]>("/admin/stores-data");
+  return data;
+};
+
+const getCurrentShift = async (storeId: number) => {
+  const { data } = await axios.get(`/current-shift?store_id=${storeId}`);
   return data;
 };
 
@@ -48,6 +54,30 @@ const Layout = ({
   const { profile, storeId, setGlobalStoreId } = useContext(StoreContext);
   const navigate = useNavigate();
   const [currentStoreId, setCurrentStoreId] = useState<number>(storeId);
+  const [isCheckingShift, setIsCheckingShift] = useState(true);
+
+  // Check for current shift
+  const { data: shiftData, isLoading: isShiftLoading } = useQuery({
+    queryKey: ["currentShift", storeId],
+    queryFn: () => getCurrentShift(storeId),
+    enabled: !!storeId && location.pathname !== "/login",
+  });
+
+  // Effect to check if user has a valid shift and redirect if not
+  useEffect(() => {
+    if (
+      !isShiftLoading &&
+      shiftData &&
+      !shiftData.start_date_time &&
+      location.pathname !== "/login"
+    ) {
+      navigate("/login");
+    }
+
+    if (!isShiftLoading) {
+      setIsCheckingShift(false);
+    }
+  }, [shiftData, isShiftLoading, navigate, location.pathname]);
 
   useEffect(() => {
     if (
@@ -73,6 +103,11 @@ const Layout = ({
     queryKey: ["storesData"],
     queryFn: getStoresData,
   });
+
+  // If we're still checking for shift data, don't render the full layout yet
+  if (isCheckingShift) {
+    <LoadingScreen loading={true} />;
+  }
 
   return (
     <>
@@ -103,11 +138,13 @@ const Layout = ({
               }}
             >
               {profile &&
-                profile.user.pages.map((page, index) => (
-                  <NavLink key={index} to={profile.user.paths[index]}>
-                    <Button>{page}</Button>
-                  </NavLink>
-                ))}
+                profile.user.pages
+                  .filter((page) => page !== "admin")
+                  .map((page, index) => (
+                    <NavLink key={index} to={profile.user.paths[index]}>
+                      <Button>{page}</Button>
+                    </NavLink>
+                  ))}
             </Grid2>
             <Grid2
               container
@@ -116,26 +153,28 @@ const Layout = ({
                 width: "fit-content",
               }}
             >
-              <FormControl>
-                <InputLabel size="small">المتجر</InputLabel>
-                <Select
-                  size="small"
-                  value={currentStoreId}
-                  label="المتجر"
-                  onChange={async (e) => {
-                    await setGlobalStoreId(e.target.value as number);
-                    setCurrentStoreId(e.target.value as number);
-                    window.location.reload();
-                  }}
-                >
-                  {storesData &&
-                    storesData.map((store) => (
-                      <MenuItem key={store.id} value={store.id}>
-                        {store.name}
-                      </MenuItem>
-                    ))}
-                </Select>
-              </FormControl>
+              {profile?.user.paths.includes("/admin") && (
+                <FormControl>
+                  <InputLabel size="small">المتجر</InputLabel>
+                  <Select
+                    size="small"
+                    value={currentStoreId}
+                    label="المتجر"
+                    onChange={async (e) => {
+                      await setGlobalStoreId(e.target.value as number);
+                      setCurrentStoreId(e.target.value as number);
+                      window.location.reload();
+                    }}
+                  >
+                    {storesData &&
+                      storesData.map((store) => (
+                        <MenuItem key={store.id} value={store.id}>
+                          {store.name}
+                        </MenuItem>
+                      ))}
+                  </Select>
+                </FormControl>
+              )}
               <Button variant="contained" onClick={() => switchAccount()}>
                 تبديل المستخدم
               </Button>

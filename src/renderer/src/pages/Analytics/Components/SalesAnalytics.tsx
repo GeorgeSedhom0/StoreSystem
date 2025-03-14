@@ -26,6 +26,7 @@ const getAnalytics = async (
   startDate: string,
   endDate: string,
   types: string[],
+  storeId: number,
 ) => {
   const { data } = await axios.post<SalesAnalyticsType>(
     "/analytics/sales",
@@ -54,9 +55,14 @@ const SalesAnalytics = () => {
   } = useTheme();
 
   const { data, isFetching } = useQuery({
-    queryKey: ["analytics", "sales", startDate, endDate, types],
+    queryKey: ["analytics", "sales", startDate, endDate, types, storeId],
     queryFn: () =>
-      getAnalytics(startDate.toISOString(), endDate.toISOString(), types),
+      getAnalytics(
+        startDate.toISOString(),
+        endDate.toISOString(),
+        types,
+        storeId,
+      ),
     initialData: [],
   });
 

@@ -11,6 +11,10 @@ import {
   Typography,
   Table,
   TableBody,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import { useCallback, useState, useContext } from "react";
 import { Party, Product, SCProduct } from "../../utils/types";
@@ -41,6 +45,8 @@ const Buy = () => {
     type: "",
     text: "",
   });
+  const [moveType, setMoveType] = useState<"buy" | "buy-return">("buy");
+  const [discount, setDiscount] = useState<number>(0);
 
   const {
     products,
@@ -48,9 +54,7 @@ const Buy = () => {
     isLoading: isProductsLoading,
   } = useProducts();
 
-  const { parties, addPartyMutationAsync } = useParties(setMsg, (data) =>
-    data.filter((party) => party.type === "مورد"),
-  );
+  const { parties, addPartyMutationAsync } = useParties(setMsg);
 
   const { storeId } = useContext(StoreContext);
 
@@ -116,7 +120,7 @@ const Buy = () => {
 
         await axios.post("/bill", bill, {
           params: {
-            move_type: "buy",
+            move_type: moveType,
             store_id: storeId,
             party_id: newPartyId,
           },
@@ -124,6 +128,9 @@ const Buy = () => {
 
         await updateProducts();
         setShoppingCart([]);
+        setDiscount(0);
+        setMoveType("buy");
+        setPartyId(null);
         setMsg({
           type: "success",
           text: "تم اضافة الفاتورة بنجاح",
@@ -136,7 +143,7 @@ const Buy = () => {
         });
       }
     },
-    [addingParty, newParty, partyId, updateProducts, storeId],
+    [addingParty, newParty, partyId, updateProducts, storeId, moveType],
   );
 
   return (
@@ -158,27 +165,64 @@ const Buy = () => {
               </Typography>
             </Grid2>
 
-            <Grid2 size={6}>
-              <Button
-                variant="contained"
-                onClick={() => submitBill(shoppingCart, 0)}
-                disabled={shoppingCart.length === 0}
-                fullWidth
-              >
-                اضافة فاتورة
-              </Button>
-            </Grid2>
+            <Grid2 size={12} container flexWrap="nowrap">
+              <Grid2>
+                <FormControl fullWidth>
+                  <InputLabel size="small">نوع الفاتورة</InputLabel>
+                  <Select
+                    value={moveType}
+                    onChange={(e) =>
+                      setMoveType(e.target.value as "buy" | "buy-return")
+                    }
+                    size="small"
+                    label="نوع الفاتورة"
+                    sx={{
+                      width: 350,
+                    }}
+                  >
+                    <MenuItem value="buy">شراء</MenuItem>
+                    <MenuItem value="buy-return">مرتجع شراء</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid2>
 
-            <Grid2 size={6}>
-              <Typography variant="h6" align="center">
-                الاجمالي:{" "}
-                {shoppingCart.reduce(
-                  (acc, item) => acc + item.wholesale_price * item.quantity,
-                  0,
-                )}{" "}
-                جنيه
-              </Typography>
-              <Typography variant="body1" align="center"></Typography>
+              <Grid2>
+                <TextField
+                  size="small"
+                  label="الخصم"
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(+e.target.value)}
+                  sx={{
+                    width: 350,
+                  }}
+                />
+              </Grid2>
+
+              <Grid2>
+                <Button
+                  variant="contained"
+                  onClick={() => submitBill(shoppingCart, discount)}
+                  disabled={shoppingCart.length === 0}
+                  sx={{
+                    width: 400,
+                  }}
+                >
+                  اضافة فاتورة
+                </Button>
+              </Grid2>
+
+              <Grid2 width="30%">
+                <Typography variant="h6" align="center">
+                  الاجمالي:{" "}
+                  {shoppingCart.reduce(
+                    (acc, item) => acc + item.wholesale_price * item.quantity,
+                    0 - discount,
+                  )}{" "}
+                  جنيه
+                </Typography>
+                <Typography variant="body1" align="center"></Typography>
+              </Grid2>
             </Grid2>
 
             <Grid2 size={12}>

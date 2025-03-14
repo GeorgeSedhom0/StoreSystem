@@ -30,7 +30,6 @@ HOST = getenv("HOST")
 DATABASE = getenv("DATABASE")
 USER = getenv("USER")
 PASS = getenv("PASS")
-OTHER_STORE = getenv("OTHER_STORE")
 SECRET = getenv("SECRET") or ""
 ALGORITHM = getenv("ALGORITHM") or ""
 
@@ -46,7 +45,6 @@ app.include_router(employee_router)
 
 origins = [
     "http://localhost:5173",
-    OTHER_STORE,
 ]
 
 app.add_middleware(
@@ -780,12 +778,7 @@ def update_bill(bill: dbBill, store_id: int):
 def add_bill(
     bill: Bill,
     move_type: Literal[
-        "sell",
-        "buy",
-        "BNPL",
-        "return",
-        "reserve",
-        "installment",
+        "sell", "buy", "BNPL", "return", "reserve", "installment", "buy-return"
     ],
     store_id: int,
     party_id: Optional[int] = None,
@@ -799,7 +792,7 @@ def add_bill(
     Args:
         bill (Bill): The bill to add
         move_type (Literal["sell", "buy", "BNPL", "return",
-                        "reserve", "installment"]): The type of the bill
+                        "reserve", "installment", "buy-return"]): The type of the bill
         store_id (int): The store ID
         party_id (Optional[int]): The party ID
         paid (Optional[float]): The amount paid
@@ -811,7 +804,7 @@ def add_bill(
     """
     bill_total = (
         bill.total
-        if move_type in ["sell", "reserve"]
+        if move_type in ["buy-return", "sell", "reserve"]
         else -bill.total
         if move_type in ["buy", "return"]
         else 0
@@ -845,7 +838,8 @@ def add_bill(
                     bill_id,
                     product_flow.id,
                     -product_flow.quantity
-                    if move_type in ["sell", "BNPL", "installment", "reserve"]
+                    if move_type
+                    in ["sell", "BNPL", "installment", "reserve", "buy-return"]
                     else product_flow.quantity,
                     product_flow.wholesale_price,
                     product_flow.price,
@@ -929,6 +923,86 @@ def add_bill(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.post("/admin/move-products")
+def move_products(
+    bill: Bill,
+    source_store_id: int,
+    destination_store_id: int,
+):
+    """
+    Move products from one store to another by
+    1. Adding a new "sell" bill to the source store with destination store as party
+    2. Adding a new "buy" bill to the destination store with source store as party
+
+    Args:
+        bill (Bill): The bill to move products
+        source_store_id (int): The source store ID
+        destination_store_id (int): The destination store ID
+
+    Returns:
+        Dict: A message indicating the result of the operation
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get the associated party ID for destination store
+            cur.execute(
+                """
+                SELECT id FROM assosiated_parties 
+                WHERE extra_info->>'store_id' = %s
+                """,
+                (str(destination_store_id),),
+            )
+            destination_party = cur.fetchone()
+            destination_party_id = (
+                destination_party["id"] if destination_party else None
+            )
+
+            # Get the associated party ID for source store
+            cur.execute(
+                """
+                SELECT id FROM assosiated_parties 
+                WHERE extra_info->>'store_id' = %s
+                """,
+                (str(source_store_id),),
+            )
+            source_party = cur.fetchone()
+            source_party_id = source_party["id"] if source_party else None
+
+        # Add sell bill to source store (with destination store as party)
+        add_bill(
+            Bill(
+                time=bill.time,
+                discount=bill.discount,
+                total=bill.total,
+                products_flow=[
+                    ProductFlow(
+                        id=product_flow.id,
+                        quantity=product_flow.quantity,
+                        price=product_flow.wholesale_price,
+                        wholesale_price=product_flow.wholesale_price,
+                    )
+                    for product_flow in bill.products_flow
+                ],
+            ),
+            "sell",
+            source_store_id,
+            destination_party_id,  # Use destination store's associated party ID
+        )
+
+        # Add buy bill to destination store (with source store as party)
+        add_bill(
+            bill,
+            "buy",
+            destination_store_id,
+            source_party_id,  # Use source store's associated party ID
+        )
+
+        return {"message": "Products moved successfully"}
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.get("/end-reservation")
 def end_reservation(bill_id: str, store_id: int):
     """
@@ -976,6 +1050,61 @@ def end_reservation(bill_id: str, store_id: int):
             )
 
             return {"message": "Reservation ended successfully"}
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/complete-bnpl-payment")
+def complete_bnpl_payment(bill_id: str, store_id: int):
+    """
+    Complete payment for a BNPL (Buy Now Pay Later) bill by changing it to a regular sell bill
+    and updating the bill total to reflect the actual payment received.
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # First, check if the bill is actually a BNPL bill
+            cur.execute(
+                """
+                SELECT discount FROM bills
+                WHERE id = %s
+                AND store_id = %s
+                AND type = 'BNPL'
+                """,
+                (bill_id, store_id),
+            )
+            bill_discount = cur.fetchone()["discount"]
+
+            if not bill_discount:
+                raise HTTPException(status_code=404, detail="BNPL bill not found")
+
+            # Get the corrected total from the products_flow
+            cur.execute(
+                """
+                SELECT SUM(amount * price) AS total
+                FROM products_flow
+                WHERE bill_id = %s
+                AND store_id = %s
+                """,
+                (bill_id, store_id),
+            )
+
+            corrected_total = cur.fetchone()["total"]
+
+            # Update the bill type to 'sell' to indicate payment received
+            cur.execute(
+                """
+                UPDATE bills
+                SET
+                    type = 'sell',
+                    total = %s
+                WHERE id = %s
+                AND store_id = %s
+                """,
+                (abs(corrected_total - bill_discount), bill_id, store_id),
+            )
+
+            return {"message": "BNPL payment completed successfully"}
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1151,12 +1280,12 @@ def shift_total(
                 FROM bills
                 WHERE time >= (
                     SELECT start_date_time FROM shifts
-                    WHERE current = True
+                    WHERE current = True AND store_id = %s
                 )
-                AND store_id = %s
+                AND bills.store_id = %s
                 GROUP BY type
                 """,
-                (store_id,),
+                (store_id, store_id),
             )
             data = cur.fetchall()
 
@@ -1245,8 +1374,156 @@ async def inventory(store_id: int):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+def generate_xlsx_admin(data, store_names):
+    # Create an in-memory output file for the new workbook
+    output = io.BytesIO()
+
+    # Create a workbook and select the active worksheet
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventory"
+
+    # Create headers with store names
+    headers = ["اسم المنتج", "الباركود", "سعر الشراء", "سعر البيع", "القسم"]
+    for store_name in store_names:
+        headers.append(f"كمية {store_name}")
+    headers.append("الكمية الإجمالية")
+    headers.append("إجمالي القيمة")
+
+    ws.append(headers)
+
+    # Calculate store totals and grand total
+    store_totals = {store_name: 0 for store_name in store_names}
+    grand_total = 0
+
+    for row in data:
+        # Prepare row data
+        row_data = [
+            row["name"],
+            row["bar_code"],
+            row["wholesale_price"],
+            row["price"],
+            row["category"],
+        ]
+
+        # Add quantities for each store
+        total_qty = 0
+        for store_name in store_names:
+            qty = row["stock_by_store"].get(store_name, 0)
+            total_qty += qty
+            row_data.append(qty)
+
+        # Add total quantity and value
+        row_data.append(total_qty)
+        total_value = total_qty * float(row["wholesale_price"])
+        row_data.append(total_value)
+
+        # Update totals
+        for i, store_name in enumerate(store_names):
+            store_totals[store_name] += row["stock_by_store"].get(
+                store_name, 0
+            ) * float(row["wholesale_price"])
+        grand_total += total_value
+
+        ws.append(row_data)
+
+    # Add totals row
+    total_row = ["الإجمالي", "", "", "", ""]
+    for store_name in store_names:
+        total_row.append("")
+    total_row.append("")
+    total_row.append(grand_total)
+    ws.append(total_row)
+
+    # Add store subtotals
+    for store_name, total in store_totals.items():
+        subtotal_row = [f"إجمالي {store_name}", "", "", "", ""]
+        for _ in range(len(store_names)):
+            subtotal_row.append("")
+        subtotal_row.append("")
+        subtotal_row.append(total)
+        ws.append(subtotal_row)
+
+    # Save the workbook to the in-memory file
+    wb.save(output)
+    output.seek(0)
+
+    return output
+
+
+@app.get("/admin/inventory")
+async def inventory_as_admin():
+    """
+    Get the products in the inventory and their total value for all stores with totals separately and combined
+
+    Returns:
+        StreamingResponse: Excel file with inventory data
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get all store names
+            cur.execute(
+                """
+                SELECT id, name FROM store_data
+                ORDER BY id
+                """
+            )
+            stores = cur.fetchall()
+            store_names = [
+                store["name"]
+                if store["name"] and store["name"] != ""
+                else str(store["id"])
+                for store in stores
+            ]
+
+            # Get all products with their stock by store
+            cur.execute(
+                """
+                WITH all_stores AS (
+                SELECT id, name FROM store_data
+                ),
+                product_stocks AS (
+                    SELECT 
+                        p.id,
+                        p.name,
+                        p.bar_code,
+                        p.wholesale_price,
+                        p.price,
+                        p.category,
+                        jsonb_object_agg(
+                            CASE 
+                                WHEN s.name IS NOT NULL AND s.name != '' THEN s.name 
+                                ELSE s.id::text 
+                            END, 
+                            COALESCE(pi.stock, 0)
+                        ) AS stock_by_store
+                    FROM products p
+                    CROSS JOIN all_stores s
+                    LEFT JOIN product_inventory pi ON p.id = pi.product_id AND s.id = pi.store_id AND pi.is_deleted = FALSE
+                    GROUP BY p.id, p.name, p.bar_code, p.wholesale_price, p.price, p.category
+                )
+                SELECT * FROM product_stocks
+                ORDER BY name
+                """
+            )
+
+            data = cur.fetchall()
+            output = generate_xlsx_admin(data, store_names)
+
+            return StreamingResponse(
+                output,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": "attachment;filename=inventory.xlsx"},
+            )
+
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.post("/shifts-analytics")
 def shifts_analytics(
+    store_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     bills_type: list[str] = ["sell", "return"],
@@ -1278,10 +1555,11 @@ def shifts_analytics(
                 FROM shifts
                 WHERE start_date_time >= %s
                 AND start_date_time <= %s
+                AND store_id = %s
                 AND current = False
                 ORDER BY start_date_time
                 """,
-                (tuple(bills_type), start_date, end_date),
+                (tuple(bills_type), start_date, end_date, store_id),
             )
             data = [
                 {

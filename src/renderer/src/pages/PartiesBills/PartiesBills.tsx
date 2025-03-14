@@ -10,10 +10,8 @@ import {
   Button,
   Autocomplete,
   TextField,
-  FormControlLabel,
-  Switch,
 } from "@mui/material";
-import { useCallback, useEffect, useMemo, useState, useContext } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -21,7 +19,7 @@ import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ar-sa";
 import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { Bill as BillType, DBProducts, Product } from "../../utils/types";
+import { CollectionBill, DBProducts, Product } from "../../utils/types";
 import { TableVirtuoso } from "react-virtuoso";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
@@ -33,7 +31,11 @@ import { useParams } from "react-router-dom";
 import useParties from "../Shared/hooks/useParties";
 import { StoreContext } from "@renderer/StoreDataProvider";
 
-const getProds = async (storeId: number) => {
+const getProds = async ({
+  queryKey: [_, storeId],
+}: {
+  queryKey: [string, number];
+}) => {
   const { data } = await axios.get<DBProducts>("/products", {
     params: {
       store_id: storeId,
@@ -48,7 +50,7 @@ const getBills = async (
   partyId: number | null,
   storeId: number,
 ) => {
-  const { data } = await axios.get<BillType[]>("/bills", {
+  const { data } = await axios.get<CollectionBill[]>("/parties/bills", {
     params: {
       start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
       end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
@@ -59,19 +61,12 @@ const getBills = async (
   return data;
 };
 
-const BillsAdmin = () => {
-  const [showExpandedBill, setShowExpandedBill] = useState<boolean>(() => {
-    const showExpandedBill = localStorage.getItem("showExpandedBill");
-    if (showExpandedBill === "true") return true;
-    return false;
-  });
+const PartiesBills = () => {
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [filters, setFilters] = useState<string[]>([
     "sell",
     "BNPL",
-    "buy",
-    "buy-return",
     "return",
     "reserve",
     "installment",
@@ -84,7 +79,7 @@ const BillsAdmin = () => {
 
   const { data: products } = useQuery({
     queryKey: ["products", storeId],
-    queryFn: () => getProds(storeId),
+    queryFn: getProds,
     initialData: { products: [], reserved_products: {} },
     select: (data) => data.products,
   });
@@ -108,11 +103,17 @@ const BillsAdmin = () => {
   });
 
   const {
-    data: bills,
+    data: collections,
     isLoading: isBillsLoading,
     refetch: refetchBills,
   } = useQuery({
-    queryKey: ["bills", startDate, endDate, selectedPartyId || "", storeId],
+    queryKey: [
+      "parties-bills",
+      startDate,
+      endDate,
+      selectedPartyId || "",
+      storeId,
+    ],
     queryFn: () => getBills(startDate, endDate, selectedPartyId, storeId),
     initialData: [],
   });
@@ -147,42 +148,29 @@ const BillsAdmin = () => {
     [lastShift],
   );
 
-  const filteredBills = useMemo(() => {
-    let filteredBills = bills.filter((bill) => filters.includes(bill.type));
+  const filteredCollections = useMemo(() => {
+    // Filter collections based on bill types
+    let filtered = collections.filter((collection) =>
+      collection.bills.some((bill) => filters.includes(bill.type)),
+    );
 
+    // Filter by selected products if any
     if (selectedProduct.length > 0) {
-      filteredBills = filteredBills.filter((bill) =>
-        bill.products.some((product) =>
-          selectedProduct.some(
-            (selectedProduct) => selectedProduct.name === product.name,
+      filtered = filtered.filter((collection) =>
+        collection.bills.some((bill) =>
+          bill.products.some((product) =>
+            selectedProduct.some((selected) => selected.name === product.name),
           ),
         ),
       );
     }
 
-    if (showExpandedBill) {
-      const expandedFilteredBills: BillType[] = [];
-      filteredBills.forEach((bill) => {
-        expandedFilteredBills.push(bill);
-        expandedFilteredBills.push({ ...bill, isExpanded: true });
-      });
-      return expandedFilteredBills;
-    }
+    return filtered;
+  }, [collections, filters, selectedProduct]);
 
-    return filteredBills;
-  }, [bills, filters, selectedProduct, showExpandedBill]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "showExpandedBill",
-      showExpandedBill ? "true" : "false",
-    );
-  }, [showExpandedBill]);
-
-  const total = filteredBills.reduce(
-    (acc, bill) => acc + parseFloat(bill.total.toFixed(2)),
-    0,
-  );
+  const total = filteredCollections.reduce((acc, collection) => {
+    return acc + parseFloat(collection.total.toFixed(2));
+  }, 0);
 
   const loading = isShiftLoading || isBillsLoading;
 
@@ -197,18 +185,6 @@ const BillsAdmin = () => {
                 <Grid2 container size={12} justifyContent="space-between">
                   <Grid2>
                     <Typography variant="h4">الفواتير</Typography>
-                  </Grid2>
-                  <Grid2>
-                    <FormControlLabel
-                      control={<Switch id="showExpandedBillSwitch" />}
-                      checked={showExpandedBill}
-                      label="عرض الفواتير المفصلة"
-                      onChange={(_, isChecked: boolean) => {
-                        // Don't turn this of while some product filter is applied
-                        if (selectedProduct.length !== 0) return;
-                        setShowExpandedBill(isChecked);
-                      }}
-                    />
                   </Grid2>
                 </Grid2>
                 <Typography variant="body1">
@@ -264,8 +240,6 @@ const BillsAdmin = () => {
                   >
                     <MenuItem value="sell">نقدي</MenuItem>
                     <MenuItem value="BNPL">آجل</MenuItem>
-                    <MenuItem value="buy">شراء</MenuItem>
-                    <MenuItem value="buy-return">مرتجع شراء</MenuItem>
                     <MenuItem value="return">مرتجع</MenuItem>
                     <MenuItem value="reserve">حجز</MenuItem>
                     <MenuItem value="installment">تقسيط</MenuItem>
@@ -281,11 +255,6 @@ const BillsAdmin = () => {
                   sx={{ minWidth: 300 }}
                   onChange={(_, newValue) => {
                     setSelectedProduct(newValue);
-
-                    // Turn show product on if filter is selected
-                    if (newValue.length !== 0 && !showExpandedBill) {
-                      setShowExpandedBill(true);
-                    }
                   }}
                   renderInput={(params) => (
                     <TextField {...params} label="بحث بالمنتج" />
@@ -354,7 +323,7 @@ const BillsAdmin = () => {
             <TableVirtuoso
               fixedHeaderContent={fixedHeaderContent}
               components={VirtuosoTableComponents}
-              data={filteredBills}
+              data={filteredCollections}
               context={{
                 setMsg: setMsg,
                 getBills: refetchBills,
@@ -367,4 +336,4 @@ const BillsAdmin = () => {
   );
 };
 
-export default BillsAdmin;
+export default PartiesBills;

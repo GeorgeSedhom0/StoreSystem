@@ -18,7 +18,11 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
             <TableRow>
               <TableCell>المنتج</TableCell>
               <TableCell>الكمية</TableCell>
-              <TableCell>السعر</TableCell>
+              <TableCell>
+                {bill.type === "buy" || bill.type === "buy-return"
+                  ? "سعر الشراء"
+                  : "سعر البيع"}
+              </TableCell>
               <TableCell>الاجمالى</TableCell>
             </TableRow>
           </TableHead>
@@ -29,13 +33,19 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
                   {product.name}
                 </TableCell>
                 <TableCell sx={{ borderBottom: "none" }}>
-                  {-product.amount}
+                  {Math.abs(product.amount)}
                 </TableCell>
                 <TableCell sx={{ borderBottom: "none" }}>
-                  {product.price.toFixed(2)}
+                  {bill.type === "buy" || bill.type === "buy-return"
+                    ? product.wholesale_price.toFixed(2)
+                    : product.price.toFixed(2)}
                 </TableCell>
                 <TableCell sx={{ borderBottom: "none" }}>
-                  {(product.price * -product.amount).toFixed(2)}
+                  {bill.type === "buy" || bill.type === "buy-return"
+                    ? Math.abs(
+                        product.wholesale_price * product.amount,
+                      ).toFixed(2)
+                    : Math.abs(product.price * product.amount).toFixed(2)}
                 </TableCell>
               </TableRow>
             ))}
@@ -54,7 +64,7 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
               <TableCell sx={{ borderBottom: "none" }}></TableCell>
               <TableCell sx={{ borderBottom: "none" }}></TableCell>
               <TableCell sx={{ borderBottom: "none" }}>
-                {bill.total.toFixed(2)}
+                {Math.abs(bill.total).toFixed(2)}
               </TableCell>
             </TableRow>
           </TableBody>

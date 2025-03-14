@@ -67,7 +67,15 @@ const ShiftDialog = ({
 
   const closeShift = async () => {
     try {
-      await axios.post("/logout");
+      await axios.post(
+        "/logout",
+        {},
+        {
+          params: {
+            store_id: storeId,
+          },
+        },
+      );
       navigate("/login");
     } catch (err) {
       console.log(err);

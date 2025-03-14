@@ -43,6 +43,28 @@ def restore_db_from_file(filepath):
         # Set password for psql
         os.environ["PGPASSWORD"] = PASS
 
+        # Create the temporary database if it doesn't exist
+        conn = psycopg2.connect(
+            host=HOST,
+            database="postgres",
+            user=USER,
+            password=PASS,
+        )
+        conn.autocommit = True  # Set autocommit to True to allow CREATE DATABASE
+        try:
+            with conn.cursor() as cur:
+                # Check if database exists first to avoid error
+                cur.execute(
+                    "SELECT 1 FROM pg_database WHERE datname = %s", (target_db,)
+                )
+                if not cur.fetchone():
+                    cur.execute(f"CREATE DATABASE {target_db}")
+                    logging.info("Temporary database created successfully")
+                else:
+                    logging.info("Temporary database already exists")
+        finally:
+            conn.close()
+
         # Restore the database using psql
         result = subprocess.run(
             ["psql", "-h", HOST, "-U", USER, "-d", target_db, "-f", filepath],
@@ -245,6 +267,17 @@ def insert_new_data(old_data):
                                 product[8],
                             ),  # Use store_id=1, product stock
                         )
+                # Insert into product_inventory for all products store 0 with stock=0
+                for product in products:
+                    cur.execute(
+                        "INSERT INTO product_inventory (store_id, product_id, stock, is_deleted) VALUES (%s, %s, %s, %s)",
+                        (
+                            0,
+                            product[0],
+                            0,
+                            False,
+                        ),  # Use store_id=0, product stock=0
+                    )
 
                 # Insert associated parties
                 print("Inserting associated parties...")
@@ -256,6 +289,25 @@ def insert_new_data(old_data):
                         "INSERT INTO assosiated_parties (id, name, phone, address, type, extra_info) VALUES (%s, %s, %s, %s, %s, %s)",
                         (party[0], party[1], party[2], party[3], party[4], extra_info),
                     )
+
+                # Reset ID sequence for associated parties to be able to insert new parties
+                cur.execute(
+                    "SELECT setval('assosiated_parties_id_seq', (SELECT MAX(id) FROM assosiated_parties)+1)"
+                )
+
+                # Insert associated parties for the two stores
+                print("Creating associated parties for stores...")
+                cur.execute("""
+                INSERT INTO assosiated_parties (name, phone, address, type, extra_info)
+                VALUES ('المخزن', '', '', 'store', '{"store_id": 0}')
+                ON CONFLICT DO NOTHING;
+                """)
+
+                cur.execute("""
+                INSERT INTO assosiated_parties (name, phone, address, type, extra_info)
+                VALUES ('المحل', '', '', 'store', '{"store_id": 1}')
+                ON CONFLICT DO NOTHING;
+                """)
 
                 # Insert bills (convert string ref_id to bigint id, set store_id=1)
                 print("Inserting bills...")
@@ -445,7 +497,7 @@ def migrate_data():
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "migrate":
         print("Starting migration process...")
-        restore_db_from_file("backup1.sql")
+        restore_db_from_file("./backup1.sql")
         if migrate_data():
             print("Migration completed successfully")
         else:

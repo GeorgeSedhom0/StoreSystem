@@ -103,14 +103,35 @@ const WholesalePriceColumn = ({
   );
 };
 
+const WholesalePriceDisplayColumn = ({
+  wholesalePrice,
+}: {
+  wholesalePrice: number;
+}) => {
+  return (
+    <TableCell>
+      <TextField
+        label="سعر الشراء"
+        type="number"
+        value={wholesalePrice}
+        variant="standard"
+        disabled={true}
+        InputProps={{
+          readOnly: true,
+        }}
+      />
+    </TableCell>
+  );
+};
+
 const TotalPriceColumn = ({
   product,
   type,
 }: {
   product: SCProduct;
-  type: "buy" | "sell";
+  type: "buy" | "sell" | "transfer";
 }) => {
-  if (type === "buy") {
+  if (type === "buy" || type === "transfer") {
     return <TableCell>{product.wholesale_price * product.quantity}</TableCell>;
   }
   return <TableCell>{product.price * product.quantity}</TableCell>;
@@ -179,6 +200,7 @@ type availableColumns =
   | "quantity"
   | "price"
   | "wholesalePrice"
+  | "wholesalePriceDisplay"
   | "totalPrice"
   | "delete"
   | "stock"
@@ -187,6 +209,7 @@ type availableColumns =
 const typeToColumns: {
   buy: availableColumns[];
   sell: availableColumns[];
+  transfer: availableColumns[];
 } = {
   buy: [
     "name",
@@ -198,6 +221,14 @@ const typeToColumns: {
     "printBarCode",
   ],
   sell: ["name", "quantity", "price", "totalPrice", "delete", "stock"],
+  transfer: [
+    "name",
+    "quantity",
+    "wholesalePriceDisplay",
+    "totalPrice",
+    "delete",
+    "stock",
+  ],
 };
 
 const Column = ({
@@ -211,7 +242,7 @@ const Column = ({
   column: availableColumns;
   product: SCProduct;
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
-  type: "buy" | "sell";
+  type: "buy" | "sell" | "transfer";
   isPrintingCode: boolean;
   setIsPrintingCode: Dispatch<SetStateAction<boolean>>;
 }) => {
@@ -241,6 +272,10 @@ const Column = ({
         product={product}
       />
     );
+  } else if (column === "wholesalePriceDisplay") {
+    return (
+      <WholesalePriceDisplayColumn wholesalePrice={product.wholesale_price} />
+    );
   } else if (column === "totalPrice") {
     return <TotalPriceColumn product={product} type={type} />;
   } else if (column === "delete") {
@@ -267,7 +302,7 @@ const ProductInCart = ({
 }: {
   product: SCProduct;
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
-  type: "buy" | "sell";
+  type: "buy" | "sell" | "transfer";
 }) => {
   const [isPrintingCode, setIsPrintingCode] = useState(false);
   return (

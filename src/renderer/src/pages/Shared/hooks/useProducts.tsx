@@ -4,7 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useContext } from "react";
 import { StoreContext } from "@renderer/StoreDataProvider";
 
-const getProducts = async ({ queryKey }: { queryKey: [string, boolean] }) => {
+const getProducts = async ({
+  queryKey,
+}: {
+  queryKey: [string, boolean, number];
+}) => {
+  const storeId = queryKey[2];
   const { data } = await axios.get<DBProducts>("/products", {
     params: {
       is_deleted: queryKey[1],
@@ -21,7 +26,7 @@ const useProducts = (getDeleted: boolean = false) => {
     isLoading,
     refetch: updateProducts,
   } = useQuery({
-    queryKey: ["products", getDeleted],
+    queryKey: ["products", getDeleted, storeId],
     queryFn: getProducts,
     initialData: { products: [], reserved_products: [] },
   });

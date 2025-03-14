@@ -47,6 +47,8 @@ def drop_all_tables(cur):
     cur.execute("DROP TABLE IF EXISTS installments_flow CASCADE")
     cur.execute("DROP TABLE IF EXISTS employee CASCADE")
     cur.execute("DROP TABLE IF EXISTS salaries CASCADE")
+    cur.execute("DROP TABLE IF EXISTS bills_collections CASCADE")
+    cur.execute("SET TIME ZONE 'Africa/Cairo'")
 
 
 def create_all_tables(cur):
@@ -64,12 +66,12 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
     """)
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('cashier', ARRAY[1, 4, 10])
+    ('cashier', ARRAY[1, 4, 13])
     """)
 
     # Create pages table
@@ -86,7 +88,9 @@ def create_all_tables(cur):
     ('بيع', '/sell'),
     ('شراء', '/buy'),
     ('اضافة منتجات', '/add-to-storage'),
+    ('(ادمن) نقل منتجات', '/admin/move-products'),
     ('الفواتير', '/bills'),
+    ('فواتير العملاء و الموردين', '/parties-bills'),
     ('الفواتير (ادمن)', '/admin/bills'),
     ('المنتجات', '/products'),
     ('المنتجات (ادمن)', '/admin/products'),
@@ -94,7 +98,8 @@ def create_all_tables(cur):
     ('التقارير', '/analytics'),
     ('الاعدادات', '/settings'),
     ('ادارة الاقساط', '/installments'),
-    ('الموظفين', '/employees')
+    ('الموظفين', '/employees'),
+    ('admin', '/admin')
     """)
 
     # Create the users table
@@ -137,12 +142,12 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO store_data (id, name, address, phone, extra_info)
     VALUES
-    (0, '', '', '', '{}')
+    (0, 'المخزن', '', '', '{}')
     """)
     cur.execute("""
     INSERT INTO store_data (name, address, phone, extra_info)
     VALUES
-    ('', '', '', '{}')
+    ('المحل', '', '', '{}')
     """)
 
     # Create the products table
@@ -182,6 +187,18 @@ def create_all_tables(cur):
     )
     """)
 
+    # Create the assosiated_parties table
+    cur.execute("""
+    CREATE TABLE assosiated_parties (
+        id BIGSERIAL PRIMARY KEY,
+        name VARCHAR,
+        phone VARCHAR,
+        address VARCHAR,
+        type VARCHAR, -- 'customer' or 'supplier'
+        extra_info JSONB
+    )
+    """)
+
     # Create the bills table
     cur.execute("""
     CREATE TABLE bills (
@@ -191,8 +208,23 @@ def create_all_tables(cur):
       discount FLOAT,
       total FLOAT,
       type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL' or 'reserve' or 'installment'
-      party_id BIGINT,
+      party_id BIGINT REFERENCES assosiated_parties(id),
       PRIMARY KEY (id, store_id)
+    )
+    """)
+
+    # Create the bills_collections table
+    cur.execute("""
+    CREATE TABLE bills_collections (
+        id BIGSERIAL PRIMARY KEY,
+        collection_id UUID DEFAULT gen_random_uuid(),
+        party_id BIGINT REFERENCES assosiated_parties(id),
+        bill_id BIGINT,
+        store_id BIGINT,
+        is_closed BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        closed_at TIMESTAMP,
+        FOREIGN KEY (bill_id, store_id) REFERENCES bills(id, store_id)
     )
     """)
 
@@ -210,18 +242,6 @@ def create_all_tables(cur):
       party_id BIGINT,
       PRIMARY KEY (id, store_id),
       FOREIGN KEY (store_id, bill_id) REFERENCES bills(store_id, id)
-    )
-    """)
-
-    # Create the assosiated_parties table
-    cur.execute("""
-    CREATE TABLE assosiated_parties (
-        id BIGSERIAL PRIMARY KEY,
-        name VARCHAR,
-        phone VARCHAR,
-        address VARCHAR,
-        type VARCHAR, -- 'customer' or 'supplier'
-        extra_info JSONB
     )
     """)
 
@@ -309,6 +329,27 @@ def create_all_triggers(cur):
     """Create all database triggers"""
     print("Creating database triggers...")
 
+    # Trigger to add new products to inventory of all stores
+    cur.execute("""
+    -- Trigger to add new products to inventory of all stores
+    CREATE OR REPLACE FUNCTION add_product_to_all_stores()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        -- Insert the new product into inventory for all stores with 0 stock
+        INSERT INTO product_inventory (store_id, product_id, stock)
+        SELECT id, NEW.id, 0
+        FROM store_data;
+        
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    
+    CREATE TRIGGER trigger_add_product_to_all_stores
+    AFTER INSERT ON products
+    FOR EACH ROW
+    EXECUTE FUNCTION add_product_to_all_stores();
+    """)
+
     # Update the trigger to update stock after inserting a product flow
     cur.execute("""
     -- Trigger to update stock after insert in product_inventory
@@ -353,6 +394,7 @@ def create_all_triggers(cur):
                     WHEN NEW.type = 'installment' THEN 'in'
                     WHEN NEW.type = 'buy' THEN 'out'
                     WHEN NEW.type = 'return' THEN 'out'
+                    WHEN NEW.type = 'buy-return' THEN 'in'
                     ELSE 'out' END,
             NEW.id,
             CASE WHEN NEW.type = 'sell' THEN 'فاتورة بيع'
@@ -361,6 +403,7 @@ def create_all_triggers(cur):
                   WHEN NEW.type = 'reserve' THEN 'فاتورة حجز'
                   WHEN NEW.type = 'installment' THEN 'فاتورة تقسيط'
                   WHEN NEW.type = 'BNPL' THEN 'فاتورة اجل'
+                  WHEN NEW.type = 'buy-return' THEN 'فاتورة مرتجع شراء'
                   ELSE 'فاتورة'
             END,
             NEW.party_id
@@ -373,6 +416,81 @@ def create_all_triggers(cur):
     AFTER INSERT ON bills
     FOR EACH ROW
     EXECUTE FUNCTION insert_cash_flow_after_insert();
+    """)
+
+    # Create the trigger to add entry to bills_collections when bill has an associated party
+    cur.execute("""
+    CREATE OR REPLACE FUNCTION add_bill_to_collections()
+    RETURNS TRIGGER AS $$
+    DECLARE
+        existing_collection_id UUID;
+    BEGIN
+        -- Only add to bills_collections if party_id is not null
+        IF NEW.party_id IS NOT NULL THEN
+            -- Check if there's an existing open collection for this party
+            SELECT collection_id INTO existing_collection_id
+            FROM bills_collections
+            WHERE party_id = NEW.party_id 
+              AND is_closed = FALSE
+            LIMIT 1;
+            
+            IF existing_collection_id IS NOT NULL THEN
+                -- Add to existing collection
+                INSERT INTO bills_collections (collection_id, party_id, bill_id, store_id, is_closed)
+                VALUES (existing_collection_id, NEW.party_id, NEW.id, NEW.store_id, FALSE);
+            ELSE
+                -- Create new collection with a new UUID
+                INSERT INTO bills_collections (party_id, bill_id, store_id, is_closed)
+                VALUES (NEW.party_id, NEW.id, NEW.store_id, FALSE);
+                -- The collection_id will be generated automatically with DEFAULT gen_random_uuid()
+            END IF;
+        END IF;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+                
+    CREATE TRIGGER trigger_add_bill_to_collections
+    AFTER INSERT ON bills
+    FOR EACH ROW
+    EXECUTE FUNCTION add_bill_to_collections();
+    """)
+
+    # Create a trigger to keep assosiated parties in sync with available stores
+    cur.execute("""
+    -- Trigger function to manage the corresponding associated party for each store
+    CREATE OR REPLACE FUNCTION sync_store_to_associated_party()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        -- For INSERT: Create a new associated party for the store
+        IF TG_OP = 'INSERT' THEN
+            INSERT INTO assosiated_parties (name, phone, address, type, extra_info)
+            VALUES (NEW.name, NEW.phone, NEW.address, 'store', jsonb_build_object('store_id', NEW.id));
+        
+        -- For UPDATE: Update the corresponding associated party
+        ELSIF TG_OP = 'UPDATE' THEN
+            UPDATE assosiated_parties
+            SET 
+                name = NEW.name,
+                phone = NEW.phone,
+                address = NEW.address
+            WHERE extra_info->>'store_id' = NEW.id::text;
+            
+            -- If no matching party found, create one
+            IF NOT FOUND THEN
+                INSERT INTO assosiated_parties (name, phone, address, type, extra_info)
+                VALUES (NEW.name, NEW.phone, NEW.address, 'store', jsonb_build_object('store_id', NEW.id));
+            END IF;
+        END IF;
+        
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    
+    -- Create the trigger for both INSERT and UPDATE operations
+    CREATE TRIGGER trigger_sync_store_to_associated_party
+    AFTER INSERT OR UPDATE ON store_data
+    FOR EACH ROW
+    EXECUTE FUNCTION sync_store_to_associated_party();
     """)
 
     # Create the trigger to insert into cash_flow after inserting a salary

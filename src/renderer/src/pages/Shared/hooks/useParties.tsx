@@ -26,15 +26,11 @@ const deleteParty = async (partyId: number) => {
   });
 };
 
-const useParties = (
-  setMsg: Dispatch<SetStateAction<AlertMsg>>,
-  filter: (_: Party[]) => Party[] = (data) => data,
-) => {
+const useParties = (setMsg: Dispatch<SetStateAction<AlertMsg>>) => {
   const { data: parties, refetch: refetchParties } = useQuery({
     queryKey: ["parties"],
     queryFn: getParties,
     initialData: [],
-    select: (data: Party[]) => filter(data),
   });
 
   const {

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useContext, useMemo, useState } from "react";
 import { AdminProduct } from "../../utils/types";
 import { Button, Card, Grid2, TextField, Typography } from "@mui/material";
 import { TableVirtuoso } from "react-virtuoso";
@@ -12,6 +12,7 @@ import {
 import LoadingScreen from "../Shared/LoadingScreen";
 import { Link } from "react-router-dom";
 import useAdminProducts from "../Shared/hooks/useAdminProducts";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const ProductsAdmin = () => {
   const [editedProducts, setEditedProducts] = useState<AdminProduct[]>([]);
@@ -22,6 +23,8 @@ const ProductsAdmin = () => {
   });
   const [changedOnly, setChangedOnly] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
+
+  const { storeId } = useContext(StoreContext);
 
   const {
     products,
@@ -53,7 +56,7 @@ const ProductsAdmin = () => {
   const getInventory = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get("/inventory", {
+      const response = await axios.get("/admin/inventory", {
         responseType: "blob", // important
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -74,7 +77,7 @@ const ProductsAdmin = () => {
     try {
       await axios.put("/products", editedProducts, {
         params: {
-          store_id: import.meta.env.VITE_STORE_ID,
+          store_id: storeId,
         },
       });
       setMsg({ type: "success", text: "تم تعديل المنتجات بنجاح" });
@@ -87,7 +90,7 @@ const ProductsAdmin = () => {
     setQuery("");
     setChangedOnly(false);
     setEditedProducts([]);
-  }, [editedProducts]);
+  }, [editedProducts, storeId]);
 
   return (
     <>

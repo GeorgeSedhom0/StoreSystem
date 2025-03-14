@@ -19,7 +19,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Bill, Party, Product, SCProduct } from "../../utils/types";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
@@ -37,6 +37,7 @@ import useParties from "../Shared/hooks/useParties";
 import useProducts from "../Shared/hooks/useProducts";
 import { useShift } from "./hooks/useShifts";
 import useBills from "./hooks/useBills";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 const Sell = () => {
   const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
@@ -67,6 +68,7 @@ const Sell = () => {
   const [usingThirdParties, setUsingThirdParties] = useState<boolean>(false);
 
   const billRef = useRef<HTMLDivElement>(null);
+  const { storeId } = useContext(StoreContext);
 
   const naviagte = useNavigate();
 
@@ -78,9 +80,7 @@ const Sell = () => {
 
   const { shift, isShiftLoading, isShiftError } = useShift();
 
-  const { parties, addPartyMutationAsync } = useParties(setMsg, (parties) =>
-    parties.filter((party) => party.type === "عميل"),
-  );
+  const { parties, addPartyMutationAsync } = useParties(setMsg);
 
   const { createBill, isCreatingBill } = useBills();
 
@@ -180,6 +180,7 @@ const Sell = () => {
           paid,
           installments,
           installmentInterval,
+          storeId,
         });
 
         setLastBill(data.bill);

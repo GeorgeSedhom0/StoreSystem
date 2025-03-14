@@ -14,6 +14,12 @@ const endReservation = async (id: string, storeId: number) => {
   });
 };
 
+const completeBnplPayment = async (id: string, storeId: number) => {
+  await axios.get("/complete-bnpl-payment", {
+    params: { bill_id: id, store_id: storeId },
+  });
+};
+
 const billTypes = {
   sell: "بيع",
   buy: "شراء",
@@ -38,6 +44,18 @@ const Bill = ({ context, item: bill, ...props }: any) => {
     },
     onError: () => {
       setMsg({ type: "error", text: "حدث خطأ أثناء تسليم الحجز" });
+    },
+  });
+
+  const { mutate: completeBnplMutation } = useMutation({
+    mutationKey: ["completeBnplPayment"],
+    mutationFn: (id: string) => completeBnplPayment(id, storeId),
+    onSuccess: () => {
+      setMsg({ type: "success", text: "تم استلام الدفع بنجاح" });
+      getBills();
+    },
+    onError: () => {
+      setMsg({ type: "error", text: "حدث خطأ أثناء استلام الدفع" });
     },
   });
 
@@ -78,6 +96,11 @@ const Bill = ({ context, item: bill, ...props }: any) => {
               {bill.type === "reserve" && (
                 <Button onClick={() => endReservationMutation(bill.id)}>
                   تسليم
+                </Button>
+              )}
+              {bill.type === "BNPL" && (
+                <Button onClick={() => completeBnplMutation(bill.id)}>
+                  تحصيل
                 </Button>
               )}
             </ButtonGroup>

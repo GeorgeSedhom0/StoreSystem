@@ -143,9 +143,9 @@ def auth_user(
                 cur.execute(
                     """
                     SELECT start_date_time, user_id FROM shifts
-                    WHERE current = True
+                    WHERE current = True AND store_id = %s
                     """,
-                    (user["id"],),
+                    (store_id,),
                 )
                 cur_shift = cur.fetchone()
 
@@ -172,7 +172,7 @@ def auth_user(
 
 
 @router.post("/logout")
-def logout_user(access_token=Cookie()) -> JSONResponse:
+def logout_user(store_id: int, access_token=Cookie()) -> JSONResponse:
     """
     Logout the user and end the current shift
     """
@@ -195,9 +195,9 @@ def logout_user(access_token=Cookie()) -> JSONResponse:
                 """
                 UPDATE shifts
                 SET end_date_time = %s, current = False
-                WHERE current = True
+                WHERE current = True AND store_id = %s
                 """,
-                (datetime.now(),),
+                (datetime.now(), store_id),
             )
             response = JSONResponse(content={"message": "Logged out successfully"})
             response.delete_cookie(key="access_token")

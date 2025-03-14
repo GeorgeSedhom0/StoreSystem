@@ -67,6 +67,9 @@ const Products = () => {
     try {
       const response = await axios.get("/inventory", {
         responseType: "blob", // important
+        params: {
+          store_id: storeId,
+        },
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");

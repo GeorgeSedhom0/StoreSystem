@@ -8,6 +8,7 @@ interface CreateBillParams {
   paid: number;
   installments: number;
   installmentInterval: number;
+  storeId: number;
 }
 
 const addBill = async ({
@@ -17,11 +18,12 @@ const addBill = async ({
   paid,
   installments,
   installmentInterval,
+  storeId,
 }: CreateBillParams) => {
   const { data } = await axios.post("/bill", bill, {
     params: {
       move_type: billPayment,
-      store_id: import.meta.env.VITE_STORE_ID,
+      store_id: storeId,
       party_id: newPartyId,
       paid: paid,
       installments: installments,
