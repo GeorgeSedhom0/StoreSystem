@@ -400,27 +400,8 @@ def add_product(product: Product, store_id: int):
                     product.category,
                 ),
             )
-            new_product = cur.fetchone()
 
-            # Then add to the product_inventory for this store with initial stock of 0
-            cur.execute(
-                """
-                INSERT INTO product_inventory (
-                    store_id, product_id, stock, is_deleted
-                )
-                VALUES (%s, %s, %s, %s)
-                """,
-                (
-                    store_id,
-                    new_product["id"],
-                    0,
-                    False,
-                ),
-            )
-
-            # Return product with store-specific inventory data
-            result = dict(new_product)
-            result["stock"] = 0
+            result = cur.fetchone()
             return result
     except Exception as e:
         print(f"Error: {e}")
