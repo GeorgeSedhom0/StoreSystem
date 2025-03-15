@@ -171,7 +171,7 @@ def create_all_tables(cur):
       stock INT DEFAULT 0,
       is_deleted BOOLEAN DEFAULT FALSE,
       UNIQUE(store_id, product_id),
-      FOREIGN KEY (product_id, store_id) REFERENCES products(product_id, store_id)
+      FOREIGN KEY (product_id, store_id) REFERENCES products(id, store_id)
     )
     """)
 
