@@ -91,7 +91,7 @@ const ShiftsAnalytics = () => {
     }
   }, []);
 
-  const options = useMemo(
+  const options: echarts.EChartsOption = useMemo(
     () => ({
       tooltip: {
         trigger: "axis",
