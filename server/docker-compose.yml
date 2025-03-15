@@ -5,6 +5,7 @@ services:
     build: .
     ports:
       - "8000:8000"
+    restart: unless-stopped
     environment:
       - HOST=db
       - USER=${USER}
@@ -22,6 +23,7 @@ services:
     image: postgres:17
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+    restart: unless-stopped
     environment:
       - POSTGRES_PASSWORD=${PASS}
       - POSTGRES_USER=${USER}
