@@ -16768,6 +16768,7 @@ COPY public.bills (id, store_id, ref_id, "time", discount, total, type, needs_up
 16061	0	0_16061	2025-03-16 00:28:42	0	130	sell	t	\N
 16062	0	0_16062	2025-03-16 00:28:49	0	360	sell	t	\N
 16063	0	0_16063	2025-03-16 00:34:55	0	220	sell	t	\N
+16064	0	0_16064	2025-03-16 00:45:37	0	350	sell	t	\N
 \.
 
 
@@ -32222,6 +32223,7 @@ COPY public.cash_flow (id, store_id, "time", amount, type, bill_id, description,
 16055	0	2025-03-15 23:40:45	355	in	0_16052	فاتورة بيع	168132	t	\N
 16040	0	2025-03-15 20:59:13	200	in	0_16037	فاتورة بيع	161497	t	\N
 16041	0	2025-03-15 21:08:16	330	in	0_16038	فاتورة بيع	161827	t	\N
+16067	0	2025-03-16 00:45:37	350	in	0_16064	فاتورة بيع	170672	t	\N
 16056	0	2025-03-15 23:42:19	270	in	0_16053	فاتورة بيع	168402	t	\N
 16042	0	2025-03-15 21:08:29	0	in	0_16039	فاتورة بيع	163977	t	\N
 16043	0	2025-03-15 21:11:04	1200	in	0_16040	فاتورة بيع	165177	t	\N
@@ -34165,6 +34167,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 874	frisky 30 9 mango.ice	713	100	130	1	frisky	t	f
 1851	cart g3 1.2	1647	145	185	73	caliburn	t	f
 894	frisky 30 18 green.apple	733	120	150	4	frisky	t	f
+1845	cart relx 15000	1641	300	350	21	relx	t	f
 968	frisky 60 12 peach.ice	807	160	200	1	frisky	t	f
 1844	pod relx 15000 cart	1640	500	600	11	relx	t	f
 953	frisky 60 12 cola	792	160	200	1	frisky	t	f
@@ -34190,7 +34193,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1580	chubby 30 6 cola	1402	100	130	0	chubby	t	f
 516	007 60 9 dr.no	6454659	180	230	12	007	t	f
 1848	wenax u pod	1644	850	1100	2	geek vape	t	f
-1845	cart relx 15000	1641	300	350	22	relx	t	f
 1850	cart g3 0.9	1646	145	185	40	caliburn	t	f
 1858	eg mtl 60 9 tob.caramel.nuts	1654	150	200	0	eg	t	f
 1551	chubby 30 18 mango.peach	1373	150	180	7	chubby	t	f
@@ -58619,6 +58621,7 @@ COPY public.products_flow (id, store_id, bill_id, product_id, wholesale_price, p
 24943	0	0_16062	1575	150	180	-1	t
 24944	0	0_16063	1852	110	140	-1	t
 24945	0	0_16063	472	50	80	-1	t
+24946	0	0_16064	1845	300	350	-1	t
 \.
 
 
@@ -59009,14 +59012,14 @@ SELECT pg_catalog.setval('public.assosiated_parties_id_seq', 307, true);
 -- Name: bills_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.bills_id_seq', 16063, true);
+SELECT pg_catalog.setval('public.bills_id_seq', 16064, true);
 
 
 --
 -- Name: cash_flow_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.cash_flow_id_seq', 16066, true);
+SELECT pg_catalog.setval('public.cash_flow_id_seq', 16067, true);
 
 
 --
@@ -59051,7 +59054,7 @@ SELECT pg_catalog.setval('public.pages_id_seq', 11, true);
 -- Name: products_flow_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.products_flow_id_seq', 24945, true);
+SELECT pg_catalog.setval('public.products_flow_id_seq', 24946, true);
 
 
 --
