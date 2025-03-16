@@ -61,8 +61,13 @@ def restore_db_from_file(filepath):
                     cur.execute(f"CREATE DATABASE {target_db}")
                     logging.info("Temporary database created successfully")
                 else:
-                    logging.info("Temporary database already exists")
+                    logging.info(
+                        "Temporary database already exists will be deleted and recreated"
+                    )
+                    cur.execute(f"DROP DATABASE {target_db}")
+                    cur.execute(f"CREATE DATABASE {target_db}")
         finally:
+            conn.commit()
             conn.close()
 
         # Restore the database using psql
