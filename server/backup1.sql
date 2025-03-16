@@ -16722,6 +16722,52 @@ COPY public.bills (id, store_id, ref_id, "time", discount, total, type, needs_up
 16014	0	0_16014	2025-03-15 00:10:55	0	0	sell	t	\N
 16016	0	0_16016	2025-03-15 00:26:03	0	450	sell	t	\N
 16017	0	0_16017	2025-03-15 00:39:27	0	180	sell	t	\N
+16018	0	0_16018	2025-03-15 16:33:24	10	250	sell	t	\N
+16019	0	0_16019	2025-03-15 16:49:19	10	300	sell	t	\N
+16020	0	0_16020	2025-03-15 16:59:33	0	320	sell	t	\N
+16021	0	0_16021	2025-03-15 17:05:09	10	300	sell	t	\N
+16022	0	0_16022	2025-03-15 17:23:38	0	180	sell	t	\N
+16023	0	0_16023	2025-03-15 18:41:47	0	350	sell	t	\N
+16024	0	0_16024	2025-03-15 19:15:52	0	180	sell	t	\N
+16025	0	0_16025	2025-03-15 19:18:18	0	380	sell	t	\N
+16026	0	0_16026	2025-03-15 19:28:59	0	150	sell	t	\N
+16027	0	0_16027	2025-03-15 19:34:17	0	130	sell	t	\N
+16028	0	0_16028	2025-03-15 19:36:47	0	130	sell	t	\N
+16029	0	0_16029	2025-03-15 19:38:57	0	250	sell	t	\N
+16030	0	0_16030	2025-03-15 20:12:32	0	230	sell	t	\N
+16031	0	0_16031	2025-03-15 20:13:49	0	130	sell	t	\N
+16032	0	0_16032	2025-03-15 20:17:03	15	180	sell	t	\N
+16033	0	0_16033	2025-03-15 20:24:54	0	900	sell	t	\N
+16034	0	0_16034	2025-03-15 20:37:11	0	200	sell	t	\N
+16035	0	0_16035	2025-03-15 20:53:28	5	120	sell	t	\N
+16036	0	0_16036	2025-03-15 20:55:53	0	200	sell	t	\N
+16037	0	0_16037	2025-03-15 20:59:13	0	200	sell	t	\N
+16038	0	0_16038	2025-03-15 21:08:16	0	330	sell	t	\N
+16039	0	0_16039	2025-03-15 21:08:29	0	0	sell	t	\N
+16040	0	0_16040	2025-03-15 21:11:04	25	1200	sell	t	\N
+16041	0	0_16041	2025-03-15 21:12:26	0	180	sell	t	\N
+16042	0	0_16042	2025-03-15 21:13:04	0	280	sell	t	\N
+16043	0	0_16043	2025-03-15 21:28:24	10	300	sell	t	\N
+16044	0	0_16044	2025-03-15 21:44:46	0	230	sell	t	\N
+16045	0	0_16045	2025-03-15 22:07:13	0	250	sell	t	\N
+16046	0	0_16046	2025-03-15 22:11:39	0	350	sell	t	\N
+16047	0	0_16047	2025-03-15 23:07:32	0	130	sell	t	\N
+16048	0	0_16048	2025-03-15 23:09:04	0	250	sell	t	\N
+16049	0	0_16049	2025-03-15 23:10:45	0	250	sell	t	\N
+16050	0	0_16050	2025-03-15 23:11:31	0	180	sell	t	\N
+16051	0	0_16051	2025-03-15 23:25:05	0	200	sell	t	\N
+16052	0	0_16052	2025-03-15 23:40:45	0	355	sell	t	\N
+16053	0	0_16053	2025-03-15 23:42:19	0	270	sell	t	\N
+16054	0	0_16054	2025-03-15 23:52:30	0	180	sell	t	\N
+16055	0	0_16055	2025-03-15 23:57:45	0	150	sell	t	\N
+16056	0	0_16056	2025-03-16 00:06:46	0	180	sell	t	\N
+16057	0	0_16057	2025-03-16 00:09:44	0	180	sell	t	\N
+16058	0	0_16058	2025-03-16 00:23:04	10	640	sell	t	\N
+16059	0	0_16059	2025-03-16 00:25:29	0	-250	return	t	\N
+16060	0	0_16060	2025-03-16 00:27:22	0	130	sell	t	\N
+16061	0	0_16061	2025-03-16 00:28:42	0	130	sell	t	\N
+16062	0	0_16062	2025-03-16 00:28:49	0	360	sell	t	\N
+16063	0	0_16063	2025-03-16 00:34:55	0	220	sell	t	\N
 \.
 
 
@@ -32146,10 +32192,56 @@ COPY public.cash_flow (id, store_id, "time", amount, type, bill_id, description,
 16016	0	2025-03-15 00:06:49	0	in	0_16013	فاتورة بيع	154637	t	\N
 16012	0	2025-03-14 23:31:34	10	in	0_16009	فاتورة بيع	153577	t	\N
 16013	0	2025-03-14 23:42:38	580	in	0_16010	فاتورة بيع	154157	t	\N
+16021	0	2025-03-15 16:33:24	250	in	0_16018	فاتورة بيع	156667	t	\N
 16017	0	2025-03-15 00:10:55	0	in	0_16014	فاتورة بيع	154697	t	\N
 16020	0	2025-03-15 00:39:27	180	in	0_16017	فاتورة بيع	156417	t	\N
 16018	0	2025-03-15 00:19:16	1090	in	0_16015	فاتورة بيع	155787	t	\N
 16015	0	2025-03-15 00:02:45	0	in	0_16012	فاتورة بيع	154957	t	\N
+16023	0	2025-03-15 16:59:33	320	in	0_16020	فاتورة بيع	157287	t	\N
+16022	0	2025-03-15 16:49:19	300	in	0_16019	فاتورة بيع	156967	t	\N
+16024	0	2025-03-15 17:05:09	300	in	0_16021	فاتورة بيع	157587	t	\N
+16025	0	2025-03-15 17:23:38	180	in	0_16022	فاتورة بيع	157767	t	\N
+16026	0	2025-03-15 18:41:47	350	in	0_16023	فاتورة بيع	158117	t	\N
+16027	0	2025-03-15 19:15:52	180	in	0_16024	فاتورة بيع	158297	t	\N
+16028	0	2025-03-15 19:18:18	380	in	0_16025	فاتورة بيع	158677	t	\N
+16029	0	2025-03-15 19:28:59	150	in	0_16026	فاتورة بيع	158827	t	\N
+16030	0	2025-03-15 19:34:17	130	in	0_16027	فاتورة بيع	158957	t	\N
+16052	0	2025-03-15 23:10:45	250	in	0_16049	فاتورة بيع	167397	t	\N
+16031	0	2025-03-15 19:36:47	130	in	0_16028	فاتورة بيع	159087	t	\N
+16032	0	2025-03-15 19:38:57	250	in	0_16029	فاتورة بيع	159337	t	\N
+16066	0	2025-03-16 00:34:55	220	in	0_16063	فاتورة بيع	170322	t	\N
+16033	0	2025-03-15 20:12:32	230	in	0_16030	فاتورة بيع	159567	t	\N
+16053	0	2025-03-15 23:11:31	180	in	0_16050	فاتورة بيع	167577	t	\N
+16034	0	2025-03-15 20:13:49	130	in	0_16031	فاتورة بيع	159697	t	\N
+16035	0	2025-03-15 20:17:03	180	in	0_16032	فاتورة بيع	159877	t	\N
+16036	0	2025-03-15 20:24:54	900	in	0_16033	فاتورة بيع	160777	t	\N
+16054	0	2025-03-15 23:25:05	200	in	0_16051	فاتورة بيع	167777	t	\N
+16037	0	2025-03-15 20:37:11	200	in	0_16034	فاتورة بيع	160977	t	\N
+16038	0	2025-03-15 20:53:28	120	in	0_16035	فاتورة بيع	161097	t	\N
+16039	0	2025-03-15 20:55:53	200	in	0_16036	فاتورة بيع	161297	t	\N
+16055	0	2025-03-15 23:40:45	355	in	0_16052	فاتورة بيع	168132	t	\N
+16040	0	2025-03-15 20:59:13	200	in	0_16037	فاتورة بيع	161497	t	\N
+16041	0	2025-03-15 21:08:16	330	in	0_16038	فاتورة بيع	161827	t	\N
+16056	0	2025-03-15 23:42:19	270	in	0_16053	فاتورة بيع	168402	t	\N
+16042	0	2025-03-15 21:08:29	0	in	0_16039	فاتورة بيع	163977	t	\N
+16043	0	2025-03-15 21:11:04	1200	in	0_16040	فاتورة بيع	165177	t	\N
+16057	0	2025-03-15 23:52:30	180	in	0_16054	فاتورة بيع	168582	t	\N
+16044	0	2025-03-15 21:12:26	180	in	0_16041	فاتورة بيع	165357	t	\N
+16045	0	2025-03-15 21:13:04	280	in	0_16042	فاتورة بيع	165637	t	\N
+16046	0	2025-03-15 21:28:24	300	in	0_16043	فاتورة بيع	165937	t	\N
+16058	0	2025-03-15 23:57:45	150	in	0_16055	فاتورة بيع	168732	t	\N
+16047	0	2025-03-15 21:44:46	230	in	0_16044	فاتورة بيع	166167	t	\N
+16048	0	2025-03-15 22:07:13	250	in	0_16045	فاتورة بيع	166417	t	\N
+16049	0	2025-03-15 22:11:39	350	in	0_16046	فاتورة بيع	166767	t	\N
+16059	0	2025-03-16 00:06:46	180	in	0_16056	فاتورة بيع	168912	t	\N
+16050	0	2025-03-15 23:07:32	130	in	0_16047	فاتورة بيع	166897	t	\N
+16051	0	2025-03-15 23:09:04	250	in	0_16048	فاتورة بيع	167147	t	\N
+16060	0	2025-03-16 00:09:44	180	in	0_16057	فاتورة بيع	169092	t	\N
+16061	0	2025-03-16 00:23:04	640	in	0_16058	فاتورة بيع	169732	t	\N
+16062	0	2025-03-16 00:25:29	-250	out	0_16059	فاتورة مرتجع	169482	t	\N
+16063	0	2025-03-16 00:27:22	130	in	0_16060	فاتورة بيع	169612	t	\N
+16064	0	2025-03-16 00:28:42	130	in	0_16061	فاتورة بيع	169742	t	\N
+16065	0	2025-03-16 00:28:49	360	in	0_16062	فاتورة بيع	170102	t	\N
 \.
 
 
@@ -32210,7 +32302,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 28	nasty5000	28	360	500	0	1-2	t	f
 34	Basker V2	34	1200	1550	0	1-3	t	f
 36	Battery AWT	36	105	150	0	1-1	t	f
-345	GT Cores DL	345	125	175	10	3-2	t	f
 23	GOT 60	23	110	140	2	2-1	t	f
 39	Mini Fit	39	500	650	0	1-2	t	f
 91	Ares Pod	91	500	650	0	1-2	t	f
@@ -32228,6 +32319,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 70	Argus Mod GT	70	2600	3400	1	1-1	t	f
 131	tank PNP DL	131	225	300	18	1-3	t	f
 57	Nord MTL	57	100	140	15	3-2	t	f
+345	GT Cores DL	345	125	175	9	3-2	t	f
 72	fruits station	72	100	125	2	2-1	t	f
 77	Nord 2 RPM	77	200	250	2	1-3	t	f
 78	k1	78	1100	1150	0	1-2	t	f
@@ -32328,6 +32420,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 186	wenex u	186	1050	1400	0	1-2	t	f
 133	Dollar 30 18N	133	105	150	18	2-2	t	f
 142	sotto white	142	300	390	-1	1-3	t	f
+446	sucker punch 60 dl	3546456	100	130	12	liquid	t	f
 475	sprinkles 30 18	364	115	150	23	liquid	t	f
 100	Oscar 60 ml	100	95	120	0	2-1	t	f
 497	007 30 18 tob.pistachio	65462130	110	150	0	007	t	f
@@ -32335,7 +32428,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 129	Battery Imren green	129	220	285	4	1-1	t	f
 140	DORIC 60	140	1350	1750	0	1-2	t	f
 112	Xros 3	112	1250	1550	0	1-2	t	f
-472	 Dooz 30ml DL	361	50	80	54	liquid	t	f
 105	Yummy 60 DL	105	130	180	2	2-1	t	f
 185	cover 	185	120	160	9	3-4	t	f
 106	Yummy 30 	106	80	130	10	2-2	t	f
@@ -32348,7 +32440,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1126	sprinkles 60 12 mango.ice	965	155	200	0	sprinkles	t	f
 115	Wenax Styles	115	750	1000	0	1-2	t	f
 168	gk3	168	1400	1750	0	1-2	t	f
-446	sucker punch 60 dl	3546456	100	130	14	liquid	t	f
+472	 Dooz 30ml DL	361	50	80	51	liquid	t	f
 35	K1 Cartridge	35	125	160	15	3-4	t	f
 526	y2k 30 12 tob.nuts	160128895	125	160	0	y2k	t	f
 144	E8 Pod	144	275	500	0	1-2	t	f
@@ -32614,9 +32706,8 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 433	vinci 5 coil	646846	1350	1750	0	pod	t	f
 175	b3	175	1700	2200	1	1-3	t	f
 412	rpm 85 kit	138435	1850	2350	0	1-1	t	f
-46	Vapresso Xros cartridge	46	130	180	110	3-4	t	f
+1891	S4 0.85	1684	65	85	16	S4	t	f
 427	wenax q metel	165654816	750	950	0	pod	t	f
-50	PNP MTL	50	110	150	33	3-2	t	f
 416	Tank ito	54384134	250	325	0	1-3	t	f
 426	wenax q pro	546545	1100	1450	0	pod	t	f
 431	Battery camelion 	32546841	150	200	-1	battery	t	f
@@ -32634,12 +32725,13 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 395	drag q	31655	1000	1300	0	1-2	t	f
 424	VP 20000 Puffs 	354163436	650	850	32	 puffs	t	f
 415	Drag H40	3453454	1550	2150	0	1-1	t	f
-1891	S4 0.85	1684	65	85	20	S4	t	f
+50	PNP MTL	50	110	150	32	3-2	t	f
 92	Tank PNP X	92	350	460	-1	1-3	t	f
 79	Wired Coil Build	79	40	50	0	4-1	t	f
 418	sotto blue 	34434635435	265	350	1	battary	t	f
 588	joker 30 12 grape	427	100	130	0	joker	t	f
 355	Geek Vape MTL	355	95	145	29	3-2	t	f
+46	Vapresso Xros cartridge	46	130	180	109	3-4	t	f
 261	smok RPM 80 MTL	261	200	250	5	1-3	t	f
 411	 tank pnp x Dl 	546546	250	350	7	1-3	t	f
 1446	eg mtl 60 9 tob.butter	1268	160	200	3	eg mtl	t	f
@@ -32722,10 +32814,9 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 510	007 30 18 cake str	554461	110	150	0	007	t	f
 1892	S4 0.35	1685	65	85	20	S4	t	f
 558	hummer 60 12 lotus	397	120	160	0	hummer	t	f
-58	Euro 60 DL	58	110	150	48	2-1	t	f
+165	Glass	165	70	100	147	1-3	t	f
 202	Relx kir	202	135	160	84	3-4	t	f
 219	united dl 	219	40	65	15	3-1	t	f
-165	Glass	165	70	100	148	1-3	t	f
 552	hummer 60 9 mango	391	120	160	0	hummer	t	f
 95	Leo Alien Triple DL 0.35	95	50	75	14	3-1	t	f
 537	hummer 60 6 tob.nuts	375	120	160	0	hummer	t	f
@@ -32750,6 +32841,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 150	Caliburn A3	150	125	175	11	3-4	t	f
 212	geek vape DL	212	110	130	17	3-2	t	f
 266	smok rpm pro  kit	266	2000	2500	1	1-1	t	f
+58	Euro 60 DL	58	110	150	47	2-1	t	f
 381	x Alien triple 	56465	70	90	0	3-1	t	f
 617	joker 60 9 tob.butter	456	160	200	2	joker	t	f
 406	everest salt 50	3545	260	300	1	2-2	t	f
@@ -32784,7 +32876,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 525	y2k 30 18 tob.nuts	1601285	125	160	0	y2k	t	f
 561	hummer 60 12 mango	400	120	160	0	hummer	t	f
 97	sonder U	97	130	170	2	3-4	t	f
-94	PNP DL	94	110	150	61	3-2	t	f
 301	Hummer	301	120	160	75	2-2	t	f
 599	joker 30 18 grape	438	115	150	5	joker	t	f
 600	joker 30 18 redberry	439	115	150	0	joker	t	f
@@ -32825,6 +32916,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 622	joker 60 9 redberry	461	160	200	0	joker	t	f
 1900	waka Duo sour.blue.raspberry	6942108463346	500	650	1	waka	t	f
 621	joker 60 9 grape	460	160	200	0	joker	t	f
+94	PNP DL	94	110	150	60	3-2	t	f
 679	euro 60 6 lotus.caramel	518	140	180	1	euro	t	f
 660	splash 60 9 tob.butter	499	155	195	0	splash	t	f
 661	splash 60 9 tob.creamy	500	155	195	3	splash	t	f
@@ -32859,6 +32951,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 690	euro 60 9 tob.almond	529	140	180	6	euro	t	f
 663	splash 60 9 blue	502	155	195	1	splash	t	f
 1894	S4 0.24	1687	65	85	19	S4	t	f
+671	splash 60 12 blue	510	155	195	1	splash	t	f
 674	euro 60 6 tob.creamy	513	140	180	0	euro	t	f
 547	hummer 60 9 tob.bisc.caramel	386	120	160	6	hummer	t	f
 692	euro 60 9 cookies.butter	531	140	180	0	euro	t	f
@@ -32871,13 +32964,12 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 707	euro 60 12 lotus.caramel	546	140	180	0	euro	t	f
 709	euro 60 12 str.gum	548	140	180	0	euro	t	f
 1901	eg mtl 60 9 watermelon	1688	160	200	1	eg	t	f
-671	splash 60 12 blue	510	155	195	2	splash	t	f
 238	frisky salt 30	238	205	250	48	2-2	t	f
 683	euro 60 6 str.milk	522	140	180	0	euro	t	f
 694	euro 60 9 cake.str	533	140	180	-1	euro	t	f
 480	vape staion salt 50	369	200	250	8	liquid	t	f
 695	euro 60 9 str.gum	534	140	180	-1	euro	t	f
-73	Xlim Cartridge	73	140	180	307	3-4	t	f
+73	Xlim Cartridge	73	140	180	305	3-4	t	f
 677	euro 60 6 cake.almond	516	140	180	5	euro	t	f
 682	euro 60 6 watermelon.gum	521	140	180	0	euro	t	f
 697	euro 60 9 str.milk	536	140	180	0	euro	t	f
@@ -33006,6 +33098,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1439	eg mtl 60 12 tob.cherry	1261	160	200	3	eg mtl	t	f
 828	vape station 60 12 str	667	140	180	0	vape station	t	f
 831	vape station 60 12 tribica	670	140	180	0	vape station	t	f
+1952	oxva liquid	1734	380	450	102	oxva	t	f
 834	vape station 60 12 tob.cup	673	140	180	0	vape station	t	f
 835	vape station 60 6 tob.nuts	674	140	180	0	vape station	t	f
 889	frisky 30 9 str.watermelon	728	100	130	0	frisky	t	f
@@ -33072,11 +33165,11 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1920	chubby 30 12  mango.watermelon	1707	105	130	5	chubby	t	f
 1562	chubby 30 12 mango.kiwi	1384	105	130	5	chubby	t	f
 1960	sprinkles 30 25 cappuccino	1742	200	250	3	sprinkles	t	f
-1952	oxva liquid	1734	380	450	103	oxva	t	f
 1964	g3 koko lite	1746	580	750	15	caliburn	t	f
 944	frisky 60 12 passion	783	160	200	0	frisky	t	f
 1909	chubby 30 6 boom.berry	1696	105	130	2	chubby	t	f
-902	frisky 30 12 energy	741	100	130	6	frisky	t	f
+903	frisky 30 18 energy	742	120	150	2	frisky	t	f
+902	frisky 30 12 energy	741	100	130	5	frisky	t	f
 916	frisky 30 9 fayroz	755	100	130	0	frisky	t	f
 917	frisky 30 12 fayroz	756	130	130	0	frisky	t	f
 918	frisky 30 18 fayroz	757	115	150	0	frisky	t	f
@@ -33125,7 +33218,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 941	frisky 60 12 green.apple	780	160	200	0	frisky	t	f
 934	frisky 60 9 lush.ice	773	160	200	0	frisky	t	f
 973	8ball 30 18 fayroz	812	110	150	2	8ball	t	f
-903	frisky 30 18 energy	742	120	150	3	frisky	t	f
 813	vape station 60 12 mango.gold.ice	652	140	180	0	vape station	t	f
 937	frisky 60 9 str.watermelon	776	160	200	0	frisky	t	f
 905	frisky 30 12 cola	744	100	130	0	frisky	t	f
@@ -33160,7 +33252,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1036	aurora 60 12 bisc.creamy	875	175	220	0	aurora	t	f
 992	8ball 30 12 str.lemon	831	100	130	0	8ball	t	f
 1025	aurora 30 18 vct	864	115	150	0	aurora	t	f
-1014	aurora 30 6 bisc.creamy	853	100	130	4	aurora	t	f
 989	8ball 30 18 str.banana	828	110	150	0	8ball	t	f
 1302	prestige 60 18 cookies	1142	220	260	3	prestige	t	f
 1029	aurora 30 18 arc	868	115	150	0	aurora	t	f
@@ -33199,6 +33290,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 987	8ball 30 9 str.banana	826	100	130	0	8ball	t	f
 1955	eg mtl 60 7 tob.tribeca	1737	160	200	3	eg	t	f
 1558	chubby 30 12 grape.blue	1380	105	130	3	chubby	t	f
+1014	aurora 30 6 bisc.creamy	853	100	130	3	aurora	t	f
 1961	sprinkles 30 50 cappuccino	1743	200	250	2	sprinkles	t	f
 1550	chubby 30 12 mango.peach	1372	105	130	4	chubby	t	f
 1051	aurora 60 9 tob.butter	890	175	220	0	aurora	t	f
@@ -33331,7 +33423,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1202	sprinkles 30 12 fayroz	1041	100	130	0	sprinkles	t	f
 1203	sprinkles 30 18 fayroz	1042	115	150	0	sprinkles	t	f
 1223	baron 60 9 grape.berry.roman	1062	140	180	2	baron	t	f
-1209	pnp coil 0.3	1048	110	150	61	voopoo	t	f
 519	007 60 9 golden	17889651	180	230	3	007	t	f
 1218	baron 60 12 mix.berries	1057	140	180	-3	baron	t	f
 1303	prestige 60 6 cake.nuts	1143	180	220	6	prestige	t	f
@@ -33370,6 +33461,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1222	baron 60 12 cotton.candy.sweet.berry	1061	140	180	0	baron	t	f
 1251	prestige 30 6 cake.nuts	1090	100	130	2	prestige	t	f
 1163	sprinkles 30 18 pink panther	1002	115	150	1	sprinkles	t	f
+1209	pnp coil 0.3	1048	110	150	59	voopoo	t	f
 1217	baron 60 9 mix.berries	1056	140	180	3	baron	t	f
 1208	xlim cart ez 1.2	1047	160	200	3	xlim	t	f
 1300	prestige 60 9 cookies	1140	180	220	3	prestige	t	f
@@ -33542,18 +33634,18 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1041	aurora 60 18 tob.nuts	880	220	260	4	aurora	t	f
 1430	eg mtl 60 9 mango.ice	1252	160	200	2	eg mtl	t	f
 1463	dovape 30 12 lemon.mint	1285	100	125	0	dovape	t	f
+1018	aurora 30 6 tob.nuts	857	100	130	1	aurora	t	f
 1415	drift 60 9 creamy.bisc	1237	160	200	0	drift	t	f
 1427	drift 60 9 mango.grape.ice	1249	160	200	2	drift	t	f
 1021	aurora 30 18 tob.nuts	860	115	150	2	aurora	t	f
-1453	eg mtl 60 7 tob.dark.creamy	1275	160	200	1	eg mtl	t	f
-1932	dooz 30 12 mixey.berry	1719	95	120	4	dooz	t	f
+1932	dooz 30 12 mixey.berry	1719	95	120	3	dooz	t	f
 1452	eg mtl 60 16 tob.bisc.caramel	1274	175	220	3	eg mtl	t	f
 1944	frisky cool 30 50 blue.razz	1731	200	250	0	frisky	t	f
 1019	aurora 30 9 tob.nuts	858	100	130	4	aurora	t	f
 1441	eg mtl 60 7 tob.custer	1263	160	200	0	eg mtl	t	f
 1477	dovape 30 9 grape	1299	100	125	1	dovape	t	f
 1444	eg mtl 60 16 tob.custer	1266	175	220	3	eg mtl	t	f
-1018	aurora 30 6 tob.nuts	857	100	130	2	aurora	t	f
+1453	eg mtl 60 7 tob.dark.creamy	1275	160	200	0	eg mtl	t	f
 1936	frisky cool 30 50 mango.str	1723	200	250	0	frisky	t	f
 1469	dovape 30 12 mango	1291	100	125	0	dovape	t	f
 1843	chubby 30 12 mango.ice	1639	105	130	5	chubby	t	f
@@ -33600,9 +33692,9 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1544	chubby 30 6 pinp.ice	1366	100	130	0	chubby	t	f
 1489	dovape 30 9 shisha.apple	1311	100	125	1	dovape	t	f
 1533	dovape 30 6 cookies	1355	100	125	0	dovape	t	f
-1534	dovape 30 9 cookies	1356	100	125	2	dovape	t	f
 1535	dovape 30 12 cookies	1357	100	125	2	dovape	t	f
 1545	chubby 30 9 pinp.ice	1367	100	130	0	chubby	t	f
+1534	dovape 30 9 cookies	1356	100	125	1	dovape	t	f
 1507	dovape 30 9 bisc.pistachio	1329	100	125	0	dovape	t	f
 1547	chubby 30 18 pinp.ice	1369	150	180	2	chubby	t	f
 1559	chubby 30 18 grape.blue	1381	150	180	0	chubby	t	f
@@ -33623,7 +33715,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1256	prestige 30 9 creamy.nuts	1095	100	130	4	prestige	t	f
 1536	chubby 30 6 mix.berry	1358	105	130	5	chubby	t	f
 1556	chubby 30 6 grape.blue	1378	105	130	3	chubby	t	f
-1602	dooz 30 9 mango.watermelon	1424	95	120	4	dooz	t	f
 1239	prestige 30 6 king.panther.ice	1078	100	130	3	prestige	t	f
 1576	chubby 30 6 str.gum	1398	100	130	0	chubby	t	f
 1579	chubby 30 18 str.gum	1401	150	180	0	chubby	t	f
@@ -33638,13 +33729,16 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1611	dooz 30 12 tob.butter	1433	95	120	3	dooz	t	f
 1613	dooz 30 12 tob.dark.creamy	1435	95	120	2	dooz	t	f
 1235	prestige 30 6 king.panther	1074	100	130	3	prestige	t	f
+1602	dooz 30 9 mango.watermelon	1424	95	120	3	dooz	t	f
 1249	prestige 30 12 cookies	1088	100	130	5	prestige	t	f
 1236	prestige 30 9 king.panther	1075	100	130	3	prestige	t	f
 1599	dooz 30 12 str.gum	1421	95	120	4	dooz	t	f
 1237	prestige 30 12 king.panther	1076	100	130	3	prestige	t	f
 1577	chubby 30 9 str.gum	1399	100	130	0	chubby	t	f
 1238	prestige 30 18 king.panther	1077	120	150	3	prestige	t	f
+1566	chubby 30 12 str.kiwi	1388	105	130	6	chubby	t	f
 1591	chubby 30 18 mango.grape	1413	150	180	0	chubbby	t	f
+1564	chubby 30 6 str.kiwi	1386	100	130	3	chubby	t	f
 1228	prestige 30 9 tasty	1067	100	130	9	prestige	t	f
 1604	dooz 30 9 grape.berry	1426	95	120	1	dooz	t	f
 1605	dooz 30 12 grape.berry	1427	95	120	1	dooz	t	f
@@ -33664,12 +33758,10 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1612	dooz 30 9 tob.dark.creamy	1434	95	120	0	dooz	t	f
 1565	chubby 30 9 str.kiwi	1387	105	130	5	chubby	t	f
 1567	chubby 30 18 str.kiwi	1389	150	180	1	chubby	t	f
-1566	chubby 30 12 str.kiwi	1388	105	130	8	chubby	t	f
 1227	prestige 30 6 tasty	1066	100	130	4	prestige	t	f
 1596	dooz 30 9 str.ice	1418	95	120	5	dooz	t	f
 1918	chubby 30 6 mango.watermelon	1705	105	130	5	chubby	t	f
 1597	dooz 30 12 str.ice	1419	95	120	6	dooz	t	f
-1564	chubby 30 6 str.kiwi	1386	100	130	4	chubby	t	f
 1598	dooz 30 9 str.gum	1420	95	120	5	dooz	t	f
 1248	prestige 30 9 cookies	1087	100	130	3	prestige	t	f
 1568	chubby 30 6 str.lemon	1390	105	130	5	chubby	t	f
@@ -33774,10 +33866,9 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1595	dooz 30 12 green.apple.ice	1417	95	120	4	dooz	t	f
 1727	solo2 str	6942108425283	270	330	1	waka	t	f
 938	frisky 60 12 str.watermelon	777	160	200	0	frisky	t	f
-1714	frisky 30 30 peach.ice	1534	210	250	3	frisky	t	f
+1714	frisky 30 30 peach.ice	1534	210	250	1	frisky	t	f
 1741	smash green.apple	6942108442457	350	450	4	waka	t	f
 1616	vape station 30 30 cola.cool	1438	190	230	-1	vape station	t	f
-1716	frisky 30 30 cola.ice	1536	210	250	2	frisky	t	f
 1718	frisky 30 30 energy	1538	210	250	0	frisky	t	f
 1746	smash peach.ice	6942108442365	350	450	5	waka	t	f
 1717	frisky 30 50 cola.ice	1537	235	280	2	frisky	t	f
@@ -33802,6 +33893,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1656	sprinkles 30 50 tob.butter	1476	205	250	1	sprinkles	t	f
 1641	sprinkles 30 25 grape.ice	1461	180	230	1	sprinkles	t	f
 1661	sprinkles 30 25 tob.bisc.butter	1481	180	230	1	sprinkles	t	f
+1716	frisky 30 30 cola.ice	1536	210	250	1	frisky	t	f
 995	8ball 30 9 candy girl	834	100	130	5	8ball	t	f
 1776	sucker punch 60 9 lemon mint	1573	140	180	1	sucker punch	t	f
 1766	sucker punch 60 6 cola	1563	140	180	3	suckr punch	t	f
@@ -33813,6 +33905,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1680	suger bear 30 30 smooky.cookie	1500	235	275	1	suger bear	t	f
 1758	splash 100 3 Honey.peatch	1555	120	160	2	splash	t	f
 1938	frisky cool 30 50 peach.man.water	1725	200	250	0	frisky	t	f
+1755	splash 100 3 str.gum	1552	120	160	2	splash	t	f
 1529	dovape 30 12 cigar	1351	100	125	2	dovape	t	f
 1146	sprinkles 60 12 tob.bisc.butter	985	155	200	0	sprinkles	t	f
 1354	suger bear 30 9 mango.ice	1176	115	150	4	suger bear	t	f
@@ -33830,7 +33923,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1749	11	137	111	11	0	11	t	t
 1757	splash 100 3 lotus	1554	120	160	3	splash	t	f
 1752	splash 100 3 fayrous.ice	1549	120	160	8	splash	t	f
-1207	xlim cart ez 0.8	1046	160	200	113	xlim	t	f
+1355	suger bear 30 12 mango.ice	1177	115	150	3	suger bear	t	f
 1662	sprinkles 30 50 tob.bisc.butter	1482	205	250	1	sprinkles	t	f
 1922	 frisky 30 9 coco.melon	1709	100	130	0	frisky	t	f
 1462	dovape 30 9 lemon.mint	1284	100	125	0	dovape	t	f
@@ -33842,15 +33935,13 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1753	splash 100 3 Hallz.cherry	1550	120	160	3	splash	t	f
 1756	splash 100 3 sweety	1553	120	160	4	splash	t	f
 673	splash 60 12 str.gum	512	155	195	2	splash	t	f
-1206	xlim cart ez 0.6	1045	160	200	166	xlim	t	f
 1761	splash 100 3 Hallz.blue	1558	120	160	2	splash	t	f
 1928	wenax m starter 	1715	1800	2200	2	geek vape	t	f
-1755	splash 100 3 str.gum	1552	120	160	3	splash	t	f
+666	splash 60 12 tob.dark	505	155	195	6	splash	t	f
 665	splash 60 9 str.gum	504	155	195	4	splash	t	f
 1759	splash 100 3 coco	1556	120	160	4	splash	t	f
 672	splash 60 12 honey peach	511	155	195	0	splash	t	f
-666	splash 60 12 tob.dark	505	155	195	7	splash	t	f
-1777	sucker punch 60 12 lemon mint	1574	140	180	2	sucker punch	t	f
+1206	xlim cart ez 0.6	1045	160	200	159	xlim	t	f
 1925	dollar 60 9 bisc.roben	1712	145	180	5	dollar	t	f
 1273	prestige 30 12 tob.r8	1113	100	130	3	prestige	t	f
 658	splash 60 9 tob.dark	497	155	195	9	splash	t	f
@@ -33861,9 +33952,11 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1767	sucker punch 60 9 cola	1564	140	180	5	sucker punch	t	f
 1635	sprinkles 30 25 mango.ice	198	180	230	1	sprinkles	t	f
 1921	chubby 30 18 mango.watermelon	1708	150	180	4	chubby	t	f
-1768	sucker punch 60 12 cola	1565	140	180	5	sucker punch	t	f
-1355	suger bear 30 12 mango.ice	1177	115	150	4	suger bear	t	f
+1207	xlim cart ez 0.8	1046	160	200	112	xlim	t	f
+1768	sucker punch 60 12 cola	1565	140	180	4	sucker punch	t	f
+1777	sucker punch 60 12 lemon mint	1574	140	180	1	sucker punch	t	f
 1571	chubby 30 18 str.lemon	1393	150	180	4	chubby	t	f
+798	sucker punch 60 12 blue.mist	637	140	180	3	sucker punch	t	f
 1923	frisky 30 12 coco.melon	1710	100	130	0	frisky	t	f
 794	sucker punch 60 9 peach.ice	633	140	180	9	sucker punch	t	f
 793	sucker punch 60 6 peach.ice	632	140	180	0	sucker punch	t	f
@@ -33871,12 +33964,15 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1781	sucker punch 30 30 passion.mango	1578	180	220	0	sucker punch 	t	f
 1784	sucker punch 30 30 blueberry.ice.cream	1581	180	220	0	sucker punch	t	f
 1779	sucker punch 30 30 str.melon	1576	180	220	0	sucker punch	t	f
-801	sucker punch 60 12 pink panther	640	140	180	7	sucker punch	t	f
+1926	dollar 60 12 bisc.roben	1713	145	180	4	dollar	t	f
+783	sucker punch 60 12 passion.gwafa	622	140	180	3	sucker punch	t	f
+1769	sucker punch 60 6 watermelon	1566	140	180	3	sucker punch	t	f
+801	sucker punch 60 12 pink panther	640	140	180	6	sucker punch	t	f
 782	sucker punch 60 9 passion.gwafa	621	140	180	12	sucker punch	t	f
 1786	sucker punch 30 30 blue.mist	1583	180	220	0	sucker punch	t	f
 1787	sucker punch 30 30 mango.ice	1584	180	220	0	sucker punch	t	f
 1771	sucker punch 60 12 watermelon	1568	140	180	2	sucker punch	t	f
-783	sucker punch 60 12 passion.gwafa	622	140	180	4	sucker punch	t	f
+781	sucker punch 60 6 passion.gwafa	620	140	180	1	sucker punch	t	f
 770	sucker punch 60 9 mango.ice	609	140	180	0	sucker punch	t	f
 788	sucker punch 60 9 str.gum	627	140	180	5	sucker punch	t	f
 1770	sucker punch 60 9 watermelo	1567	140	180	0	sucker punch	t	f
@@ -33887,14 +33983,10 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 789	sucker punch 60 12 str.gum	628	140	180	5	sucker punch	t	f
 767	sucker punch 60 9 mango.passion	606	140	180	7	sucker punch	t	f
 787	sucker punch 60 6 str.gum	626	140	180	0	sucker punch	t	f
-1926	dollar 60 12 bisc.roben	1713	145	180	5	dollar	t	f
 1927	vape station dl 60 3 mango.ice	1714	115	150	5	vape station	t	f
 1780	sucker punch 30 30 guava	1577	180	220	0	sucker punch	t	f
 443	xlim pro2	56484	1250	1450	14	pod	t	f
-781	sucker punch 60 6 passion.gwafa	620	140	180	2	sucker punch	t	f
 1783	sucker punch 30 30 peach	1580	180	220	0	sucker punch 	t	f
-798	sucker punch 60 12 blue.mist	637	140	180	4	sucker punch	t	f
-1769	sucker punch 60 6 watermelon	1566	140	180	4	sucker punch	t	f
 1570	chubby 30 12 str.lemon	1392	105	130	6	chubby	t	f
 1538	chubby 30 12 mix.berry	1360	105	130	6	chubby	t	f
 1537	chubby 30 9 mix.berry	1359	105	130	5	chubby	t	f
@@ -33914,11 +34006,11 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1796	sucker punch 30 50 passion.mango	1593	210	250	0	sucker punch	t	f
 1115	dollar 30 18 bisc.roben	954	120	150	6	dollar	t	f
 1810	sucker punch 100 3 mango.ice	1607	140	180	0	sucker punch	t	f
+1101	dollar 30 9 tob.bisc.caramel	940	100	130	9	dollar	t	f
 1807	sucker punch 100 3 blueberry.ice.cream	1604	140	180	2	sucker punch	t	f
 1800	sucker punch 100 3 bluw.mist	1597	140	180	0	sucker punch 	t	f
 1080	dollar 30 6 str.gum	919	100	130	3	dollar	t	f
 1082	dollar 30 12 str.gum	921	100	130	3	dollar	t	f
-1101	dollar 30 9 tob.bisc.caramel	940	100	130	10	dollar	t	f
 1794	sucker punch 30 50 mango.peach	1591	210	250	0	sucker punch	t	f
 1793	sucker punch 30 50 str.melon	1590	210	250	0	sucker punch	t	f
 1804	sucker punch 100 3 str.melon	1601	140	180	2	sucker punch	t	f
@@ -33960,6 +34052,7 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 495	007 30 9 tob.pistachio	56456745	100	130	3	007	t	f
 1953	dollar 60 9 cookies	1735	145	180	3	dollar	t	f
 1317	prestige 60 12 tob.butter	1157	180	220	1	prestige	t	f
+1823	frisky 30 12 bubble.gum.mint	1619	100	130	0	frisky	t	f
 1628	vape station 30 30 kiwi.pastion.gwafa.cool	1450	190	230	1	vape station	t	f
 1621	vape station 30 50 mango.str.cool	1443	210	250	0	vape station	t	f
 1826	bomb 60 9 black.tast	1622	140	180	5	bomb	t	f
@@ -33992,7 +34085,6 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1958	eg mtl 60 16 tob.tribeca	1740	175	220	0	eg	t	f
 1007	bomb 60 12 vct	846	140	180	1	bomb	t	f
 1821	wenax k2	1617	1000	1250	0	geek vape	t	f
-1823	frisky 30 12 bubble.gum.mint	1619	100	130	1	frisky	t	f
 1818	Nexlim pod	1614	1500	1950	3	xlim	t	f
 1774	sucker punch 60 12 redbull	1571	140	180	3	sucker punch	t	f
 1815	Nexlim cart 1.2	1611	155	200	11	xlim	t	f
@@ -34018,12 +34110,12 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1013	bomb 60 12 tribica	852	140	180	0	bomb	t	f
 1329	prestige 60 12 emperor	1169	180	220	2	prestige	t	f
 1552	chubby 30 6 mango.str	1374	105	130	5	chubby	t	f
+1554	chubby 30 12 mango.str	1376	105	130	4	chubby	t	f
 1330	prestige 60 18 emperor	1170	220	260	0	prestige	t	f
 1542	chubby 30 12 green.apple	1364	100	130	5	chubby	t	f
 836	vape station 60 9 tob.nuts	675	140	180	1	vape station	t	f
 1829	Baron 100 grape.berry.pome	1625	120	160	3	baron	t	f
 1322	prestige 60 18 queen	1162	220	260	3	prestige	t	f
-1554	chubby 30 12 mango.str	1376	105	130	5	chubby	t	f
 1276	prestige 30 9 emperor	1116	100	130	5	prestige	t	f
 1828	Baron 100 mango.peach.water	1624	120	160	0	baron	t	f
 1831	Baron 100 mango.ice	1627	120	160	0	baron	t	f
@@ -34046,22 +34138,25 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1833	Baron 100 str.icecream	1629	120	160	0	baron	t	f
 1553	chubby 30 9 mango.str	1375	105	130	6	chubby	t	f
 1333	waka lemon mint	6942108400297	175	200	2	waka	t	f
-1845	cart relx 15000	1641	300	350	23	relx	t	f
 1574	chubby 30 12 watermelon	1396	105	130	8	chubby	t	f
+1846	pod g3 lite	1642	575	750	12	caliburn	t	f
 925	frisky 60 9 mango.peach.ice	764	160	200	0	frisky	t	f
 1332	waka kiwi str	6942108400303	175	200	1	waka	t	f
-1852	pnp 0.15 	1648	110	140	12	voopoo	t	f
 489	007 30 6 golden	5414244	100	130	6	007	t	f
 1149	sprinkles 60 9 tob.caramel	988	155	200	0	sprinkles	t	f
 482	007 30 18 dr.no	455145	120	150	-1	007	t	f
 459	cyber s	369852147	850	1050	0	bod	t	f
+518	007 60 12 golden	61754544	180	230	10	007	t	f
 875	frisky 30 12 mango.ice	714	100	130	0	frisky	t	f
 1862	vape station 30 50 blueberry.raspbrry	1658	210	250	0	vape station	t	f
 1847	xlim pro2 ozo 	1643	1250	1550	1	oxva	t	f
 1861	vape station 30 30 blueberry.raspberry	1657	190	230	0	vape station	t	f
 487	007 30 12 golden	96565421	100	130	12	007	t	f
+348	sonder q	348	140	180	146	3-4	t	f
 1854	vozol 20000 star	1650	450	600	0	vozol	t	f
+1575	chubby 30 18 watermelon	1397	150	180	3	chubby	t	f
 952	frisky 60 9 cola	791	160	200	2	frisky	t	f
+1852	pnp 0.15 	1648	110	140	11	voopoo	t	f
 1912	chubby 30 18 boom.berry	1699	150	180	1	chubby	t	f
 515	007 60 12 dr.no	7778454	180	230	7	007	t	f
 1857	eg mtl 60 7 tob.caramel.nuts	1653	150	200	0	eg	t	f
@@ -34078,13 +34173,11 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1855	g3 pro koko	1651	1250	1600	1	caliburn	t	f
 1849	cart g3 0.6	1645	145	185	50	caliburn	t	f
 884	frisky 30 12 kiwi.passion	723	100	130	0	frisky	t	f
-1846	pod g3 lite	1642	575	750	13	caliburn	t	f
 1581	chubby 30 9 cola	1403	100	130	4	chubby	t	f
 1549	chubby 30 9 mango.peach	1371	105	130	6	chubby	t	f
 488	007 30 9 golden	6585641	100	130	10	007	t	f
 876	frisky 30 18 mango.ice	715	120	150	6	frisky	t	f
 926	frisky 60 12 mango.peach.ice	765	160	200	0	frisky	t	f
-1575	chubby 30 18 watermelon	1397	150	180	4	chubby	t	f
 883	frisky 30 9 kiwi.passion	722	100	130	4	frisky	t	f
 892	frisky 30 9 green.apple	731	100	130	0	frisky	t	f
 1856	eg mtl 60 7 watermelon.ice	1652	160	200	5	eg	t	f
@@ -34095,22 +34188,22 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 893	frisky 30 12 green.apple	732	100	130	4	frisky	t	f
 949	frisky 60 9 energy	788	160	200	2	frisky	t	f
 1580	chubby 30 6 cola	1402	100	130	0	chubby	t	f
-348	sonder q	348	140	180	147	3-4	t	f
 516	007 60 9 dr.no	6454659	180	230	12	007	t	f
 1848	wenax u pod	1644	850	1100	2	geek vape	t	f
+1845	cart relx 15000	1641	300	350	22	relx	t	f
 1850	cart g3 0.9	1646	145	185	40	caliburn	t	f
 1858	eg mtl 60 9 tob.caramel.nuts	1654	150	200	0	eg	t	f
-518	007 60 12 golden	61754544	180	230	11	007	t	f
 1551	chubby 30 18 mango.peach	1373	150	180	7	chubby	t	f
 877	frisky 30 9 mango.peach.ice	716	100	130	7	frisky	t	f
 1561	chubby 30 9 mango.kiwi	1383	105	130	7	chubby	t	f
 1859	vape station 30 30 peach	1655	190	230	0	vape station	t	f
+792	sucker punch 60 12 watermelon.gum	631	140	180	4	sucker punch	t	f
 1877	aurora 60 6 tob.coffee	1673	175	220	0	aurora	t	f
 1963	cart g3 0.4	1745	145	185	4	caliburn	t	f
 1864	vape station 30 50 peach.bluerazz	1660	210	250	0	vape station	t	f
-1873	frisky 30 18 bubbelgum.mint	1669	120	150	4	frisky	t	f
+772	sucker punch 60 6 mango	611	140	180	2	sucker punch	t	f
 1954	dollar 60 12 cookies	1736	145	180	2	dollar	t	f
-792	sucker punch 60 12 watermelon.gum	631	140	180	5	sucker punch	t	f
+1873	frisky 30 18 bubbelgum.mint	1669	120	150	2	frisky	t	f
 1040	aurora 60 12 tob.nuts	879	175	220	0	aurora	t	f
 913	frisky 30 9 tob.pistachio	752	100	130	7	frisky	t	f
 911	frisky 30 12 tob.caramel.nuts	750	100	130	0	frisky	t	f
@@ -34136,19 +34229,18 @@ COPY public.products (id, name, bar_code, wholesale_price, price, stock, categor
 1883	smash mint	6942108442341	350	450	0	waka	t	f
 1959	sprinkles 30 25 cappuccino	1741	180	230	0	sprinkles	t	f
 771	sucker punch 60 12 mango.ice	610	140	180	0	sucker punch	t	f
+1838	chubby 30 6 guava.banana	1634	105	130	2	chubby	t	f
 1882	argus g2	1678	1150	1450	0	voopoo	t	f
 1867	vape station 30 30 energy.drink	1663	190	230	1	vape station	t	f
 908	frisky 30 12 tob.coffee	747	100	130	0	frisky	t	f
 1869	vape station 30 30 watermelon.mango	1665	190	230	0	vape station	t	f
 1331	grape apple	6942108400327	175	200	4	wake	t	f
-772	sucker punch 60 6 mango	611	140	180	3	sucker punch	t	f
 1870	vape station 30 50 watermelon.mango	1666	210	250	0	vape station	t	f
 1885	solo2 wetermlon	6942108425276	270	330	3	waka	t	f
 1703	frisky 30 50 mango.ice	1523	235	280	0	frisky	t	f
 1563	chubby 30 18 mango.kiwi	1385	150	180	6	chubby	t	f
 1863	vape station 30 30 peach.bluerazz	1659	190	230	0	vape station	t	f
 1772	sucker punch 60 6 redbull	1569	140	180	3	sucker punch	t	f
-1838	chubby 30 6 guava.banana	1634	105	130	3	chubby	t	f
 1340	waka tob.gold	6942108416793	175	200	10	waka	t	f
 790	sucker punch 60 6 watermelon.gum	629	140	180	2	sucker punch	t	f
 1866	vape station 30 50  str.mangosteen	1662	210	250	0	vape station	t	f
@@ -58451,6 +58543,82 @@ COPY public.products_flow (id, store_id, bill_id, product_id, wholesale_price, p
 24867	0	0_16015	1952	380	450	-1	t
 24868	0	0_16016	1952	380	450	-1	t
 24869	0	0_16017	73	140	180	-1	t
+24870	0	0_16018	446	100	130	-2	t
+24871	0	0_16019	46	130	180	-1	t
+24872	0	0_16019	1823	100	130	-1	t
+24873	0	0_16020	1602	95	120	-1	t
+24874	0	0_16020	1206	160	200	-1	t
+24875	0	0_16021	94	110	150	-1	t
+24876	0	0_16021	1755	120	160	-1	t
+24877	0	0_16022	1768	140	180	-1	t
+24878	0	0_16023	1845	300	350	-1	t
+24879	0	0_16024	1777	140	180	-1	t
+24880	0	0_16025	1206	160	200	-1	t
+24881	0	0_16025	798	140	180	-1	t
+24882	0	0_16026	903	120	150	-1	t
+24883	0	0_16027	1838	105	130	-1	t
+24884	0	0_16028	1566	105	130	-1	t
+24885	0	0_16029	1714	210	250	-1	t
+24886	0	0_16030	1209	110	150	-1	t
+24887	0	0_16030	472	50	80	-1	t
+24888	0	0_16031	1566	105	130	-1	t
+24889	0	0_16032	666	155	195	-1	t
+24890	0	0_16033	1873	120	150	-1	t
+24891	0	0_16033	1846	575	750	-1	t
+24892	0	0_16034	1207	160	200	-1	t
+24893	0	0_16035	1534	100	125	-1	t
+24894	0	0_16036	1206	160	200	-1	t
+24895	0	0_16037	1206	160	200	-1	t
+24896	0	0_16038	1206	160	200	-1	t
+24897	0	0_16038	902	100	130	-1	t
+24898	0	0_-16039	1891	65	85	-4	t
+24899	0	0_-16039	792	140	180	-1	t
+24900	0	0_-16039	671	155	195	-1	t
+24901	0	0_-16039	1926	145	180	-1	t
+24902	0	0_-16039	783	140	180	-1	t
+24903	0	0_-16039	1891	65	85	4	t
+24904	0	0_-16039	792	140	180	1	t
+24905	0	0_-16039	671	155	195	1	t
+24906	0	0_-16039	1926	145	180	1	t
+24907	0	0_-16039	783	140	180	1	t
+24908	0	0_16040	1926	145	180	-1	t
+24909	0	0_16040	671	155	195	-1	t
+24910	0	0_16040	792	140	180	-1	t
+24911	0	0_16040	783	140	180	-1	t
+24912	0	0_16040	1891	65	85	-4	t
+24913	0	0_16040	58	110	150	-1	t
+24914	0	0_16041	772	140	180	-1	t
+24915	0	0_16042	1014	100	130	-1	t
+24916	0	0_16042	1355	115	150	-1	t
+24917	0	0_16043	1101	100	130	-1	t
+24918	0	0_16043	73	140	180	-1	t
+24919	0	0_16044	518	180	230	-1	t
+24920	0	0_16045	1714	210	250	-1	t
+24921	0	0_16046	1206	160	200	-1	t
+24922	0	0_16046	1873	120	150	-1	t
+24923	0	0_16047	1018	100	130	-1	t
+24924	0	0_16048	1716	210	250	-1	t
+24925	0	0_16049	1716	210	250	-1	t
+24926	0	0_16050	1769	140	180	-1	t
+24927	0	0_16051	1453	160	200	-1	t
+24928	0	0_16052	345	125	175	-1	t
+24929	0	0_16052	165	70	100	-1	t
+24930	0	0_16052	472	50	80	-1	t
+24931	0	0_16053	50	110	150	-1	t
+24932	0	0_16053	1932	95	120	-1	t
+24933	0	0_16054	801	140	180	-1	t
+24934	0	0_16055	1209	110	150	-1	t
+24935	0	0_16056	73	140	180	-1	t
+24936	0	0_16057	781	140	180	-1	t
+24937	0	0_16058	1206	160	200	-1	t
+24938	0	0_16058	1952	380	450	-1	t
+24939	0	0_16059	1716	210	250	1	t
+24940	0	0_16060	1564	100	130	-1	t
+24941	0	0_16061	1554	105	130	-1	t
+24942	0	0_16062	348	140	180	-1	t
+24943	0	0_16062	1575	150	180	-1	t
+24944	0	0_16063	1852	110	140	-1	t
+24945	0	0_16063	472	50	80	-1	t
 \.
 
 
@@ -58794,7 +58962,8 @@ COPY public.shifts (id, store_id, start_date_time, end_date_time, current, "user
 370	\N	2025-03-12 00:09:03.262213	2025-03-13 00:10:43.865182	f	5
 371	\N	2025-03-13 00:11:11.205375	2025-03-14 00:04:16.772954	f	5
 372	\N	2025-03-14 00:04:29.233847	2025-03-15 00:17:06.159477	f	2
-373	\N	2025-03-15 00:17:18.466718	\N	t	5
+373	\N	2025-03-15 00:17:18.466718	2025-03-16 00:05:23.258695	f	5
+374	\N	2025-03-16 00:05:33.008882	\N	t	5
 \.
 
 
@@ -58840,14 +59009,14 @@ SELECT pg_catalog.setval('public.assosiated_parties_id_seq', 307, true);
 -- Name: bills_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.bills_id_seq', 16017, true);
+SELECT pg_catalog.setval('public.bills_id_seq', 16063, true);
 
 
 --
 -- Name: cash_flow_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.cash_flow_id_seq', 16020, true);
+SELECT pg_catalog.setval('public.cash_flow_id_seq', 16066, true);
 
 
 --
@@ -58882,7 +59051,7 @@ SELECT pg_catalog.setval('public.pages_id_seq', 11, true);
 -- Name: products_flow_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.products_flow_id_seq', 24869, true);
+SELECT pg_catalog.setval('public.products_flow_id_seq', 24945, true);
 
 
 --
@@ -58917,7 +59086,7 @@ SELECT pg_catalog.setval('public.scopes_id_seq', 6, true);
 -- Name: shifts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.shifts_id_seq', 373, true);
+SELECT pg_catalog.setval('public.shifts_id_seq', 374, true);
 
 
 --

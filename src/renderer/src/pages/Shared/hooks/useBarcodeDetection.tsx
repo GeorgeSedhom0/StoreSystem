@@ -18,7 +18,7 @@ const useBarcodeDetection = (
       }
 
       if (e.key === "Enter") {
-        if (code.length >= 5) {
+        if (code.length >= 2) {
           const product = products.find((prod) => prod.bar_code === code);
           if (product) {
             addToCart(product);
