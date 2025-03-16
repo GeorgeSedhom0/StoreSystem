@@ -34,7 +34,7 @@ const CollectionBillComponent = ({
   item: collection,
   ...props
 }: {
-  context: any;
+  context?: any;
   item: CollectionBill;
 }) => {
   const { setMsg, getBills } = context;
