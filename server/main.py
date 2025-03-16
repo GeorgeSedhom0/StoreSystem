@@ -482,7 +482,7 @@ def update_product(products: list[Product], store_id: int):
                                 """,
                                 (
                                     store_id,
-                                    f"{store_id}_adjust",
+                                    -1,
                                     product.id,
                                     stock_difference,
                                     product.wholesale_price,
