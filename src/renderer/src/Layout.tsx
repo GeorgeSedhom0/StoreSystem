@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import { ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ReactNode, useContext, useEffect, useState } from "react";
+import { ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
@@ -55,6 +55,7 @@ const Layout = ({
   const navigate = useNavigate();
   const [currentStoreId, setCurrentStoreId] = useState<number>(storeId);
   const [isCheckingShift, setIsCheckingShift] = useState(true);
+  const topNavRef = useRef<HTMLDivElement>(null);
 
   // Check for current shift
   const { data: shiftData, isLoading: isShiftLoading } = useQuery({
@@ -117,14 +118,14 @@ const Layout = ({
           bgcolor: "background.paper",
           display: location.pathname === "/login" ? "none" : "block",
           width: "100vw",
-          overflowX: "auto",
-          height: 64,
         }}
+        ref={topNavRef}
       >
-        <Toolbar>
-          <Grid2 container justifyContent="space-between" width="100%">
+        <Toolbar sx={{ width: "100%" }}>
+          <Grid2 container spacing={3} p={2} width="100%">
             <Grid2
               container
+              size={9}
               gap={3}
               sx={{
                 ".active > Button": {
@@ -134,7 +135,6 @@ const Layout = ({
                 Button: {
                   color: "text.primary",
                 },
-                width: "fit-content",
               }}
             >
               {profile &&
@@ -148,10 +148,10 @@ const Layout = ({
             </Grid2>
             <Grid2
               container
-              gap={2}
-              sx={{
-                width: "fit-content",
-              }}
+              size={3}
+              gap={3}
+              justifyContent="flex-end"
+              alignItems="flex-start"
             >
               {profile?.user.paths.includes("/admin") && (
                 <FormControl>
@@ -192,7 +192,7 @@ const Layout = ({
       </AppBar>
       <ViewContainer
         sx={{
-          height: "calc(100vh - 205px)",
+          height: `calc(100vh - ${(topNavRef.current?.clientHeight || 0) + 140}px)`,
         }}
       >
         {children}

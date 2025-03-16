@@ -165,8 +165,8 @@ const Buy = () => {
               </Typography>
             </Grid2>
 
-            <Grid2 size={12} container flexWrap="nowrap">
-              <Grid2>
+            <Grid2 size={12} container>
+              <Grid2 size={3}>
                 <FormControl fullWidth>
                   <InputLabel size="small">نوع الفاتورة</InputLabel>
                   <Select
@@ -176,9 +176,7 @@ const Buy = () => {
                     }
                     size="small"
                     label="نوع الفاتورة"
-                    sx={{
-                      width: 350,
-                    }}
+                    fullWidth
                   >
                     <MenuItem value="buy">شراء</MenuItem>
                     <MenuItem value="buy-return">مرتجع شراء</MenuItem>
@@ -186,33 +184,29 @@ const Buy = () => {
                 </FormControl>
               </Grid2>
 
-              <Grid2>
+              <Grid2 size={3}>
                 <TextField
                   size="small"
                   label="الخصم"
                   type="number"
                   value={discount}
                   onChange={(e) => setDiscount(+e.target.value)}
-                  sx={{
-                    width: 350,
-                  }}
+                  fullWidth
                 />
               </Grid2>
 
-              <Grid2>
+              <Grid2 size={3}>
                 <Button
                   variant="contained"
                   onClick={() => submitBill(shoppingCart, discount)}
                   disabled={shoppingCart.length === 0}
-                  sx={{
-                    width: 400,
-                  }}
+                  fullWidth
                 >
                   اضافة فاتورة
                 </Button>
               </Grid2>
 
-              <Grid2 width="30%">
+              <Grid2 size={3}>
                 <Typography variant="h6" align="center">
                   الاجمالي:{" "}
                   {shoppingCart.reduce(

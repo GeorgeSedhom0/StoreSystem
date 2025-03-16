@@ -44,7 +44,14 @@ app.include_router(analytics_router)
 app.include_router(employee_router)
 
 origins = [
-    "*"
+    "http://localhost",
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://localhost:5173",
+    "https://localhost",
+    "https://localhost:3000",
+    "https://localhost:8000",
+    "https://localhost:5173",
 ]
 
 app.add_middleware(
