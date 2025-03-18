@@ -66,11 +66,16 @@ const Sell = () => {
   const [installmentInterval, setInstallmentInterval] = useState<number>(30);
   const [paid, setPaid] = useState<number>(0);
   const [usingThirdParties, setUsingThirdParties] = useState<boolean>(false);
+  
+  // Add an internal state to track submission status
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  // Add a ref to track if a submission is in progress
+  const submissionInProgress = useRef<boolean>(false);
 
   const billRef = useRef<HTMLDivElement>(null);
   const { storeId } = useContext(StoreContext);
 
-  const naviagte = useNavigate();
+  const navigate = useNavigate();
 
   const {
     products,
@@ -97,11 +102,19 @@ const Sell = () => {
         type: "error",
         text: "لا يوجد شيفت مفتوح",
       });
-      naviagte("/login");
+      navigate("/login");
     } else if (shift) {
       setShiftDialog(false);
     }
-  }, [isShiftError, shift]);
+  }, [isShiftError, shift, navigate]);
+
+  // Update the submission status when React Query updates its state
+  useEffect(() => {
+    if (!isCreatingBill && isSubmitting) {
+      setIsSubmitting(false);
+      submissionInProgress.current = false;
+    }
+  }, [isCreatingBill, isSubmitting]);
 
   const loading = isProductsLoading || isShiftLoading;
 
@@ -135,17 +148,39 @@ const Sell = () => {
   useQuickHandle(shoppingCart, setShoppingCart);
   useBarcodeDetection(products, addToCart, setMsg);
 
+  // Create a debounced version of the submit function to prevent multiple submissions
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
-      if (isCreatingBill) return;
+      // Use both the React Query state and our local state to prevent multiple submissions
+      if (isCreatingBill || isSubmitting || submissionInProgress.current) {
+        console.log("Submission already in progress, ignoring duplicate request");
+        return;
+      }
+
+      // Set our local states immediately to prevent race conditions
+      setIsSubmitting(true);
+      submissionInProgress.current = true;
 
       if (discount >= shoppingCart.reduce((acc, item) => acc + item.price, 0)) {
         setMsg({
           type: "error",
           text: "الخصم اكبر من الاجمالي",
         });
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
         return;
       }
+
+      if (shoppingCart.length === 0) {
+        setMsg({
+          type: "error",
+          text: "لا توجد منتجات في السلة",
+        });
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
+        return;
+      }
+
       try {
         const bill = {
           time: new Date().toLocaleString(),
@@ -212,6 +247,10 @@ const Sell = () => {
         window.alert(
           "حدث خطا ما اثناء اضافة الفاتورة يرجى التاكد فى صفحة الفواتير ان كانت الفاتورة محفوظة",
         );
+      } finally {
+        // Always ensure we reset the submission state, even in case of errors
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
       }
     },
     [
@@ -223,25 +262,52 @@ const Sell = () => {
       installments,
       installmentInterval,
       paid,
+      storeId,
+      isCreatingBill,
+      addPartyMutationAsync,
     ],
   );
 
-  useEffect(() => {
-    const handleF2 = async (e: KeyboardEvent) => {
+  // Handle keyboard shortcuts using a single event listener that remains stable
+  const handleKeyDown = useCallback(
+    async (e: KeyboardEvent) => {
       if (e.key === "F2") {
-        submitBill(shoppingCart, discount);
-      }
-      if (e.key === "F1") {
         e.preventDefault();
         await submitBill(shoppingCart, discount);
-        printBill(billRef, setMsg, setLastBillOpen);
+      } else if (e.key === "F1") {
+        e.preventDefault();
+        await submitBill(shoppingCart, discount);
+        if (!isSubmitting && !submissionInProgress.current) {
+          printBill(billRef, setMsg, setLastBillOpen);
+        }
       }
-    };
-    window.addEventListener("keydown", handleF2);
+    },
+    [shoppingCart, discount, submitBill, isSubmitting],
+  );
+
+  // Set up keyboard listener only once with a stable callback reference
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener("keydown", handleF2);
+      window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [shoppingCart, discount, submitBill]);
+  }, [handleKeyDown]);
+
+  // Create a safe wrapper for the print and submit function
+  const submitAndPrint = useCallback(async () => {
+    await submitBill(shoppingCart, discount);
+    if (!isSubmitting && !submissionInProgress.current) {
+      printBill(billRef, setMsg, setLastBillOpen);
+    }
+  }, [submitBill, shoppingCart, discount, isSubmitting]);
+  
+  // Check if submit should be disabled
+  const isSubmitDisabled = 
+    shoppingCart.length === 0 || 
+    isCreatingBill || 
+    isSubmitting || 
+    submissionInProgress.current ||
+    (addingParty && (!newParty.name || !newParty.phone));
 
   return (
     <Grid2 container spacing={3}>
@@ -321,23 +387,14 @@ const Sell = () => {
                 <Button
                   variant="contained"
                   onClick={() => submitBill(shoppingCart, discount)}
-                  disabled={
-                    shoppingCart.length === 0 ||
-                    (addingParty && (!newParty.name || !newParty.phone))
-                  }
+                  disabled={isSubmitDisabled}
                 >
                   حفظ الفاتورة (F2)
                 </Button>
                 <Button
                   variant="contained"
-                  onClick={async () => {
-                    await submitBill(shoppingCart, discount);
-                    printBill(billRef, setMsg, setLastBillOpen);
-                  }}
-                  disabled={
-                    shoppingCart.length === 0 ||
-                    (addingParty && (!newParty.name || !newParty.phone))
-                  }
+                  onClick={submitAndPrint}
+                  disabled={isSubmitDisabled}
                 >
                   حفظ و طباعة الفاتورة (F1)
                 </Button>

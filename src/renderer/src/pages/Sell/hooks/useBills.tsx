@@ -29,6 +29,7 @@ const addBill = async ({
       installments: installments,
       installment_interval: installmentInterval,
     },
+    
   });
 
   return data;

@@ -6,8 +6,9 @@ import {
   DialogTitle,
   TextField,
 } from "@mui/material";
-import { Dispatch, SetStateAction, useState } from "react";
+import { Dispatch, SetStateAction, useContext, useState } from "react";
 import { printCode } from "./../../utils/functions";
+import { StoreContext } from "@renderer/StoreDataProvider";
 
 interface PrintBarCodeProps {
   code: string;
@@ -17,6 +18,7 @@ interface PrintBarCodeProps {
 }
 const PrintBarCode = ({ code, name, price, setOpen }: PrintBarCodeProps) => {
   const [quantity, setQuantity] = useState(1);
+  const {store} = useContext(StoreContext)
   return (
     <Dialog open={true}>
       <DialogTitle>طباعة الباركود</DialogTitle>
@@ -34,7 +36,7 @@ const PrintBarCode = ({ code, name, price, setOpen }: PrintBarCodeProps) => {
           onClick={() => {
             printCode(
               code,
-              `فحم المهندس \n ${name}`,
+              `${store.name} \n ${name}`,
               price.toString() + " " + "جنية ",
               quantity,
             );

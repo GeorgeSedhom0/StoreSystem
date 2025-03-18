@@ -16,7 +16,7 @@ import {
   Select,
   MenuItem,
 } from "@mui/material";
-import { useCallback, useState, useContext } from "react";
+import { useCallback, useState, useContext, useRef } from "react";
 import { Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -47,6 +47,10 @@ const Buy = () => {
   });
   const [moveType, setMoveType] = useState<"buy" | "buy-return">("buy");
   const [discount, setDiscount] = useState<number>(0);
+  
+  // Add state and ref to track submission status
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const submissionInProgress = useRef<boolean>(false);
 
   const {
     products,
@@ -91,6 +95,27 @@ const Buy = () => {
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
+      // Prevent multiple submissions
+      if (isSubmitting || submissionInProgress.current) {
+        console.log("Submission already in progress, ignoring duplicate request");
+        return;
+      }
+
+      // Set our local states immediately to prevent race conditions
+      setIsSubmitting(true);
+      submissionInProgress.current = true;
+
+      // Validate inputs
+      if (shoppingCart.length === 0) {
+        setMsg({
+          type: "error",
+          text: "لا توجد منتجات في السلة",
+        });
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
+        return;
+      }
+
       try {
         const bill = {
           time: new Date().toLocaleString(),
@@ -141,16 +166,26 @@ const Buy = () => {
           type: "error",
           text: "حدث خطأ ما",
         });
+      } finally {
+        // Always ensure we reset the submission state, even in case of errors
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
       }
     },
-    [addingParty, newParty, partyId, updateProducts, storeId, moveType],
+    [addingParty, newParty, partyId, updateProducts, storeId, moveType, isSubmitting],
   );
+
+  // Check if submit should be disabled
+  const isSubmitDisabled = 
+    shoppingCart.length === 0 || 
+    isSubmitting || 
+    submissionInProgress.current;
 
   return (
     <Grid2 container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
 
-      <LoadingScreen loading={isProductsLoading} />
+      <LoadingScreen loading={isProductsLoading || isSubmitting} />
 
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 3 }}>
@@ -199,7 +234,7 @@ const Buy = () => {
                 <Button
                   variant="contained"
                   onClick={() => submitBill(shoppingCart, discount)}
-                  disabled={shoppingCart.length === 0}
+                  disabled={isSubmitDisabled}
                   fullWidth
                 >
                   اضافة فاتورة
@@ -211,8 +246,8 @@ const Buy = () => {
                   الاجمالي:{" "}
                   {shoppingCart.reduce(
                     (acc, item) => acc + item.wholesale_price * item.quantity,
-                    0 - discount,
-                  )}{" "}
+                    0,
+                  ) - discount}{" "}
                   جنيه
                 </Typography>
                 <Typography variant="body1" align="center"></Typography>
