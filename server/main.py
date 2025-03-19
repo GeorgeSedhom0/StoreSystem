@@ -1062,7 +1062,6 @@ def complete_bnpl_payment(bill_id: str, store_id: int):
                 (bill_id, store_id),
             )
             bill_discount = cur.fetchone()["discount"]
-            logging.info(bill_discount)
 
             if bill_discount is None:
                 raise HTTPException(status_code=404, detail="BNPL bill not found")
