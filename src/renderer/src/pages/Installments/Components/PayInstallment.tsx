@@ -43,6 +43,11 @@ const PayInstallment = ({
   setMsg: Dispatch<SetStateAction<AlertMsg>>;
   refetchInstallments: () => void;
 }) => {
+  if (!selectedInstallment) {
+    setSelectedInstallment(null)
+    return null
+  }
+
   const installmentSize =
     (selectedInstallment.total * -1 - selectedInstallment.paid) /
     selectedInstallment.installments_count;
@@ -66,18 +71,14 @@ const PayInstallment = ({
       (fullyPaidIntervals + 1);
   const [amount, setAmount] = useState<number>(installmentSize);
 
-  const { mutate: pay } = useMutation({
+  const { mutateAsync: pay } = useMutation({
     mutationKey: ["pay"],
     mutationFn: payInstallment,
     onSuccess: () => {
       setMsg({ type: "success", text: "تم الدفع" });
-      refetchInstallments();
-      setSelectedInstallment(null);
     },
     onError: () => {
       setMsg({ type: "error", text: "حدث خطأ" });
-      refetchInstallments();
-      setSelectedInstallment(null);
     },
   });
 
@@ -136,11 +137,13 @@ const PayInstallment = ({
             <Button
               variant="contained"
               color="primary"
-              onClick={() => {
-                pay({
+              onClick={async() => {
+                await pay({
                   id: selectedInstallment.id,
                   amount: amount,
                 });
+                refetchInstallments()
+                
               }}
             >
               دفع
