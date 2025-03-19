@@ -7,6 +7,7 @@ import bcrypt  # type: ignore
 def connect_to_database():
     """Connect to the PostgreSQL database and return connection and cursor"""
     load_dotenv()
+    
 
     # PostgreSQL connection details
     HOST = getenv("HOST")
@@ -30,6 +31,9 @@ def drop_all_tables(cur):
     """Drop all existing tables in cascade mode"""
     print("Dropping all existing tables...")
 
+    load_dotenv()
+    DATABASE = getenv("DATABASE")
+
     # Drop all tables before creating
     cur.execute("DROP TABLE IF EXISTS users CASCADE")
     cur.execute("DROP TABLE IF EXISTS scopes CASCADE")
@@ -49,6 +53,7 @@ def drop_all_tables(cur):
     cur.execute("DROP TABLE IF EXISTS salaries CASCADE")
     cur.execute("DROP TABLE IF EXISTS bills_collections CASCADE")
     cur.execute("SET TIME ZONE 'Africa/Cairo'")
+    cur.execute(f"ALTER DATABASE {DATABASE} SET timezone TO 'Africa/Cairo';")
 
 
 def create_all_tables(cur):
@@ -587,7 +592,7 @@ def create_all_triggers(cur):
             NEW.amount,
             'in',
             (SELECT bill_id FROM installments
-            WHERE installments.id = NEW.installment_id),  -- Changed from concatenated value
+            WHERE installments.id = NEW.installment_id),
             'قسط',
             (SELECT party_id FROM bills
             WHERE bills.id = (SELECT bill_id FROM installments
@@ -636,8 +641,9 @@ def create_all_triggers(cur):
     BEGIN
         SELECT total INTO latest_total FROM cash_flow
         WHERE store_id = NEW.store_id
-        AND (id != NEW.id OR store_id != NEW.store_id)
-        ORDER BY time DESC LIMIT 1;
+        AND id != NEW.id
+        ORDER BY time DESC, id DESC
+        LIMIT 1;
 
         IF latest_total IS NULL THEN
             latest_total := 0;

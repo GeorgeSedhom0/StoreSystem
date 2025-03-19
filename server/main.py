@@ -1144,7 +1144,7 @@ def get_cash_flow(
                 AND time <= %s
                 AND store_id = %s
                 {extra_condition}
-                ORDER BY cash_flow.time DESC
+                ORDER BY cash_flow.time DESC, cash_flow.id DESC
                 """,
                 params,
             )

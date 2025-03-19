@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   web:
     build: .
@@ -13,12 +11,15 @@ services:
       - DATABASE=${DATABASE}
       - SECRET=${SECRET}
       - ALGORITHM=${ALGORITHM}
+      - TZ=Africa/Cairo
+      - PGTZ=Africa/Cairo
     depends_on:
       - db
     volumes:
       - ./:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-  
+      - ssl_certs:/app/ssl
+    command: uvicorn main_wrapper:app --host 0.0.0.0 --port 8000 --ssl-keyfile=/app/ssl/key.pem --ssl-certfile=/app/ssl/cert.pem --reload  
+ 
   db:
     image: postgres:17
     volumes:
@@ -28,8 +29,11 @@ services:
       - POSTGRES_PASSWORD=${PASS}
       - POSTGRES_USER=${USER}
       - POSTGRES_DB=${DATABASE}
+      - TZ=Africa/Cairo
+      - PGTZ=Africa/Cairo 
     ports:
       - "5433:5432"
 
 volumes:
   postgres_data:
+  ssl_certs:

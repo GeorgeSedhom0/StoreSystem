@@ -6,6 +6,7 @@ import logging
 from dotenv import load_dotenv
 from os import getenv
 from fastapi import APIRouter
+from datetime import datetime
 
 load_dotenv()
 
@@ -155,7 +156,7 @@ def get_installments(
 def add_flow(installment_id: int, amount: float) -> JSONResponse:
     query = """
     INSERT INTO installments_flow (installment_id, amount, time)
-    VALUES (%s, %s, now())
+    VALUES (%s, %s, NOW())
     """
 
     try:
