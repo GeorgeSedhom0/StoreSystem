@@ -2,14 +2,22 @@ FROM python:3.9
 
 WORKDIR /app
 
-# Add PostgreSQL repository for version 17 client tools
+# Update and install basic dependencies
 RUN apt-get update && apt-get install -y wget gnupg2 lsb-release
+
+# Add PostgreSQL repository properly
 RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
 RUN wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
-RUN apt-get update
 
-# Install PostgreSQL 17 client, OpenSSL, and tzdata for timezone support
-RUN apt-get install -y postgresql-client-17 openssl tzdata
+# Clean apt cache and update
+RUN apt-get clean && apt-get update
+
+# Install PostgreSQL 17 client explicitly and remove any other versions
+RUN apt-get install -y postgresql-client-17 openssl tzdata && \
+    apt-get remove -y postgresql-client-15 || true
+
+# Verify the installed version
+RUN pg_dump --version
 
 # Rest of your Dockerfile remains the same
 ENV TZ=Africa/Cairo
