@@ -2,10 +2,16 @@ FROM python:3.9
 
 WORKDIR /app
 
-# Install PostgreSQL client, OpenSSL, and tzdata for timezone support
-RUN apt-get update && apt-get install -y postgresql-client openssl tzdata
+# Add PostgreSQL repository for version 17 client tools
+RUN apt-get update && apt-get install -y wget gnupg2 lsb-release
+RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+RUN wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+RUN apt-get update
 
-# Set timezone
+# Install PostgreSQL 17 client, OpenSSL, and tzdata for timezone support
+RUN apt-get install -y postgresql-client-17 openssl tzdata
+
+# Rest of your Dockerfile remains the same
 ENV TZ=Africa/Cairo
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN dpkg-reconfigure -f noninteractive tzdata
