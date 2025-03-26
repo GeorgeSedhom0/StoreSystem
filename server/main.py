@@ -1539,6 +1539,7 @@ def shifts_analytics(
                         WHERE time >= start_date_time
                         AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
                         AND type IN %s
+                        AND store_id = %s
                     ) AS total
                 FROM shifts
                 WHERE start_date_time >= %s
@@ -1547,7 +1548,7 @@ def shifts_analytics(
                 AND current = False
                 ORDER BY start_date_time
                 """,
-                (tuple(bills_type), start_date, end_date, store_id),
+                (tuple(bills_type), store_id, start_date, end_date, store_id),
             )
             data = [
                 {
@@ -1570,7 +1571,7 @@ async def backup():
     """
     try:
         # Create a .sql file to store the backup
-        with open("backup.sql", "wb") as f:
+        with open("./backup.sql", "wb") as f:
             os.environ["PGPASSWORD"] = PASS
             subprocess.run(
                 ["pg_dump", "-h", HOST, "-U", USER, "-d", DATABASE], stdout=f
