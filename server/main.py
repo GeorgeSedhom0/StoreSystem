@@ -691,6 +691,7 @@ def update_bill(bill: dbBill, store_id: int):
                 """
                 INSERT INTO bills (id, store_id)
                 VALUES (%s, %s)
+                ON CONFLICT (id, store_id) DO NOTHING
                 """,
                 (negative_bill_id, store_id),
             )
