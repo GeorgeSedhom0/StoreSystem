@@ -7,7 +7,6 @@ import bcrypt  # type: ignore
 def connect_to_database():
     """Connect to the PostgreSQL database and return connection and cursor"""
     load_dotenv()
-    
 
     # PostgreSQL connection details
     HOST = getenv("HOST")
@@ -614,7 +613,7 @@ def create_all_triggers(cur):
     CREATE OR REPLACE FUNCTION update_product_price_after_insert()
     RETURNS TRIGGER AS $$
     BEGIN
-      IF (SELECT type FROM bills WHERE id = NEW.bill_id) = 'buy' THEN 
+      IF (SELECT type FROM bills WHERE id = NEW.bill_id LIMIT 1) = 'buy' THEN 
         UPDATE products
         SET
           wholesale_price = NEW.wholesale_price,
