@@ -668,7 +668,7 @@ def update_bill(bill: dbBill, store_id: int):
     products = bill.products
     for product in products:
         product.amount = (
-            -product.amount if bill.type in ["buy", "return"] else product.amount
+            product.amount if bill.type in ["buy", "return"] else -product.amount
         )
 
     try:
