@@ -27,7 +27,7 @@ cur.execute("""
     FROM cash_flow
     ) s
     WHERE cash_flow.id = s.id
-    AND cash_flow.store_id = s.store_id;"
+    AND cash_flow.store_id = s.store_id;
   """)
 
 conn.commit()
