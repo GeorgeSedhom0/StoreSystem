@@ -638,6 +638,10 @@ def create_all_triggers(cur):
     DECLARE
         latest_total FLOAT;
     BEGIN
+        IF NEW.bill_id < 0 THEN
+            RETURN NEW;
+        END IF;
+
         SELECT total INTO latest_total FROM cash_flow
         WHERE store_id = NEW.store_id
         AND id != NEW.id
