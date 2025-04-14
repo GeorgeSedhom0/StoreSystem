@@ -1638,7 +1638,7 @@ def get_bill_products(bill_id: str, store_id: int):
                     ABS(products_flow.amount) AS amount,
                     products_flow.wholesale_price,
                     products_flow.price,
-                    products.stock
+                    products.amount AS stock
                 FROM products_flow 
                 JOIN products ON products_flow.product_id = products.id
                 WHERE products_flow.bill_id = %s
