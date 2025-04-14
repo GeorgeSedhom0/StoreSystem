@@ -13,6 +13,11 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from "@mui/material";
 import { useCallback, useState, useContext } from "react";
 import { Product, SCProduct, StoreData } from "../../utils/types";
@@ -41,6 +46,10 @@ const MoveProducts = () => {
     type: "",
     text: "",
   });
+  const [billDialogOpen, setBillDialogOpen] = useState<boolean>(false);
+  const [billId, setBillId] = useState<string>("");
+  const [isLoadingBillProducts, setIsLoadingBillProducts] =
+    useState<boolean>(false);
 
   const {
     products,
@@ -133,11 +142,114 @@ const MoveProducts = () => {
     [destinationStoreId, storeId, updateProducts],
   );
 
+  const handleStartFromBill = async () => {
+    if (!billId) {
+      setMsg({
+        type: "error",
+        text: "يرجى إدخال رقم الفاتورة",
+      });
+      return;
+    }
+
+    setIsLoadingBillProducts(true);
+    try {
+      const { data } = await axios.get(`/bill-products`, {
+        params: {
+          bill_id: billId,
+          store_id: storeId,
+        },
+      });
+
+      if (!data || data.length === 0) {
+        setMsg({
+          type: "error",
+          text: "لم يتم العثور على منتجات في هذه الفاتورة",
+        });
+        setIsLoadingBillProducts(false);
+        return;
+      }
+
+      // Convert bill products to shopping cart format
+      const newCartItems: SCProduct[] = data.map((product: any) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        wholesale_price: product.wholesale_price,
+        quantity: product.amount,
+        stock: product.stock,
+        barCode: product.bar_code,
+      }));
+
+      // Add products to shopping cart
+      setShoppingCart((prevCart) => {
+        // Merge new items with existing cart
+        const updatedCart = [...prevCart];
+
+        newCartItems.forEach((newItem) => {
+          const existingItemIndex = updatedCart.findIndex(
+            (item) => item.id === newItem.id,
+          );
+
+          if (existingItemIndex >= 0) {
+            // Add quantity to existing item
+            updatedCart[existingItemIndex].quantity += newItem.quantity;
+          } else {
+            // Add new item to cart
+            updatedCart.push(newItem);
+          }
+        });
+
+        return updatedCart;
+      });
+
+      setMsg({
+        type: "success",
+        text: `تم إضافة ${data.length} منتج من الفاتورة إلى السلة`,
+      });
+
+      setBillDialogOpen(false);
+    } catch (error) {
+      console.log(error);
+      setMsg({
+        type: "error",
+        text: "حدث خطأ أثناء جلب بيانات الفاتورة",
+      });
+    } finally {
+      setIsLoadingBillProducts(false);
+    }
+  };
+
   return (
     <Grid2 container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
 
-      <LoadingScreen loading={isProductsLoading || isStoresLoading} />
+      <LoadingScreen
+        loading={isProductsLoading || isStoresLoading || isLoadingBillProducts}
+      />
+
+      {/* Bill ID Dialog */}
+      <Dialog open={billDialogOpen} onClose={() => setBillDialogOpen(false)}>
+        <DialogTitle>ابدأ من فاتورة</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="رقم الفاتورة"
+            fullWidth
+            variant="outlined"
+            value={billId}
+            onChange={(e) => setBillId(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBillDialogOpen(false)} color="secondary">
+            إلغاء
+          </Button>
+          <Button onClick={handleStartFromBill} color="primary">
+            تأكيد
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 3 }}>
@@ -170,7 +282,18 @@ const MoveProducts = () => {
               </FormControl>
             </Grid2>
 
-            <Grid2 size={4}>
+            <Grid2 size={2}>
+              <Button
+                variant="contained"
+                color="secondary"
+                onClick={() => setBillDialogOpen(true)}
+                fullWidth
+              >
+                ابدأ من فاتورة
+              </Button>
+            </Grid2>
+
+            <Grid2 size={2}>
               <Button
                 variant="contained"
                 onClick={() => submitBill(shoppingCart)}

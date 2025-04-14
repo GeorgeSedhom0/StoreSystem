@@ -1616,3 +1616,38 @@ async def restore(file: UploadFile = File(...)):
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# Add this new endpoint after the other bill-related endpoints
+@app.get("/bill-products")
+def get_bill_products(bill_id: str, store_id: int):
+    """
+    Get all products from a specific bill by ID
+
+    Returns:
+        List[Dict]: A list of dictionaries containing the products from the bill
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT 
+                    products_flow.product_id AS id,
+                    products.name,
+                    products.bar_code,
+                    ABS(products_flow.amount) AS amount,
+                    products_flow.wholesale_price,
+                    products_flow.price,
+                    products.stock
+                FROM products_flow 
+                JOIN products ON products_flow.product_id = products.id
+                WHERE products_flow.bill_id = %s
+                AND products_flow.store_id = %s
+                """,
+                (bill_id, store_id),
+            )
+            products = cur.fetchall()
+            return products
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e

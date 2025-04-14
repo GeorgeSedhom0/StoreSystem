@@ -47,7 +47,7 @@ const Buy = () => {
   });
   const [moveType, setMoveType] = useState<"buy" | "buy-return">("buy");
   const [discount, setDiscount] = useState<number>(0);
-  
+
   // Add state and ref to track submission status
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const submissionInProgress = useRef<boolean>(false);
@@ -97,7 +97,9 @@ const Buy = () => {
     async (shoppingCart: SCProduct[], discount: number) => {
       // Prevent multiple submissions
       if (isSubmitting || submissionInProgress.current) {
-        console.log("Submission already in progress, ignoring duplicate request");
+        console.log(
+          "Submission already in progress, ignoring duplicate request",
+        );
         return;
       }
 
@@ -172,14 +174,20 @@ const Buy = () => {
         submissionInProgress.current = false;
       }
     },
-    [addingParty, newParty, partyId, updateProducts, storeId, moveType, isSubmitting],
+    [
+      addingParty,
+      newParty,
+      partyId,
+      updateProducts,
+      storeId,
+      moveType,
+      isSubmitting,
+    ],
   );
 
   // Check if submit should be disabled
-  const isSubmitDisabled = 
-    shoppingCart.length === 0 || 
-    isSubmitting || 
-    submissionInProgress.current;
+  const isSubmitDisabled =
+    shoppingCart.length === 0 || isSubmitting || submissionInProgress.current;
 
   return (
     <Grid2 container spacing={3}>
@@ -292,8 +300,8 @@ const Buy = () => {
                 filterOptions={(options, params) => {
                   const filtered = options.filter(
                     (option) =>
-                      option.name.toLowerCase().includes(params.inputValue) ||
-                      option.phone.includes(params.inputValue),
+                      option.name?.toLowerCase().includes(params.inputValue) ||
+                      option.phone?.includes(params.inputValue),
                   );
                   return filtered;
                 }}
