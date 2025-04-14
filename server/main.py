@@ -1633,14 +1633,8 @@ def get_bill_products(bill_id: str, store_id: int):
                 """
                 SELECT 
                     products_flow.product_id AS id,
-                    products.name,
-                    products.bar_code,
-                    ABS(products_flow.amount) AS amount,
-                    products_flow.wholesale_price,
-                    products_flow.price,
-                    products.amount AS stock
+                    ABS(products_flow.amount) AS amount
                 FROM products_flow 
-                JOIN products ON products_flow.product_id = products.id
                 WHERE products_flow.bill_id = %s
                 AND products_flow.store_id = %s
                 """,

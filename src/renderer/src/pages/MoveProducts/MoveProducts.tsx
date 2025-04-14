@@ -169,18 +169,23 @@ const MoveProducts = () => {
         return;
       }
 
-      // Convert bill products to shopping cart format
-      const newCartItems: SCProduct[] = data.map((product: any) => ({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        wholesale_price: product.wholesale_price,
-        quantity: product.amount,
-        stock: product.stock,
-        barCode: product.bar_code,
-      }));
+      // Only use id and amount from the endpoint, get the rest from products
+      const newCartItems: SCProduct[] = data
+        .map((item: any) => {
+          const foundProduct = products.find((p) => p.id === item.id);
+          if (!foundProduct) return null;
+          return {
+            id: foundProduct.id,
+            name: foundProduct.name,
+            price: foundProduct.price,
+            wholesale_price: foundProduct.wholesale_price,
+            quantity: item.amount,
+            stock: foundProduct.stock,
+            barCode: foundProduct.bar_code,
+          };
+        })
+        .filter(Boolean) as SCProduct[];
 
-      // Add products to shopping cart
       setShoppingCart((prevCart) => {
         // Merge new items with existing cart
         const updatedCart = [...prevCart];
@@ -204,7 +209,7 @@ const MoveProducts = () => {
 
       setMsg({
         type: "success",
-        text: `تم إضافة ${data.length} منتج من الفاتورة إلى السلة`,
+        text: `تم إضافة ${newCartItems.length} منتج من الفاتورة إلى السلة`,
       });
 
       setBillDialogOpen(false);
