@@ -1125,8 +1125,8 @@ def get_cash_flow(
         params = (
             start_date if start_date else "1970-01-01",
             end_date if end_date else datetime.now().isoformat(),
-            party_id,
             store_id,
+            party_id,
         )
 
     try:
