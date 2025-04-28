@@ -28,6 +28,7 @@ import BillsAdmin from "./pages/BillsAdmin/BillsAdmin";
 import ProductsAdmin from "./pages/ProductsAdmin/ProductdsAdmin";
 import MoveProducts from "./pages/MoveProducts/MoveProducts";
 import PartiesBills from "./pages/PartiesBills/PartiesBills";
+import AdminSell from "./pages/AdminSell/AdminSell";
 
 axios.defaults.withCredentials = true;
 
@@ -178,13 +179,21 @@ const App = () => {
               <CssBaseline />
               <Layout isBaseUrlSet={isBaseURLSet}>
                 <Routes>
+                  {/* Admin routes should be defined first for proper precedence */}
+                  <Route path="/admin/products" element={<ProductsAdmin />} />
+                  <Route path="/admin/bills" element={<BillsAdmin />} />
+                  <Route
+                    path="/admin/move-products"
+                    element={<MoveProducts />}
+                  />
+                  <Route path="/admin/sell" element={<AdminSell />} />
+
+                  {/* Regular routes */}
                   <Route path="/sell" element={<Sell />} />
                   <Route path="/add-to-storage" element={<Storage />} />
                   <Route path="/buy" element={<Buy />} />
                   <Route path="/products" element={<Products />} />
-                  <Route path="/admin/products" element={<ProductsAdmin />} />
                   <Route path="/bills" element={<Bills />} />
-                  <Route path="/admin/bills" element={<BillsAdmin />} />
                   <Route path="/bills/:partyId" element={<Bills />} />
                   <Route path="/cash" element={<Cash />} />
                   <Route path="/cash/:partyId" element={<Cash />} />
@@ -194,10 +203,7 @@ const App = () => {
                   <Route path="/employees" element={<Employee />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/parties-bills" element={<PartiesBills />} />
-                  <Route
-                    path="/admin/move-products"
-                    element={<MoveProducts />}
-                  />
+
                   {/* if any route other than the defined go to /sell */}
                   <Route path="*" element={<Navigate to="/sell" />} />
                 </Routes>

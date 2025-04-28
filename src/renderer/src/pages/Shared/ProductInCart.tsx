@@ -41,10 +41,12 @@ const PriceColumn = ({
   price,
   setShoppingCart,
   product,
+  disbaled,
 }: {
   price: number;
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
   product: SCProduct;
+  disbaled?: boolean;
 }) => {
   return (
     <TableCell>
@@ -65,6 +67,7 @@ const PriceColumn = ({
         inputProps={{
           inputMode: "decimal",
         }}
+        disabled={disbaled}
       />
     </TableCell>
   );
@@ -129,7 +132,7 @@ const TotalPriceColumn = ({
   type,
 }: {
   product: SCProduct;
-  type: "buy" | "sell" | "transfer";
+  type: "buy" | "sell" | "sell-admin" | "transfer";
 }) => {
   if (type === "buy" || type === "transfer") {
     return <TableCell>{product.wholesale_price * product.quantity}</TableCell>;
@@ -209,6 +212,7 @@ type availableColumns =
 const typeToColumns: {
   buy: availableColumns[];
   sell: availableColumns[];
+  "sell-admin": availableColumns[];
   transfer: availableColumns[];
 } = {
   buy: [
@@ -221,6 +225,7 @@ const typeToColumns: {
     "printBarCode",
   ],
   sell: ["name", "quantity", "price", "totalPrice", "delete", "stock"],
+  "sell-admin": ["name", "quantity", "price", "totalPrice", "delete", "stock"],
   transfer: [
     "name",
     "quantity",
@@ -242,7 +247,7 @@ const Column = ({
   column: availableColumns;
   product: SCProduct;
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
-  type: "buy" | "sell" | "transfer";
+  type: "buy" | "sell" | "sell-admin" | "transfer";
   isPrintingCode: boolean;
   setIsPrintingCode: Dispatch<SetStateAction<boolean>>;
 }) => {
@@ -262,6 +267,7 @@ const Column = ({
         price={product.price}
         setShoppingCart={setShoppingCart}
         product={product}
+        disbaled={type === "sell"}
       />
     );
   } else if (column === "wholesalePrice") {
@@ -302,7 +308,7 @@ const ProductInCart = ({
 }: {
   product: SCProduct;
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
-  type: "buy" | "sell" | "transfer";
+  type: "buy" | "sell" | "sell-admin" | "transfer";
 }) => {
   const [isPrintingCode, setIsPrintingCode] = useState(false);
   return (

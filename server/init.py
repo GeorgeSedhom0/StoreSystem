@@ -70,12 +70,12 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
     """)
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('cashier', ARRAY[1, 4, 13])
+    ('cashier', ARRAY[1, 5, 14])
     """)
 
     # Create pages table
@@ -90,6 +90,7 @@ def create_all_tables(cur):
     INSERT INTO pages (name, path)
     VALUES
     ('بيع', '/sell'),
+    ('بيع ادمن', '/admin/sell'),
     ('شراء', '/buy'),
     ('اضافة منتجات', '/add-to-storage'),
     ('(ادمن) نقل منتجات', '/admin/move-products'),
