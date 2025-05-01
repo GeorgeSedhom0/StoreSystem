@@ -9,17 +9,9 @@ files:
   - "!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
   - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
-  - "server/**/*"
-  - "!server/env/**"
-  - "!server/.env"
-  - "!server/__pycache__/**"
   - "build/installer.nsh"
   - "out/**/*"
   - "print-template.html"
-extraFiles:
-  - from: "server"
-    to: "server"
-    filter: ["!env/**", "!__pycache__/**", "!.env"]
 asarUnpack:
   - "resources/**"
 win:
@@ -29,7 +21,6 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
-  include: build/installer.nsh
   oneClick: false
   perMachine: true
   installerIcon: build/icon.ico

@@ -142,25 +142,39 @@ const App = () => {
 
   useEffect(() => {
     const setBaseUrl = async () => {
-      try {
-        const baseUrl = await window.electron.ipcRenderer.invoke(
-          "get",
-          "baseUrl",
-        );
-        if (baseUrl) {
-          const { data } = await axios.get(baseUrl + "/test");
+      const baseUrl = await window.electron.ipcRenderer.invoke(
+        "get",
+        "baseUrl",
+      );
+
+      if (!baseUrl) {
+        setIsBaseURLSet(false);
+        setIsLoading(false);
+        return;
+      }
+
+      // Loop until connection is successful
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        try {
+          const { data } = await axios.get(baseUrl + "/test", {
+            timeout: 5000, // Add a timeout to prevent hanging indefinitely
+          });
           if (data === "Hello, World!") {
             axios.defaults.baseURL = baseUrl;
+            setIsBaseURLSet(true);
+            setIsLoading(false);
+            console.log("Base URL set successfully:", baseUrl);
+            break; // Exit the loop on success
           } else {
-            setIsBaseURLSet(false);
+            console.log("Received unexpected data from /test endpoint:", data);
           }
-        } else {
-          setIsBaseURLSet(false);
+        } catch (e) {
+          console.error("Failed to connect to server, retrying...");
         }
-      } catch (e) {
-        console.log(e);
+        // Wait for 2 seconds before retrying
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
-      setIsLoading(false);
     };
 
     setBaseUrl();
