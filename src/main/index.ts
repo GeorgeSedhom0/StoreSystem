@@ -2,7 +2,6 @@ import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
-import { ServerManager } from "./server_manager";
 import { settingsManager } from "./settings_manager";
 
 function createChildWindow(url: string): void {
@@ -43,14 +42,10 @@ function createChildWindow(url: string): void {
   childWindow.focus();
 }
 
-let serverManager: ServerManager;
-
 app.commandLine.appendSwitch("ignore-certificate-errors", "true");
 
 function createWindow(): void {
-  serverManager = new ServerManager();
   try {
-    serverManager.startServer();
     // Create the browser window.
     const mainWindow = new BrowserWindow({
       width: 900,
@@ -148,7 +143,6 @@ app.on(
 // explicitly with Cmd + Q.
 app.on("window-all-closed", () => {
   console.log("Window all closed");
-  serverManager.stopServer();
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -156,7 +150,6 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   console.log("Before quit");
-  serverManager.stopServer();
 });
 
 // In this file you can include the rest of your app"s specific main process

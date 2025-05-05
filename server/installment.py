@@ -6,7 +6,6 @@ import logging
 from dotenv import load_dotenv
 from os import getenv
 from fastapi import APIRouter
-from datetime import datetime
 import json
 
 load_dotenv()
