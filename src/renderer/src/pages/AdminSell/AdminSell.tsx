@@ -38,9 +38,20 @@ import useProducts from "../Shared/hooks/useProducts";
 import { useShift } from "./hooks/useShifts";
 import useBills from "./hooks/useBills";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { usePersistentCart } from "../../Shared/hooks/usePersistentCart";
 
 const AdminSell = () => {
-  const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
+  const {
+    products,
+    isLoading: isProductsLoading,
+    updateProducts,
+  } = useProducts();
+
+  const [shoppingCart, setShoppingCart] = usePersistentCart(
+    "AdminSell",
+    [],
+    products,
+  );
   const [msg, setMsg] = useState<AlertMsg>({
     type: "",
     text: "",
@@ -76,12 +87,6 @@ const AdminSell = () => {
   const { storeId } = useContext(StoreContext);
 
   const navigate = useNavigate();
-
-  const {
-    products,
-    isLoading: isProductsLoading,
-    updateProducts,
-  } = useProducts();
 
   const { shift, isShiftLoading, isShiftError } = useShift();
 

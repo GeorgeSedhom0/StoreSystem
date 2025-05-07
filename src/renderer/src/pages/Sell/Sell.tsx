@@ -38,9 +38,20 @@ import useProducts from "../Shared/hooks/useProducts";
 import { useShift } from "./hooks/useShifts";
 import useBills from "./hooks/useBills";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { usePersistentCart } from "../../Shared/hooks/usePersistentCart";
 
 const Sell = () => {
-  const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
+  const {
+    products,
+    isLoading: isProductsLoading,
+    updateProducts,
+  } = useProducts();
+
+  const [shoppingCart, setShoppingCart] = usePersistentCart(
+    "Sell",
+    [],
+    products,
+  );
   const [msg, setMsg] = useState<AlertMsg>({
     type: "",
     text: "",
@@ -66,7 +77,7 @@ const Sell = () => {
   const [installmentInterval, setInstallmentInterval] = useState<number>(30);
   const [paid, setPaid] = useState<number>(0);
   const [usingThirdParties, setUsingThirdParties] = useState<boolean>(false);
-  
+
   // Add an internal state to track submission status
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   // Add a ref to track if a submission is in progress
@@ -76,12 +87,6 @@ const Sell = () => {
   const { storeId } = useContext(StoreContext);
 
   const navigate = useNavigate();
-
-  const {
-    products,
-    isLoading: isProductsLoading,
-    updateProducts,
-  } = useProducts();
 
   const { shift, isShiftLoading, isShiftError } = useShift();
 
@@ -153,7 +158,9 @@ const Sell = () => {
     async (shoppingCart: SCProduct[], discount: number) => {
       // Use both the React Query state and our local state to prevent multiple submissions
       if (isCreatingBill || isSubmitting || submissionInProgress.current) {
-        console.log("Submission already in progress, ignoring duplicate request");
+        console.log(
+          "Submission already in progress, ignoring duplicate request",
+        );
         return;
       }
 
@@ -300,12 +307,12 @@ const Sell = () => {
       printBill(billRef, setMsg, setLastBillOpen);
     }
   }, [submitBill, shoppingCart, discount, isSubmitting]);
-  
+
   // Check if submit should be disabled
-  const isSubmitDisabled = 
-    shoppingCart.length === 0 || 
-    isCreatingBill || 
-    isSubmitting || 
+  const isSubmitDisabled =
+    shoppingCart.length === 0 ||
+    isCreatingBill ||
+    isSubmitting ||
     submissionInProgress.current ||
     (addingParty && (!newParty.name || !newParty.phone));
 

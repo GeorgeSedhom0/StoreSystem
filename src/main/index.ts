@@ -260,3 +260,11 @@ ipcMain.handle("set", (_event, key, value) => {
 ipcMain.handle("get", (_event, key) => {
   return settingsManager.getSetting(key);
 });
+
+ipcMain.handle("get-cart", (_event, page: string) => {
+  return settingsManager.getSetting(`cart-${page}`) || [];
+});
+
+ipcMain.handle("set-cart", (_event, page: string, cart: any) => {
+  settingsManager.setSetting(`cart-${page}`, cart);
+});

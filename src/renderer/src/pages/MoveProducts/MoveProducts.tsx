@@ -31,6 +31,7 @@ import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import useProducts from "../Shared/hooks/useProducts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { useQuery } from "@tanstack/react-query";
+import { usePersistentCart } from "../../Shared/hooks/usePersistentCart";
 
 const getStoresData = async () => {
   const { data } = await axios.get<StoreData[]>("/admin/stores-data");
@@ -38,7 +39,17 @@ const getStoresData = async () => {
 };
 
 const MoveProducts = () => {
-  const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
+  const {
+    products,
+    updateProducts,
+    isLoading: isProductsLoading,
+  } = useProducts();
+
+  const [shoppingCart, setShoppingCart] = usePersistentCart(
+    "MoveProducts",
+    [],
+    products,
+  );
   const [destinationStoreId, setDestinationStoreId] = useState<number | null>(
     null,
   );
@@ -50,12 +61,6 @@ const MoveProducts = () => {
   const [billId, setBillId] = useState<string>("");
   const [isLoadingBillProducts, setIsLoadingBillProducts] =
     useState<boolean>(false);
-
-  const {
-    products,
-    updateProducts,
-    isLoading: isProductsLoading,
-  } = useProducts();
 
   const { storeId } = useContext(StoreContext);
 

@@ -28,9 +28,20 @@ import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import useParties from "../Shared/hooks/useParties";
 import useProducts from "../Shared/hooks/useProducts";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { usePersistentCart } from "../../Shared/hooks/usePersistentCart";
 
 const Buy = () => {
-  const [shoppingCart, setShoppingCart] = useState<SCProduct[]>([]);
+  const {
+    products,
+    updateProducts,
+    isLoading: isProductsLoading,
+  } = useProducts();
+
+  const [shoppingCart, setShoppingCart] = usePersistentCart(
+    "Buy",
+    [],
+    products,
+  );
   const [partyId, setPartyId] = useState<number | null>(null);
   const [addingParty, setAddingParty] = useState<boolean>(false);
   const [newParty, setNewParty] = useState<Party>({
@@ -51,12 +62,6 @@ const Buy = () => {
   // Add state and ref to track submission status
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const submissionInProgress = useRef<boolean>(false);
-
-  const {
-    products,
-    updateProducts,
-    isLoading: isProductsLoading,
-  } = useProducts();
 
   const { parties, addPartyMutationAsync } = useParties(setMsg);
 
