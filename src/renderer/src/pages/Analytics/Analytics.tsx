@@ -1,29 +1,40 @@
-import { Card, Grid2, Typography } from "@mui/material";
-import ShiftsAnalytics from "./Components/ShiftsAnalytics";
-import TopProductsAnalytics from "./Components/TopProductsAnalytics";
-import AlertsAnalytics from "./Components/AlertsAnalytics";
-import ProductsAnalytics from "./Components/ProductsAnalytics";
-import SalesAnalytics from "./Components/SalesAnalytics";
+import { TabContext, TabList, TabPanel } from "@mui/lab";
+import { Card, Divider, Tab } from "@mui/material";
+import { useEffect, useRef, useState } from "react";
+import autoAnimate from "@formkit/auto-animate";
+import GeneralAnalyticsTab from "./Components/GeneralAnalyticsTab";
+import ProductsAnalyticsTab from "./Components/ProductsAnalyticsTab";
+import IncomeAnalyticsTab from "./Components/IncomeAnalyticsTab";
 
 const Analytics = () => {
+  const [tab, setTab] = useState("1");
+  const parent = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!parent.current) return;
+    autoAnimate(parent.current);
+  }, []);
+
   return (
-    <>
-      <Grid2 container spacing={2}>
-        <Grid2 size={12}>
-          <Card elevation={3} sx={{ px: 3, py: 2 }}>
-            <Typography variant="h4">الاحصائيات</Typography>
-            <Typography variant="body1">
-              قم بالتحليل والاطلاع على الاحصائيات الخاصة بالمتجر
-            </Typography>
-          </Card>
-        </Grid2>
-        <ShiftsAnalytics />
-        <SalesAnalytics />
-        <TopProductsAnalytics />
-        <ProductsAnalytics />
-        <AlertsAnalytics />
-      </Grid2>
-    </>
+    <Card elevation={3} sx={{ px: 3, py: 2 }} ref={parent}>
+      <TabContext value={tab}>
+        <TabList onChange={(_, value) => setTab(value)}>
+          <Tab label="عام" value="1" />
+          <Tab label="المنتجات" value="2" />
+          <Tab label="التقرير المالى" value="3" />
+        </TabList>
+        <Divider />
+        <TabPanel value="1">
+          <GeneralAnalyticsTab />
+        </TabPanel>
+        <TabPanel value="2">
+          <ProductsAnalyticsTab />
+        </TabPanel>
+        <TabPanel value="3">
+          <IncomeAnalyticsTab />
+        </TabPanel>
+      </TabContext>
+    </Card>
   );
 };
 

@@ -212,8 +212,8 @@ const App = () => {
                   <Route path="/cash" element={<Cash />} />
                   <Route path="/cash/:partyId" element={<Cash />} />
                   <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/installments" element={<Installments />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/installments" element={<Installments />} />
                   <Route path="/employees" element={<Employee />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/parties-bills" element={<PartiesBills />} />

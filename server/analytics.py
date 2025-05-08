@@ -353,3 +353,132 @@ def sales(
     except psycopg2.Error as e:
         logging.error(e)
         raise HTTPException(status_code=500, detail="Database error")
+
+
+@router.get("/analytics/income")
+def income_analytics(
+    store_id: int,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    """Get income analytics including cash flow and profit data."""
+    if start_date is None:
+        start_date = "2021-01-01"
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cursor:
+            # Get cash flow summary
+            cursor.execute(
+                """
+                SELECT 
+                    SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as cash_in,
+                    SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) as cash_out
+                FROM cash_flow
+                WHERE store_id = %s 
+                AND time > %s AND time <= %s
+                """,
+                (store_id, start_date, end_date),
+            )
+
+            cash_summary = cursor.fetchone()
+
+            # Calculate profit (difference between selling price and wholesale price)
+            cursor.execute(
+                """
+                SELECT 
+                    (SELECT SUM(total) FROM bills 
+                    WHERE store_id = %s 
+                    AND time > %s AND time <= %s 
+                    AND type = 'sell' 
+                    AND id > 0)
+                    - 
+                    (SELECT SUM(ABS(wholesale_price * amount)) FROM products_flow pf
+                    JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
+                    WHERE pf.store_id = %s
+                    AND b.time > %s AND b.time <= %s
+                    AND pf.amount < 0
+                    AND b.id > 0
+                    AND b.type = 'sell')
+                    AS profit
+                """,
+                (store_id, start_date, end_date, store_id, start_date, end_date),
+            )
+
+            profit_data = cursor.fetchone()
+
+            # Get daily cash flow
+            cursor.execute(
+                """
+                SELECT 
+                    DATE_TRUNC('day', time) AS day,
+                    SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as cash_in,
+                    SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) as cash_out
+                FROM cash_flow
+                WHERE store_id = %s
+                AND time > %s AND time <= %s
+                GROUP BY day
+                ORDER BY day
+                """,
+                (store_id, start_date, end_date),
+            )
+
+            daily_cashflow = cursor.fetchall()
+
+            # Get daily profit
+            cursor.execute(
+                """
+                SELECT 
+                    DATE_TRUNC('day', b.time) AS day,
+                    SUM((pf.price - p.wholesale_price) * (-pf.amount)) as profit
+                FROM products_flow pf
+                JOIN products p ON pf.product_id = p.id
+                JOIN bills b ON pf.bill_id = b.id
+                WHERE pf.store_id = %s
+                AND b.time > %s AND b.time <= %s
+                AND pf.amount < 0
+                AND b.id > 0
+                GROUP BY day
+                ORDER BY day
+                """,
+                (store_id, start_date, end_date),
+            )
+
+            daily_profit = cursor.fetchall()
+
+            # Process daily cashflow data
+            cashflow_data = []
+            for row in daily_cashflow:
+                day = row["day"].strftime("%Y-%m-%d")
+                cash_in = float(row["cash_in"] or 0)
+                cash_out = float(row["cash_out"] or 0)
+                net = cash_in - cash_out
+                cashflow_data.append([day, cash_in, cash_out, net])
+
+            # Process daily profit data
+            profit_data_list = []
+            for row in daily_profit:
+                day = row["day"].strftime("%Y-%m-%d")
+                profit = float(row["profit"] or 0)
+                profit_data_list.append([day, profit])
+
+            # Prepare response data
+            response_data = {
+                "cash_in": float(cash_summary["cash_in"] or 0),
+                "cash_out": float(cash_summary["cash_out"] or 0),
+                "net_cash": float(cash_summary["cash_in"] or 0)
+                - float(cash_summary["cash_out"] or 0),
+                "profit": float(profit_data["profit"] or 0),
+                "daily_cashflow": cashflow_data,
+                "daily_profit": profit_data_list,
+            }
+
+            return response_data
+
+    except psycopg2.Error as e:
+        logging.error(e)
+        raise HTTPException(status_code=500, detail="Database error")
+    except Exception as e:
+        logging.error(e)
+        raise HTTPException(status_code=500, detail=str(e))
