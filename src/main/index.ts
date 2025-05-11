@@ -4,15 +4,36 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
 import { settingsManager } from "./settings_manager";
 
-// Track window count for unique IDs
-let windowCounter = 0;
+// Track window IDs
 const windowRegistry = new Map<number, BrowserWindow>();
 
-function createChildWindow(url: string): void {
-  // Increment counter to get a new unique window ID
-  windowCounter++;
-  const windowId = windowCounter;
+// Function to find the smallest available window ID
+function getNextAvailableWindowId(): number {
+  // If registry is empty, start with 1
+  if (windowRegistry.size === 0) {
+    return 1;
+  }
+  
+  // Get all current window IDs
+  const usedIds = Array.from(windowRegistry.keys()).sort((a, b) => a - b);
+  
+  // Find the first gap in the sequence or the next number after the largest
+  let nextId = 1;
+  for (const id of usedIds) {
+    if (id > nextId) {
+      // Found a gap
+      break;
+    }
+    nextId = id + 1;
+  }
+  
+  return nextId;
+}
 
+function createChildWindow(url: string): void {
+  // Get the next available window ID
+  const windowId = getNextAvailableWindowId();
+  
   const childWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -24,13 +45,15 @@ function createChildWindow(url: string): void {
       sandbox: false,
     },
   });
-
   // Register window with its ID
   windowRegistry.set(windowId, childWindow);
+  console.log(`Created child window with ID: ${windowId}, active windows: ${Array.from(windowRegistry.keys())}`);
 
   // Remove from registry when closed
   childWindow.on("closed", () => {
+    console.log(`Closing window ID: ${windowId}, before removal active windows: ${Array.from(windowRegistry.keys())}`);
     windowRegistry.delete(windowId);
+    console.log(`After removal active windows: ${Array.from(windowRegistry.keys())}`);
   });
 
   childWindow.webContents.session.setCertificateVerifyProc(
@@ -62,10 +85,9 @@ app.commandLine.appendSwitch("ignore-certificate-errors", "true");
 
 function createWindow(): void {
   try {
-    // First window gets ID 1
-    windowCounter = 1;
-    const windowId = windowCounter;
-
+    // Get ID for the main window (should be 1 if it's the first window)
+    const windowId = getNextAvailableWindowId();
+    
     // Create the browser window.
     const mainWindow = new BrowserWindow({
       width: 900,
@@ -77,14 +99,15 @@ function createWindow(): void {
         preload: join(__dirname, "../preload/index.js"),
         sandbox: false,
       },
-    });
-
-    // Register main window with its ID
+    });    // Register main window with its ID
     windowRegistry.set(windowId, mainWindow);
+    console.log(`Created main window with ID: ${windowId}, active windows: ${Array.from(windowRegistry.keys())}`);
 
     // Remove from registry when closed
     mainWindow.on("closed", () => {
+      console.log(`Closing main window ID: ${windowId}, before removal active windows: ${Array.from(windowRegistry.keys())}`);
       windowRegistry.delete(windowId);
+      console.log(`After removal active windows: ${Array.from(windowRegistry.keys())}`);
     });
 
     mainWindow.webContents.session.setCertificateVerifyProc(
@@ -306,13 +329,18 @@ ipcMain.handle(
 ipcMain.handle("get-window-id", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return null;
-
+  
   // Find the windowId from the registry
   for (const [id, window] of windowRegistry.entries()) {
     if (window === win) {
       return id;
     }
   }
-
+  
   return null;
+});
+
+// For debugging: get all active window IDs
+ipcMain.handle("get-active-window-ids", () => {
+  return Array.from(windowRegistry.keys());
 });
