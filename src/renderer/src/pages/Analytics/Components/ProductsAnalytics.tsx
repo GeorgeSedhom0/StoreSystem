@@ -84,6 +84,17 @@ const ProductsAnalytics = () => {
     },
   });
 
+  // Add "All" option logic
+  const allProductIds = useMemo(
+    () => products.products.map((prod) => prod.id!),
+    [products.products],
+  );
+  const isAllSelected =
+    selectedProducts.length === allProductIds.length &&
+    allProductIds.length > 0;
+
+  const chipDisplayLimit = 5;
+
   const setRange = useCallback((range: "day" | "week" | "month") => {
     switch (range) {
       case "day":
@@ -108,7 +119,17 @@ const ProductsAnalytics = () => {
       tooltip: {
         trigger: "axis",
       },
-      legend: {},
+      legend: {
+        type: "scroll",
+        orient: "horizontal",
+        pageButtonPosition: "end",
+        pageButtonGap: 5,
+        pageIconSize: 12,
+        pageTextStyle: { fontSize: 10 },
+        tooltip: {
+          show: true,
+        },
+      },
       toolbox: {
         feature: {
           magicType: {
@@ -120,46 +141,44 @@ const ProductsAnalytics = () => {
             title: "Export to Excel",
             icon: `image://${tableIcon}`,
             onclick: () => {
-              const groupedByDate = new Map<string, Map<string, number>>();
+              // New approach: Make dates columns and products rows
               const allDates = new Set<string>();
-              const allProducts = new Set<string>();
+              const productMap = new Map<string, Map<string, number>>();
 
-              // Collect all unique dates and products
+              // Collect all unique dates and initialize product maps
               Object.entries(data).forEach(([name, values]) => {
-                allProducts.add(name);
-                values.forEach(([date, _]) => {
-                  allDates.add(date);
-                });
-              });
-
-              // Initialize each product's data for all dates with 0
-              allDates.forEach((date) => {
-                if (!groupedByDate.has(date)) {
-                  groupedByDate.set(date, new Map<string, number>());
+                if (!productMap.has(name)) {
+                  productMap.set(name, new Map<string, number>());
                 }
-                allProducts.forEach((product) => {
-                  groupedByDate.get(date)!.set(product, 0);
-                });
-              });
 
-              // Populate the actual values
-              Object.entries(data).forEach(([name, values]) => {
                 values.forEach(([date, value]) => {
-                  groupedByDate.get(date)!.set(name, value);
+                  allDates.add(date);
+                  productMap.get(name)!.set(date, value);
                 });
               });
 
-              const exportData = [
-                ["التاريخ", "المنتج", "الكمية المباعة"],
-                ...Array.from(groupedByDate.entries()).flatMap(
-                  ([date, products]) =>
-                    Array.from(products.entries()).map(([name, value]) => [
-                      date,
-                      name,
-                      value,
-                    ]),
-                ),
-              ];
+              // Sort dates chronologically
+              const sortedDates = Array.from(allDates).sort();
+
+              // Create header row with dates
+              const headerRow = ["المنتج", ...sortedDates];
+
+              // Create data rows (one per product)
+              const dataRows = Array.from(productMap.entries()).map(
+                ([productName, dateValues]) => {
+                  const row = [productName];
+
+                  // Add value for each date (or "0" if no data)
+                  sortedDates.forEach((date) => {
+                    row.push(String(dateValues.get(date) || 0));
+                  });
+
+                  return row;
+                },
+              );
+
+              // Final export data structure
+              const exportData = [headerRow, ...dataRows];
 
               exportToExcel(exportData);
             },
@@ -237,17 +256,63 @@ const ProductsAnalytics = () => {
           <Grid2 size={12}>
             <Autocomplete
               multiple
-              options={products.products}
+              options={[
+                { id: -1, name: "الكل" }, // "All" option
+                ...products.products,
+              ]}
               getOptionLabel={(option) => option.name}
-              value={products.products.filter((prod) =>
-                selectedProducts.includes(prod.id!),
-              )}
-              onChange={(_, newValue) =>
-                setSelectedProducts(newValue.map((prod) => prod.id!))
+              value={
+                isAllSelected
+                  ? [{ id: -1, name: "الكل" }, ...products.products]
+                  : products.products.filter((prod) =>
+                      selectedProducts.includes(prod.id!),
+                    )
               }
+              onChange={(_, newValue) => {
+                // If "All" is selected/deselected
+                const hasAll = newValue.some((prod) => prod.id === -1);
+                if (hasAll) {
+                  // If not all selected, select all; if all selected, deselect all
+                  if (!isAllSelected) {
+                    setSelectedProducts(allProductIds);
+                  } else {
+                    setSelectedProducts([]);
+                  }
+                } else {
+                  setSelectedProducts(
+                    newValue
+                      .filter((prod) => prod.id !== -1)
+                      .map((prod) => prod.id!),
+                  );
+                }
+              }}
               renderInput={(params) => (
                 <TextField {...params} label="المنتجات" />
               )}
+              renderOption={(props, option, { selected: _ }) => (
+                <li {...props}>
+                  <span>{option.name}</span>
+                </li>
+              )}
+              renderTags={(tagValue, getTagProps) => {
+                // Display limited number of chips with a count for the rest
+                const displayedTags = tagValue.slice(0, chipDisplayLimit);
+                const remainingCount = tagValue.length - displayedTags.length;
+
+                return (
+                  <>
+                    {displayedTags.map((option, index) => (
+                      <span {...getTagProps({ index })}>{option.name}</span>
+                    ))}
+                    {remainingCount > 0 && (
+                      <Typography component="span" sx={{ mx: 0.5 }}>
+                        +{remainingCount} أخرى
+                      </Typography>
+                    )}
+                  </>
+                );
+              }}
+              disableCloseOnSelect
             />
           </Grid2>
           <Grid2 size={12}>
