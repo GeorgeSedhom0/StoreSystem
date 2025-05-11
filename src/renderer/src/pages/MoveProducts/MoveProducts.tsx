@@ -130,8 +130,8 @@ const MoveProducts = () => {
           },
         });
 
-        await updateProducts();
         setShoppingCart([]);
+        await updateProducts();
         setMsg({
           type: "success",
           text: "تم نقل المنتجات بنجاح",

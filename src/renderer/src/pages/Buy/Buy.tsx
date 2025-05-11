@@ -158,8 +158,8 @@ const Buy = () => {
           },
         });
 
-        await updateProducts();
         setShoppingCart([]);
+        await updateProducts();
         setDiscount(0);
         setMoveType("buy");
         setPartyId(null);
