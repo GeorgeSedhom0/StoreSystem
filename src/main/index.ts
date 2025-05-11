@@ -13,10 +13,10 @@ function getNextAvailableWindowId(): number {
   if (windowRegistry.size === 0) {
     return 1;
   }
-  
+
   // Get all current window IDs
   const usedIds = Array.from(windowRegistry.keys()).sort((a, b) => a - b);
-  
+
   // Find the first gap in the sequence or the next number after the largest
   let nextId = 1;
   for (const id of usedIds) {
@@ -26,14 +26,14 @@ function getNextAvailableWindowId(): number {
     }
     nextId = id + 1;
   }
-  
+
   return nextId;
 }
 
 function createChildWindow(url: string): void {
   // Get the next available window ID
   const windowId = getNextAvailableWindowId();
-  
+
   const childWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -47,13 +47,19 @@ function createChildWindow(url: string): void {
   });
   // Register window with its ID
   windowRegistry.set(windowId, childWindow);
-  console.log(`Created child window with ID: ${windowId}, active windows: ${Array.from(windowRegistry.keys())}`);
+  console.log(
+    `Created child window with ID: ${windowId}, active windows: ${Array.from(windowRegistry.keys())}`,
+  );
 
   // Remove from registry when closed
   childWindow.on("closed", () => {
-    console.log(`Closing window ID: ${windowId}, before removal active windows: ${Array.from(windowRegistry.keys())}`);
+    console.log(
+      `Closing window ID: ${windowId}, before removal active windows: ${Array.from(windowRegistry.keys())}`,
+    );
     windowRegistry.delete(windowId);
-    console.log(`After removal active windows: ${Array.from(windowRegistry.keys())}`);
+    console.log(
+      `After removal active windows: ${Array.from(windowRegistry.keys())}`,
+    );
   });
 
   childWindow.webContents.session.setCertificateVerifyProc(
@@ -87,7 +93,7 @@ function createWindow(): void {
   try {
     // Get ID for the main window (should be 1 if it's the first window)
     const windowId = getNextAvailableWindowId();
-    
+
     // Create the browser window.
     const mainWindow = new BrowserWindow({
       width: 900,
@@ -99,15 +105,21 @@ function createWindow(): void {
         preload: join(__dirname, "../preload/index.js"),
         sandbox: false,
       },
-    });    // Register main window with its ID
+    }); // Register main window with its ID
     windowRegistry.set(windowId, mainWindow);
-    console.log(`Created main window with ID: ${windowId}, active windows: ${Array.from(windowRegistry.keys())}`);
+    console.log(
+      `Created main window with ID: ${windowId}, active windows: ${Array.from(windowRegistry.keys())}`,
+    );
 
     // Remove from registry when closed
     mainWindow.on("closed", () => {
-      console.log(`Closing main window ID: ${windowId}, before removal active windows: ${Array.from(windowRegistry.keys())}`);
+      console.log(
+        `Closing main window ID: ${windowId}, before removal active windows: ${Array.from(windowRegistry.keys())}`,
+      );
       windowRegistry.delete(windowId);
-      console.log(`After removal active windows: ${Array.from(windowRegistry.keys())}`);
+      console.log(
+        `After removal active windows: ${Array.from(windowRegistry.keys())}`,
+      );
     });
 
     mainWindow.webContents.session.setCertificateVerifyProc(
@@ -329,14 +341,14 @@ ipcMain.handle(
 ipcMain.handle("get-window-id", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return null;
-  
+
   // Find the windowId from the registry
   for (const [id, window] of windowRegistry.entries()) {
     if (window === win) {
       return id;
     }
   }
-  
+
   return null;
 });
 
