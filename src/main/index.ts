@@ -4,7 +4,15 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
 import { settingsManager } from "./settings_manager";
 
+// Track window count for unique IDs
+let windowCounter = 0;
+const windowRegistry = new Map<number, BrowserWindow>();
+
 function createChildWindow(url: string): void {
+  // Increment counter to get a new unique window ID
+  windowCounter++;
+  const windowId = windowCounter;
+
   const childWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -15,6 +23,14 @@ function createChildWindow(url: string): void {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
     },
+  });
+
+  // Register window with its ID
+  windowRegistry.set(windowId, childWindow);
+
+  // Remove from registry when closed
+  childWindow.on("closed", () => {
+    windowRegistry.delete(windowId);
   });
 
   childWindow.webContents.session.setCertificateVerifyProc(
@@ -37,7 +53,7 @@ function createChildWindow(url: string): void {
   childWindow.setAutoHideMenuBar(true);
   childWindow.setMenuBarVisibility(false);
   childWindow.maximize();
-  childWindow.loadURL(url);
+  childWindow.loadURL(url + `?windowId=${windowId}`);
   childWindow.show();
   childWindow.focus();
 }
@@ -46,6 +62,10 @@ app.commandLine.appendSwitch("ignore-certificate-errors", "true");
 
 function createWindow(): void {
   try {
+    // First window gets ID 1
+    windowCounter = 1;
+    const windowId = windowCounter;
+
     // Create the browser window.
     const mainWindow = new BrowserWindow({
       width: 900,
@@ -57,6 +77,14 @@ function createWindow(): void {
         preload: join(__dirname, "../preload/index.js"),
         sandbox: false,
       },
+    });
+
+    // Register main window with its ID
+    windowRegistry.set(windowId, mainWindow);
+
+    // Remove from registry when closed
+    mainWindow.on("closed", () => {
+      windowRegistry.delete(windowId);
     });
 
     mainWindow.webContents.session.setCertificateVerifyProc(
@@ -88,14 +116,16 @@ function createWindow(): void {
           ? process.env["ELECTRON_RENDERER_URL"]
           : `file://${join(__dirname, "../renderer/index.html")}`;
       createChildWindow(url + path);
-    });
-
-    // HMR for renderer base on electron-vite cli.
+    }); // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-      mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+      mainWindow.loadURL(
+        `${process.env["ELECTRON_RENDERER_URL"]}?windowId=${windowId}`,
+      );
     } else {
-      mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+      mainWindow.loadFile(join(__dirname, "../renderer/index.html"), {
+        query: { windowId: windowId.toString() },
+      });
     }
   } catch (e) {
     dialog.showErrorBox(
@@ -261,10 +291,28 @@ ipcMain.handle("get", (_event, key) => {
   return settingsManager.getSetting(key);
 });
 
-ipcMain.handle("get-cart", (_event, page: string) => {
-  return settingsManager.getSetting(`cart-${page}`) || [];
+ipcMain.handle("get-cart", (_event, page: string, windowId: number) => {
+  return settingsManager.getSetting(`cart-${page}-window-${windowId}`) || [];
 });
 
-ipcMain.handle("set-cart", (_event, page: string, cart: any) => {
-  settingsManager.setSetting(`cart-${page}`, cart);
+ipcMain.handle(
+  "set-cart",
+  (_event, page: string, windowId: number, cart: any) => {
+    settingsManager.setSetting(`cart-${page}-window-${windowId}`, cart);
+  },
+);
+
+// Add a way to get the window ID from the renderer
+ipcMain.handle("get-window-id", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return null;
+
+  // Find the windowId from the registry
+  for (const [id, window] of windowRegistry.entries()) {
+    if (window === win) {
+      return id;
+    }
+  }
+
+  return null;
 });
