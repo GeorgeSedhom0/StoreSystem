@@ -80,7 +80,7 @@ const EditableBill = ({
       });
     } else if (bill.type === "BNPL") {
       total = 0;
-    } else if (bill.type === "buy") {
+    } else if (["buy", "buy-return"].includes(bill.type)) {
       bill.products.forEach((product) => {
         total += product.wholesale_price * product.amount;
       });
