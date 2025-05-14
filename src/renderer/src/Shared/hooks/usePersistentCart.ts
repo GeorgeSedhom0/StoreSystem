@@ -67,12 +67,13 @@ export function usePersistentCart(
                 return {
                   id: item.id,
                   quantity: item.quantity,
+                  barCode: product.bar_code,
                   ...product,
                 };
               }
               return null;
             })
-            .filter((item) => item !== null) as SCProduct[];
+            .filter((item) => item !== null);
           setState(updatedCart);
           isCartLoaded.current = true;
           console.log(
