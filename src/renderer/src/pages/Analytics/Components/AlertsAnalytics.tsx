@@ -406,12 +406,7 @@ const AlertsAnalytics = () => {
                     <TableRow
                       key={page * rowsPerPage + index}
                       sx={{
-                        "&:nth-of-type(odd)": { bgcolor: "action.hover" },
-                        ...(alert.urgent && {
-                          bgcolor: "error.light",
-                          "&:hover": { bgcolor: "error.main" },
-                          color: "error.contrastText",
-                        }),
+                        "&:hover": { bgcolor: "action.hover" },
                       }}
                     >
                       <TableCell>
