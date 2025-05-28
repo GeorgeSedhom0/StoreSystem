@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
-import { useCallback, useMemo, useState, useContext } from "react";
+import { useCallback, useContext, useMemo, useState } from "react";
 import {
   Autocomplete,
   Button,
@@ -71,9 +71,12 @@ const ProductsAnalytics = () => {
         selectedProducts,
         storeId,
       ),
-    initialData: {},
+    initialData: {} as ProductsAnalyticsType,
     enabled: selectedProducts.length > 0,
   });
+
+  // Always treat data as simple [date, value] pairs
+  const actualData = data;
 
   const { data: products } = useQuery({
     queryKey: ["products", storeId],
@@ -84,16 +87,31 @@ const ProductsAnalytics = () => {
     },
   });
 
-  // Add "All" option logic
+  const productOptions = useMemo(
+    () => ["الكل", ...products.products.map((prod) => prod.name)],
+    [products.products],
+  );
+
   const allProductIds = useMemo(
     () => products.products.map((prod) => prod.id!),
     [products.products],
   );
-  const isAllSelected =
-    selectedProducts.length === allProductIds.length &&
-    allProductIds.length > 0;
 
-  const chipDisplayLimit = 5;
+  const isAllSelected = useMemo(
+    () =>
+      selectedProducts.length === allProductIds.length &&
+      allProductIds.length > 0,
+    [selectedProducts, allProductIds],
+  );
+
+  const selectedProductNames = useMemo(() => {
+    if (isAllSelected) {
+      return ["الكل"];
+    }
+    return products.products
+      .filter((prod) => selectedProducts.includes(prod.id!))
+      .map((prod) => prod.name);
+  }, [products.products, selectedProducts, isAllSelected]);
 
   const setRange = useCallback((range: "day" | "week" | "month") => {
     switch (range) {
@@ -141,12 +159,10 @@ const ProductsAnalytics = () => {
             title: "Export to Excel",
             icon: `image://${tableIcon}`,
             onclick: () => {
-              // New approach: Make dates columns and products rows
               const allDates = new Set<string>();
               const productMap = new Map<string, Map<string, number>>();
 
-              // Collect all unique dates and initialize product maps
-              Object.entries(data).forEach(([name, values]) => {
+              Object.entries(actualData).forEach(([name, values]) => {
                 if (!productMap.has(name)) {
                   productMap.set(name, new Map<string, number>());
                 }
@@ -157,28 +173,21 @@ const ProductsAnalytics = () => {
                 });
               });
 
-              // Sort dates chronologically
               const sortedDates = Array.from(allDates).sort();
 
-              // Create header row with dates
-              const headerRow = ["المنتج", ...sortedDates];
-
-              // Create data rows (one per product)
-              const dataRows = Array.from(productMap.entries()).map(
+              const dataRows = Array.from(productMap.entries()).flatMap(
                 ([productName, dateValues]) => {
-                  const row = [productName];
-
-                  // Add value for each date (or "0" if no data)
-                  sortedDates.forEach((date) => {
-                    row.push(String(dateValues.get(date) || 0));
+                  return sortedDates.map((date) => {
+                    const value = dateValues.get(date) || 0;
+                    return [productName, date, value];
                   });
-
-                  return row;
                 },
               );
 
-              // Final export data structure
-              const exportData = [headerRow, ...dataRows];
+              const exportData = [
+                ["المنتج", "التاريخ", "الكمية المباعة"],
+                ...dataRows,
+              ];
 
               exportToExcel(exportData);
             },
@@ -192,15 +201,31 @@ const ProductsAnalytics = () => {
       yAxis: {
         type: "value",
       },
-      series: Object.entries(data).map(([name, values]) => ({
+      series: Object.entries(actualData).map(([name, values]) => ({
         name,
         type: "line",
         smooth: true,
-        data: values,
+        data: values.map(([date, value]) => [date, value]),
+        lineStyle: {
+          type: "solid",
+        },
       })),
     }),
-    [data],
+    [actualData],
   );
+
+  const handleProductChange = (_event, newValue: string[]) => {
+    const hasAll = newValue.includes("الكل");
+
+    if (hasAll) {
+      setSelectedProducts(allProductIds);
+    } else {
+      const newSelectedIds = products.products
+        .filter((prod) => newValue.includes(prod.name))
+        .map((prod) => prod.id!);
+      setSelectedProducts(newSelectedIds);
+    }
+  };
 
   return (
     <Grid2 size={12}>
@@ -256,62 +281,24 @@ const ProductsAnalytics = () => {
           <Grid2 size={12}>
             <Autocomplete
               multiple
-              options={[
-                { id: -1, name: "الكل" }, // "All" option
-                ...products.products,
-              ]}
-              getOptionLabel={(option) => option.name}
-              value={
-                isAllSelected
-                  ? [{ id: -1, name: "الكل" }, ...products.products]
-                  : products.products.filter((prod) =>
-                      selectedProducts.includes(prod.id!),
-                    )
-              }
-              onChange={(_, newValue) => {
-                // If "All" is selected/deselected
-                const hasAll = newValue.some((prod) => prod.id === -1);
-                if (hasAll) {
-                  // If not all selected, select all; if all selected, deselect all
-                  if (!isAllSelected) {
-                    setSelectedProducts(allProductIds);
-                  } else {
-                    setSelectedProducts([]);
-                  }
-                } else {
-                  setSelectedProducts(
-                    newValue
-                      .filter((prod) => prod.id !== -1)
-                      .map((prod) => prod.id!),
-                  );
-                }
-              }}
+              options={productOptions}
+              value={selectedProductNames}
+              onChange={handleProductChange}
               renderInput={(params) => (
-                <TextField {...params} label="المنتجات" />
+                <TextField
+                  {...params}
+                  label="المنتجات"
+                  placeholder={
+                    selectedProductNames.length === 0 ? "اختر المنتجات..." : ""
+                  }
+                />
               )}
-              renderOption={(props, option, { selected: _ }) => (
-                <li {...props}>
-                  <span>{option.name}</span>
-                </li>
-              )}
-              renderTags={(tagValue, getTagProps) => {
-                // Display limited number of chips with a count for the rest
-                const displayedTags = tagValue.slice(0, chipDisplayLimit);
-                const remainingCount = tagValue.length - displayedTags.length;
-
-                return (
-                  <>
-                    {displayedTags.map((option, index) => (
-                      <span {...getTagProps({ index })}>{option.name}</span>
-                    ))}
-                    {remainingCount > 0 && (
-                      <Typography component="span" sx={{ mx: 0.5 }}>
-                        +{remainingCount} أخرى
-                      </Typography>
-                    )}
-                  </>
-                );
-              }}
+              noOptionsText="لا توجد منتجات"
+              clearText="مسح الكل"
+              openText="فتح"
+              closeText="إغلاق"
+              limitTags={3}
+              getLimitTagsText={(more) => `+${more} أخرى`}
               disableCloseOnSelect
             />
           </Grid2>
@@ -321,6 +308,13 @@ const ProductsAnalytics = () => {
               style={{ height: 500 }}
               theme={mode}
               notMerge={true}
+              loadingOption={{
+                text: "جار التحميل...",
+                color: "#1890ff",
+                textColor: "#fff",
+                maskColor: "rgba(0, 0, 0, 0.45)",
+              }}
+              showLoading={isFetching}
             />
           </Grid2>
         </Grid2>

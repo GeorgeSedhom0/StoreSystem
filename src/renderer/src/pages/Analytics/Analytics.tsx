@@ -7,13 +7,17 @@ import ProductsAnalyticsTab from "./Components/ProductsAnalyticsTab";
 import IncomeAnalyticsTab from "./Components/IncomeAnalyticsTab";
 
 const Analytics = () => {
-  const [tab, setTab] = useState("1");
+  const [tab, setTab] = useState(sessionStorage.getItem("analyticsTab") || "1");
   const parent = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!parent.current) return;
     autoAnimate(parent.current);
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem("analyticsTab", tab);
+  }, [tab]);
 
   return (
     <Card elevation={3} sx={{ px: 3, py: 2 }} ref={parent}>

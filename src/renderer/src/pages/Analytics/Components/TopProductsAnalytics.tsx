@@ -20,7 +20,12 @@ import { StoreContext } from "@renderer/StoreDataProvider";
 export interface ProductsAnalyticsType {
   [key: string]: [string, number][];
 }
-const getAnalytics = async (startDate: string, endDate: string, storeId: number) => {
+
+const getAnalytics = async (
+  startDate: string,
+  endDate: string,
+  storeId: number,
+) => {
   const { data } = await axios.get<ProductsAnalyticsType>(
     "/analytics/top-products",
     {
@@ -47,8 +52,9 @@ const TopProductsAnalytics = () => {
 
   const { data, isFetching } = useQuery({
     queryKey: ["analytics", "top-products", startDate, endDate, storeId],
-    queryFn: () => getAnalytics(startDate.toISOString(), endDate.toISOString(), storeId),
-    initialData: {},
+    queryFn: () =>
+      getAnalytics(startDate.toISOString(), endDate.toISOString(), storeId),
+    initialData: {} as ProductsAnalyticsType,
   });
 
   const setRange = useCallback((range: "day" | "week" | "month") => {
@@ -91,7 +97,6 @@ const TopProductsAnalytics = () => {
               const allDates = new Set<string>();
               const allProducts = new Set<string>();
 
-              // Collect all unique dates and products
               Object.entries(data).forEach(([name, values]) => {
                 allProducts.add(name);
                 values.forEach(([date, _]) => {
@@ -99,7 +104,6 @@ const TopProductsAnalytics = () => {
                 });
               });
 
-              // Initialize each product's data for all dates with 0
               allDates.forEach((date) => {
                 if (!groupedByDate.has(date)) {
                   groupedByDate.set(date, new Map<string, number>());
@@ -109,7 +113,6 @@ const TopProductsAnalytics = () => {
                 });
               });
 
-              // Populate the actual values
               Object.entries(data).forEach(([name, values]) => {
                 values.forEach(([date, value]) => {
                   groupedByDate.get(date)!.set(name, value);
@@ -144,7 +147,10 @@ const TopProductsAnalytics = () => {
         name,
         type: "line",
         smooth: true,
-        data: values,
+        data: values.map(([date, value]) => [date, value]),
+        lineStyle: {
+          type: "solid",
+        },
       })),
     }),
     [data],
@@ -206,6 +212,13 @@ const TopProductsAnalytics = () => {
               style={{ height: 500 }}
               theme={mode}
               notMerge={true}
+              loadingOption={{
+                text: "جار التحميل...",
+                color: "#1890ff",
+                textColor: "#fff",
+                maskColor: "rgba(0, 0, 0, 0.45)",
+              }}
+              showLoading={isFetching}
             />
           </Grid2>
         </Grid2>

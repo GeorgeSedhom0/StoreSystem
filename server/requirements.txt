@@ -13,3 +13,5 @@ pandas==2.2.2
 numpy==2.0.1
 types_psycopg2==2.9.21.20250121
 pandas-stubs>=2.2.0
+xgboost==2.0.3
+scikit-learn==1.4.2
