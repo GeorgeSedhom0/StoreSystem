@@ -78,6 +78,9 @@ const Sell = () => {
   const [paid, setPaid] = useState<number>(0);
   const [usingThirdParties, setUsingThirdParties] = useState<boolean>(false);
 
+  // Ref for the cart container to enable auto-scroll
+  const cartTableRef = useRef<HTMLDivElement>(null);
+
   // Add an internal state to track submission status
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   // Add a ref to track if a submission is in progress
@@ -112,7 +115,6 @@ const Sell = () => {
       setShiftDialog(false);
     }
   }, [isShiftError, shift, navigate]);
-
   // Update the submission status when React Query updates its state
   useEffect(() => {
     if (!isCreatingBill && isSubmitting) {
@@ -120,6 +122,13 @@ const Sell = () => {
       submissionInProgress.current = false;
     }
   }, [isCreatingBill, isSubmitting]);
+
+  // Auto-scroll cart to bottom when new products are added
+  useEffect(() => {
+    if (cartTableRef.current) {
+      cartTableRef.current.scrollTop = cartTableRef.current.scrollHeight;
+    }
+  }, [shoppingCart]);
 
   const loading = isProductsLoading || isShiftLoading;
   const addToCart = useCallback((product: Product | null) => {
@@ -324,17 +333,13 @@ const Sell = () => {
         setOpen={setLastBillOpen}
         ref={billRef}
       />
-
       <LoadingScreen loading={loading} />
-
       <AlertMessage message={msg} setMessage={setMsg} />
-
       <ShiftDialog
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
         shift={shift}
       />
-
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 3 }}>
           <Grid2 container spacing={3} alignItems="center">
@@ -515,11 +520,11 @@ const Sell = () => {
             )}
           </Grid2>
         </Card>
-      </Grid2>
-
+      </Grid2>{" "}
       <Grid2 size={12}>
         <Card elevation={3}>
           <TableContainer
+            ref={cartTableRef}
             sx={{
               height: "60vh",
               overflowY: "auto",

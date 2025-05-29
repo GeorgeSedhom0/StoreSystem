@@ -16,7 +16,7 @@ import {
   Select,
   MenuItem,
 } from "@mui/material";
-import { useCallback, useState, useContext, useRef } from "react";
+import { useCallback, useState, useContext, useRef, useEffect } from "react";
 import { Party, Product, SCProduct } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -58,10 +58,12 @@ const Buy = () => {
   });
   const [moveType, setMoveType] = useState<"buy" | "buy-return">("buy");
   const [discount, setDiscount] = useState<number>(0);
-
   // Add state and ref to track submission status
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const submissionInProgress = useRef<boolean>(false);
+
+  // Ref for the cart container to enable auto-scroll
+  const cartTableRef = useRef<HTMLDivElement>(null);
 
   const { parties, addPartyMutationAsync } = useParties(setMsg);
 
@@ -94,9 +96,15 @@ const Buy = () => {
       }
     });
   }, []);
-
   useBarcodeDetection(products, addToCart, setMsg);
   useQuickHandle(shoppingCart, setShoppingCart);
+
+  // Auto-scroll cart to bottom when new products are added
+  useEffect(() => {
+    if (cartTableRef.current) {
+      cartTableRef.current.scrollTop = cartTableRef.current.scrollHeight;
+    }
+  }, [shoppingCart]);
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
@@ -197,9 +205,7 @@ const Buy = () => {
   return (
     <Grid2 container spacing={3}>
       <AlertMessage message={msg} setMessage={setMsg} />
-
       <LoadingScreen loading={isProductsLoading || isSubmitting} />
-
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 3 }}>
           <Grid2 container spacing={3} alignItems="center">
@@ -339,11 +345,11 @@ const Buy = () => {
             )}
           </Grid2>
         </Card>
-      </Grid2>
-
+      </Grid2>{" "}
       <Grid2 size={12}>
         <Card elevation={3}>
           <TableContainer
+            ref={cartTableRef}
             sx={{
               height: "60vh",
               overflowY: "auto",

@@ -19,7 +19,7 @@ import {
   DialogActions,
   TextField,
 } from "@mui/material";
-import { useCallback, useState, useContext, useRef } from "react";
+import { useCallback, useState, useContext, useRef, useEffect } from "react";
 import { Product, SCProduct, StoreData } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -62,9 +62,11 @@ const MoveProducts = () => {
   const [isLoadingBillProducts, setIsLoadingBillProducts] =
     useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
   // Add ref to track submission progress
   const submissionInProgress = useRef<boolean>(false);
+
+  // Ref for the cart container to enable auto-scroll
+  const cartTableRef = useRef<HTMLDivElement>(null);
 
   const { storeId } = useContext(StoreContext);
 
@@ -105,9 +107,16 @@ const MoveProducts = () => {
       }
     });
   }, []);
-
   useBarcodeDetection(products, addToCart, setMsg);
   useQuickHandle(shoppingCart, setShoppingCart);
+
+  // Auto-scroll cart to bottom when new products are added
+  useEffect(() => {
+    if (cartTableRef.current) {
+      cartTableRef.current.scrollTop = cartTableRef.current.scrollHeight;
+    }
+  }, [shoppingCart]);
+
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[]) => {
       // Prevent multiple submissions
@@ -389,10 +398,11 @@ const MoveProducts = () => {
             </Grid2>
           </Grid2>
         </Card>
-      </Grid2>
+      </Grid2>{" "}
       <Grid2 size={12}>
         <Card elevation={3}>
           <TableContainer
+            ref={cartTableRef}
             sx={{
               height: "60vh",
               overflowY: "auto",
