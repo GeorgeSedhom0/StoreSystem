@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, APIRouter
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -6,10 +6,17 @@ from datetime import datetime, timedelta
 import logging
 from dotenv import load_dotenv
 from os import getenv
-from fastapi import APIRouter
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Union
 import pandas as pd
 import numpy as np
+from dateutil import parser as dateutil_parser
+from decimal import Decimal
+from ml_utils import (
+    create_features_for_sales,
+    train_sales_prediction_model,
+    calculate_days_until_stockout,
+    predict_product_sales,
+)
 import xgboost as xgb
 
 load_dotenv()
@@ -33,12 +40,20 @@ logging.basicConfig(
 class Database:
     """Database context manager to handle the connection and cursor"""
 
-    def __init__(self, host, database, user, password, real_dict_cursor=True):
+    def __init__(
+        self,
+        host: str,
+        database: str,
+        user: str,
+        password: str,
+        real_dict_cursor: bool = True,
+    ):
         self.host = host
         self.database = database
         self.user = user
         self.password = password
         self.real_dict_cursor = real_dict_cursor
+        self.conn = None
 
     def __enter__(self):
         self.conn = psycopg2.connect(
@@ -52,30 +67,35 @@ class Database:
         )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            self.conn.rollback()
-        else:
-            self.conn.commit()
-        self.conn.close()
+        if self.conn:
+            if exc_type is not None:
+                self.conn.rollback()
+            else:
+                self.conn.commit()
+            self.conn.close()
 
 
 def parse_date(date_str: str) -> datetime:
-    """Parse date string handling both ISO format and date-only format"""
+    """Parse date string handling ISO 8601 and date-only format, always return naive datetime."""
     try:
-        if "T" in date_str and "Z" in date_str:
-            parsed_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-        else:
-            parsed_date = datetime.strptime(date_str, "%Y-%m-%d")
-        logging.info(f"Parsed date: {parsed_date}")
-        return parsed_date
-    except ValueError as e:
+        parsed_date = dateutil_parser.parse(date_str)
+        # Always return naive datetime (strip tzinfo)
+        return parsed_date.replace(tzinfo=None)
+    except Exception as e:
         raise HTTPException(
             status_code=400, detail=f"Invalid date format: {date_str} error: {e}"
         )
 
 
+def to_float(value: Union[Decimal, float, int]) -> float:
+    """Convert Decimal or numeric types to float"""
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value) if value is not None else 0.0
+
+
 def get_product_info(product_id: int, store_id: int) -> Optional[Dict]:
-    """get product information to avoid repeated queries"""
+    """Get product information to avoid repeated queries"""
     try:
         with Database(HOST, DATABASE, USER, PASS) as cursor:
             cursor.execute(
@@ -140,319 +160,12 @@ def get_historical_sales_data(
         return [(row["day"], float(row["total"])) for row in data]
 
 
-def create_features_for_sales(
-    dates,
-) -> pd.DataFrame:
-    """Create features for sales prediction"""
-    features = pd.DataFrame()
-
-    # Handle both DatetimeIndex and Series
-    if isinstance(dates, pd.DatetimeIndex):
-        features["day_of_week"] = dates.dayofweek
-        features["day_of_month"] = dates.day
-        features["month"] = dates.month
-        features["is_weekend"] = (dates.dayofweek >= 5).astype(int)
-    else:  # Series
-        features["day_of_week"] = dates.dt.dayofweek
-        features["day_of_month"] = dates.dt.day
-        features["month"] = dates.dt.month
-        features["is_weekend"] = (dates.dt.dayofweek >= 5).astype(int)
-
-    return features
-
-
-def train_sales_prediction_model(
-    historical_data: List[Tuple[datetime, float]],
-) -> Optional[xgb.XGBRegressor]:
-    """Train XGBoost model for sales prediction"""
-    if len(historical_data) < 14:  # Need at least 2 weeks of data
-        return None
-
-    try:
-        # Convert to DataFrame
-        df = pd.DataFrame(historical_data, columns=["date", "sales"])
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.sort_values("date").reset_index(drop=True)
-
-        # Create features
-        features = create_features_for_sales(df["date"])
-
-        # Add lag features
-        for lag in [1, 3, 7]:
-            if len(df) > lag:
-                features[f"lag_{lag}"] = (
-                    df["sales"].shift(lag).fillna(df["sales"].mean())
-                )
-
-        model = xgb.XGBRegressor(
-            n_estimators=400,
-            max_depth=6,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            min_child_weight=3,
-            gamma=0.05,
-            reg_alpha=0.05,
-            reg_lambda=1.0,
-            random_state=42,
-            n_jobs=-1,
-        )
-
-        # Remove any NaN values
-        mask = ~features.isna().any(axis=1)
-        X_train = features[mask]
-        y_train = df["sales"][mask]
-
-        if len(X_train) < 5:
-            return None
-
-        model.fit(X_train, y_train)
-        return model
-
-    except Exception as e:
-        logging.warning(f"Model training failed: {e}")
-        return None
-
-
-def predict_product_sales(
-    product_id: int, store_id: int, days_to_predict: int = 15
-) -> Optional[List[Tuple[str, float]]]:
-    """Optimized prediction function that trains model once and predicts all days"""
-    try:
-        # Get product info
-        product_info = get_product_info(product_id, store_id)
-        if not product_info:
-            return None
-
-        # Get historical data
-        historical_data = get_historical_sales_data(product_id, store_id)
-
-        if len(historical_data) < 14:
-            # Not enough data for ML, use simple average
-            if len(historical_data) > 0:
-                recent_avg = float(
-                    np.mean([sales for _, sales in historical_data[-7:]])
-                )
-                predictions = []
-                for i in range(days_to_predict):
-                    date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
-                    predictions.append((date, recent_avg))
-                return predictions
-            return None
-
-        # Train model once
-        model = train_sales_prediction_model(historical_data)
-
-        if model is None:
-            # Fallback to weighted average
-            weights = np.exp(np.linspace(-2, 0, min(14, len(historical_data))))
-            weights /= weights.sum()
-            recent_sales = [sales for _, sales in historical_data[-14:]]
-            weighted_avg = np.dot(weights, recent_sales[-len(weights) :])
-
-            predictions = []
-            for i in range(days_to_predict):
-                date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
-                predictions.append((date, weighted_avg))
-            return predictions
-
-        # Prepare features for all prediction days at once
-        future_dates = pd.date_range(
-            start=datetime.now().date(), periods=days_to_predict, freq="D"
-        )
-        future_features = create_features_for_sales(future_dates)
-
-        # Add lag features using the most recent historical data
-        recent_sales = [sales for _, sales in historical_data[-7:]]
-        avg_recent = np.mean(recent_sales) if recent_sales else 0
-
-        for lag in [1, 3, 7]:
-            if f"lag_{lag}" in model.feature_names_in_:
-                # Use actual recent data for initial lags
-                if lag <= len(recent_sales):
-                    future_features[f"lag_{lag}"] = recent_sales[-lag]
-                else:
-                    future_features[f"lag_{lag}"] = avg_recent
-
-        # Predict all days at once
-        predictions_raw = model.predict(future_features)
-        predictions_raw = np.maximum(predictions_raw, 0)  # No negative predictions
-        # round to 0 decimal places
-        predictions_raw = np.round(predictions_raw, 0)
-
-        # Return predictions without stock constraints
-        predictions = []
-        for i, pred in enumerate(predictions_raw):
-            date = future_dates[i].strftime("%Y-%m-%d")
-            if float(pred) > 0:
-                predictions.append((date, float(pred)))
-
-            # Update lag features for next predictions if needed
-            if i < len(predictions_raw) - 1:
-                for lag in [1, 3, 7]:
-                    if f"lag_{lag}" in future_features.columns and i >= lag - 1:
-                        # This is simplified - in production you might want more sophisticated lag updates
-                        future_features.loc[
-                            future_features.index[i + 1], f"lag_{lag}"
-                        ] = pred
-
-        return predictions
-
-    except Exception as e:
-        logging.error(f"Prediction failed for product {product_id}: {e}")
-        return None
-
-
-def predict_stock_depletion(
-    product_id: int, store_id: int, current_stock: float, days_to_predict: int = 30
-) -> Optional[int]:
-    """Predict when stock will be depleted considering current stock levels"""
-    try:
-        # Get historical sales data
-        historical_data = get_historical_sales_data(product_id, store_id)
-
-        if len(historical_data) < 7:
-            # Not enough data, use simple average from available data
-            if len(historical_data) > 0:
-                avg_daily_consumption = np.mean([sales for _, sales in historical_data])
-                if avg_daily_consumption > 0:
-                    days_left = int(current_stock / avg_daily_consumption)
-                    return min(days_left, days_to_predict)
-            return days_to_predict  # No consumption pattern found
-
-        # Train model for sales prediction
-        model = train_sales_prediction_model(historical_data)
-
-        if model is None:
-            # Fallback to weighted average
-            weights = np.exp(np.linspace(-1, 0, min(7, len(historical_data))))
-            weights /= weights.sum()
-            recent_sales = [sales for _, sales in historical_data[-7:]]
-            avg_consumption = np.dot(weights, recent_sales[-len(weights) :])
-
-            if avg_consumption > 0:
-                days_left = int(current_stock / avg_consumption)
-                return min(days_left, days_to_predict)
-            return days_to_predict
-
-        # Generate predictions and calculate stock depletion
-        future_dates = pd.date_range(
-            start=datetime.now().date(), periods=days_to_predict, freq="D"
-        )
-        future_features = create_features_for_sales(future_dates)
-
-        # Add lag features
-        recent_sales = [sales for _, sales in historical_data[-7:]]
-        avg_recent = np.mean(recent_sales) if recent_sales else 0
-
-        for lag in [1, 3, 7]:
-            if f"lag_{lag}" in model.feature_names_in_:
-                if lag <= len(recent_sales):
-                    future_features[f"lag_{lag}"] = recent_sales[-lag]
-                else:
-                    future_features[f"lag_{lag}"] = avg_recent
-
-        # Predict daily consumption
-        daily_predictions = model.predict(future_features)
-        daily_predictions = np.maximum(daily_predictions, 0)
-
-        # Calculate when stock runs out
-        remaining_stock = current_stock
-        for day, consumption in enumerate(daily_predictions, 1):
-            remaining_stock -= consumption
-            if remaining_stock <= 0:
-                return day
-
-        return days_to_predict  # Stock lasts longer than prediction period
-
-    except Exception as e:
-        logging.warning(
-            f"Stock depletion prediction failed for product {product_id}: {e}"
-        )
-        return None
-
-
-def calculate_product_consumption_rate(
-    product_id: int, store_id: int, days_back: int = 120
-) -> Optional[float]:
-    """Calculate daily consumption rate using weighted average of recent sales"""
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cursor:
-            cursor.execute(
-                """
-                SELECT 
-                    DATE_TRUNC('day', b.time)::date AS day,
-                    SUM(pf.amount) * -1 AS daily_consumption
-                FROM products_flow pf
-                JOIN bills b ON pf.bill_id = b.id
-                WHERE pf.product_id = %s
-                AND b.store_id = %s
-                AND b.type = 'sell'
-                AND pf.amount < 0
-                AND b.time >= NOW() - INTERVAL '%s days'
-                GROUP BY DATE_TRUNC('day', b.time)::date
-                ORDER BY day DESC
-                """,
-                (product_id, store_id, days_back),
-            )
-
-            sales_data = cursor.fetchall()
-
-            if not sales_data:
-                return None
-
-            # Convert to pandas for easier calculation
-            df = pd.DataFrame(sales_data)
-            df["day"] = pd.to_datetime(df["day"])
-            df = df.sort_values("day").reset_index(drop=True)
-
-            # Calculate weighted average with more recent days having higher weight
-            days_count = len(df)
-            if days_count == 0:
-                return None
-
-            # Exponential weights - more recent = higher weight
-            weights = np.exp(np.linspace(-2, 0, days_count))
-            weights = weights / weights.sum()
-
-            # Calculate weighted average
-            weighted_avg = np.average(df["daily_consumption"], weights=weights)
-
-            # Apply smoothing based on variance
-            variance = np.var(df["daily_consumption"])
-            std_dev = np.sqrt(variance)
-
-            # If consumption is very variable, be more conservative
-            if std_dev > weighted_avg:
-                # Add 20% buffer for high variance products
-                weighted_avg *= 1.2
-
-            return max(0, weighted_avg)
-
-    except Exception as e:
-        logging.warning(
-            f"Error calculating consumption rate for product {product_id}: {e}"
-        )
-        return None
-
-
-def calculate_days_until_stockout(
-    current_stock: float, daily_consumption: float
-) -> int:
-    """Calculate days until stock runs out"""
-    if daily_consumption <= 0:
-        return 999  # No consumption pattern
-
-    days_left = current_stock / daily_consumption
-    return max(0, int(np.floor(days_left)))
-
-
 @router.get("/analytics/alerts")
 def alerts(store_id: int):
     """Get alerts for products running low in stock using statistical methods"""
     try:
         with Database(HOST, DATABASE, USER, PASS) as cursor:
-            # Get all products with recent sales activity (last 90 days)
+            # Get all products with recent sales activity
             cursor.execute(
                 """
                 WITH recent_sales AS (
@@ -492,8 +205,8 @@ def alerts(store_id: int):
                 LEFT JOIN product_sales_stats pss ON p.id = pss.product_id
                 WHERE pi.store_id = %s
                 AND pi.is_deleted = FALSE
-                AND rs.product_id IS NOT NULL  -- Only products with recent sales
-                AND pss.total_sold > 0  -- Must have some sales in last 60 days
+                AND rs.product_id IS NOT NULL
+                AND pss.total_sold > 0
                 ORDER BY pi.stock ASC, p.name
                 """,
                 (store_id, store_id, store_id),
@@ -504,15 +217,7 @@ def alerts(store_id: int):
         if not products:
             return []
 
-        # Convert to DataFrame for vectorized operations
-        import decimal
-
-        def to_float(val):
-            if isinstance(val, decimal.Decimal):
-                return float(val)
-            return val
-
-        # Convert all Decimal fields to float in products
+        # Convert Decimal fields to float
         for prod in products:
             for key in ["stock", "total_sold", "avg_per_transaction"]:
                 if key in prod:
@@ -529,10 +234,10 @@ def alerts(store_id: int):
         for idx, row in df.iterrows():
             product_id = row["id"]
             current_stock = float(row["stock"])
-            active_days = max(1, row["active_days"])  # Avoid division by zero
+            active_days = max(1, row["active_days"])
             total_sold = float(row["total_sold"])
 
-            # Calculate daily consumption using multiple methods and take the most conservative
+            # Calculate daily consumption using multiple methods
             methods = []
 
             # Method 1: Simple average over active days
@@ -542,26 +247,20 @@ def alerts(store_id: int):
 
             # Method 2: Weighted consumption based on transaction patterns
             if row["avg_per_transaction"] > 0:
-                # Estimate frequency and apply to current patterns
-                transaction_based = (
-                    float(row["avg_per_transaction"]) * 0.8
-                )  # Conservative factor
+                transaction_based = float(row["avg_per_transaction"]) * 0.8
                 methods.append(transaction_based)
 
             # Method 3: Get more detailed calculation if we have enough data
-            detailed_rate = calculate_product_consumption_rate(product_id, store_id)
+            detailed_rate = calculate_days_until_stockout(product_id, store_id)
             if detailed_rate is not None:
                 methods.append(detailed_rate)
 
-            # Use the median of available methods (more robust than mean)
+            # Use the median of available methods
             if methods:
                 daily_consumption = float(np.median(methods))
-                # Apply minimum threshold
-                daily_consumption = max(
-                    0.1, daily_consumption
-                )  # At least some consumption
+                daily_consumption = max(0.1, daily_consumption)
             else:
-                daily_consumption = 0.5  # Default conservative estimate
+                daily_consumption = 0.5
 
             df.at[idx, "daily_consumption"] = daily_consumption
             df.at[idx, "days_left"] = calculate_days_until_stockout(
@@ -598,6 +297,113 @@ def alerts(store_id: int):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+def predict_total_sales(
+    store_id: int, days_to_predict: int = 15
+) -> List[Tuple[str, float]]:
+    """Predict total sales for future days"""
+    try:
+        # Get historical sales data for the store
+        end_date = datetime.now() - timedelta(days=1)
+        start_date = end_date - timedelta(days=365)
+
+        with Database(HOST, DATABASE, USER, PASS) as cursor:
+            cursor.execute(
+                """
+                WITH date_series AS (
+                    SELECT generate_series(%s::date, %s::date, '1 day'::interval)::date AS day
+                ),
+                sales_data AS (
+                    SELECT
+                        DATE_TRUNC('day', bills.time)::date AS day,
+                        COALESCE(SUM(bills.total), 0) AS total
+                    FROM bills
+                    WHERE bills.store_id = %s
+                    AND bills.type IN ('sell', 'return')
+                    AND bills.time >= %s AND bills.time <= %s
+                    GROUP BY DATE_TRUNC('day', bills.time)::date
+                )
+                SELECT 
+                    ds.day,
+                    COALESCE(sd.total, 0) AS total
+                FROM date_series ds
+                LEFT JOIN sales_data sd ON ds.day = sd.day
+                ORDER BY ds.day
+                """,
+                (
+                    start_date.strftime("%Y-%m-%d"),
+                    end_date.strftime("%Y-%m-%d"),
+                    store_id,
+                    start_date.strftime("%Y-%m-%d"),
+                    end_date.strftime("%Y-%m-%d"),
+                ),
+            )
+
+            historical_data = [
+                (row["day"], float(row["total"])) for row in cursor.fetchall()
+            ]
+
+        if len(historical_data) < 14:
+            # Not enough data, use simple average
+            if len(historical_data) > 0:
+                recent_avg = float(
+                    np.mean([sales for _, sales in historical_data[-7:]])
+                )
+                predictions = []
+                for i in range(days_to_predict):
+                    date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
+                    predictions.append((date, recent_avg))
+                return predictions
+            return []
+
+        # Use similar prediction logic as product sales
+        model = train_sales_prediction_model(historical_data)
+
+        if model is None:
+            # Fallback to weighted average
+            weights = np.exp(np.linspace(-1, 0, min(14, len(historical_data))))
+            weights /= weights.sum()
+            recent_sales = [sales for _, sales in historical_data[-14:]]
+            weighted_avg = np.dot(weights, recent_sales[-len(weights) :])
+
+            predictions = []
+            for i in range(days_to_predict):
+                date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
+                predictions.append((date, weighted_avg))
+            return predictions
+
+        # Generate predictions
+        future_dates = pd.date_range(
+            start=datetime.now().date(), periods=days_to_predict, freq="D"
+        )
+        future_features = create_features_for_sales(future_dates)
+
+        # Add lag features
+        recent_sales = [sales for _, sales in historical_data[-7:]]
+        avg_recent = np.mean(recent_sales) if recent_sales else 0
+
+        for lag in [1, 3, 7]:
+            if f"lag_{lag}" in model.feature_names_in_:
+                if lag <= len(recent_sales):
+                    future_features[f"lag_{lag}"] = recent_sales[-lag]
+                else:
+                    future_features[f"lag_{lag}"] = avg_recent
+
+        predictions_raw = model.predict(future_features)
+        predictions_raw = np.maximum(predictions_raw, 0)
+        predictions_raw = np.round(predictions_raw, 0)
+
+        predictions = []
+        for i, pred in enumerate(predictions_raw):
+            date = future_dates[i].strftime("%Y-%m-%d")
+            predictions.append((date, float(pred)))
+
+        return predictions
+
+    except Exception as e:
+        logging.error(f"Sales prediction failed: {e}")
+        return []
+
+
 @router.post("/analytics/sales")
 def sales(
     store_id: int,
@@ -605,13 +411,20 @@ def sales(
     end_date: Optional[str] = None,
     types: Optional[List[str]] = None,
 ):
-    """Get daily sales for a specific store"""
+    """Get daily sales for a specific store with prediction support"""
     if start_date is None:
         start_date = "2021-01-01"
     if end_date is None:
         end_date = datetime.now().strftime("%Y-%m-%d")
     if types is None:
         types = ["sell", "return"]
+
+    # Parse dates
+    start_date_obj = parse_date(start_date)
+    end_date_obj = parse_date(end_date)
+    today = datetime.now()
+    is_future_prediction = end_date_obj.date() > today.date()
+    historical_end_date = min(end_date_obj, today - timedelta(days=1))
 
     try:
         with Database(HOST, DATABASE, USER, PASS, real_dict_cursor=False) as cursor:
@@ -627,11 +440,43 @@ def sales(
                 GROUP BY day
                 ORDER BY day
                 """,
-                (start_date, end_date, tuple(types), store_id),
+                (
+                    start_date_obj.date(),
+                    historical_end_date.date(),
+                    tuple(types),
+                    store_id,
+                ),
             )
 
-            data = cursor.fetchall()
-            return data
+            historical_data = cursor.fetchall()
+
+            # Convert to list format
+            result_data = [
+                [row[0].strftime("%Y-%m-%d"), float(row[1]), False]
+                for row in historical_data
+            ]
+
+            # Add predictions if needed
+            if is_future_prediction:
+                prediction_days = (end_date_obj.date() - today.date()).days + 1
+                predictions = predict_total_sales(store_id, prediction_days)
+                for date_str, predicted_value in predictions:
+                    result_data.append([date_str, predicted_value, True])
+
+            # Ensure all days in range are present
+            all_dates = pd.date_range(
+                start=start_date_obj.strftime("%Y-%m-%d"),
+                end=end_date_obj.strftime("%Y-%m-%d"),
+            )
+            data_map = {d[0]: d for d in result_data}
+            final_result = []
+            for dt in all_dates:
+                date_str = dt.strftime("%Y-%m-%d")
+                if date_str in data_map:
+                    final_result.append(data_map[date_str])
+                else:
+                    final_result.append([date_str, 0, False])
+            return final_result
 
     except psycopg2.Error as e:
         logging.error(e)
@@ -777,12 +622,17 @@ def process_products_data_with_predictions(
             products_data[product_name] = []
 
         # Get predictions
-        predictions = predict_product_sales(product_id, store_id, prediction_days)
+        predictions = predict_product_sales(
+            product_id, store_id, prediction_days,
+            get_product_info=get_product_info,
+            get_historical_sales_data=get_historical_sales_data
+        )
 
         if predictions:
-            # Add predictions to the data
             for date_str, predicted_value in predictions:
-                products_data[product_name].append([date_str, float(predicted_value)])
+                products_data[product_name].append(
+                    [date_str, float(predicted_value), True]
+                )
 
     return products_data
 
@@ -800,12 +650,9 @@ def top_products(
         end_date = datetime.now().strftime("%Y-%m-%d")
 
     # Parse dates
+    start_date_obj = parse_date(start_date)
     end_date_obj = parse_date(end_date)
     today = datetime.now()
-
-    logging.info(f"Fetching top products from {start_date} to {end_date_obj}")
-
-    # Check if prediction is needed
     is_future_prediction = end_date_obj.date() > today.date()
     historical_end_date = min(end_date_obj, today - timedelta(days=1))
 
@@ -828,7 +675,7 @@ def top_products(
                 ORDER BY total_sold DESC
                 LIMIT 5
                 """,
-                (start_date, historical_end_date.strftime("%Y-%m-%d"), store_id),
+                (start_date_obj.date(), historical_end_date.date(), store_id),
             )
 
             top_products_info = cursor.fetchall()
@@ -856,8 +703,8 @@ def top_products(
                 (
                     tuple(product_ids),
                     store_id,
-                    start_date,
-                    historical_end_date.strftime("%Y-%m-%d"),
+                    start_date_obj.date(),
+                    historical_end_date.date(),
                 ),
             )
 
@@ -870,13 +717,31 @@ def top_products(
                 day_str = row["day"].strftime("%Y-%m-%d")
                 if product_name not in products_data:
                     products_data[product_name] = []
-                products_data[product_name].append([day_str, float(row["total"])])
+                products_data[product_name].append(
+                    [day_str, float(row["total"]), False]
+                )
 
             # Add predictions if needed
             if is_future_prediction:
                 products_data = process_products_data_with_predictions(
                     products_data, product_ids, store_id, end_date_obj, today
                 )
+
+            # Ensure all days in range are present for each product
+            all_dates = pd.date_range(
+                start=start_date_obj.strftime("%Y-%m-%d"),
+                end=end_date_obj.strftime("%Y-%m-%d"),
+            )
+            for pname, arr in products_data.items():
+                date_map = {d[0]: d for d in arr}
+                filled = []
+                for dt in all_dates:
+                    date_str = dt.strftime("%Y-%m-%d")
+                    if date_str in date_map:
+                        filled.append(date_map[date_str])
+                    else:
+                        filled.append([date_str, 0, False])
+                products_data[pname] = filled
 
             return products_data
 
@@ -904,16 +769,14 @@ def products(
         )
 
     # Parse dates
+    start_date_obj = parse_date(start_date)
     end_date_obj = parse_date(end_date)
     today = datetime.now()
-
-    # Check if prediction is needed
     is_future_prediction = end_date_obj.date() > today.date()
     historical_end_date = min(end_date_obj, today - timedelta(days=1))
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cursor:
-            # Get historical daily data
             cursor.execute(
                 """
                 SELECT p.name, DATE_TRUNC('day', b.time) AS day, 
@@ -932,8 +795,8 @@ def products(
                 (
                     tuple(products_ids),
                     store_id,
-                    start_date,
-                    historical_end_date.strftime("%Y-%m-%d"),
+                    start_date_obj.date(),
+                    historical_end_date.date(),
                 ),
             )
 
@@ -946,7 +809,9 @@ def products(
                 day_str = row["day"].strftime("%Y-%m-%d")
                 if product_name not in products_data:
                     products_data[product_name] = []
-                products_data[product_name].append([day_str, float(row["total"])])
+                products_data[product_name].append(
+                    [day_str, float(row["total"]), False]
+                )
 
             # Add predictions if needed
             if is_future_prediction:
@@ -954,8 +819,340 @@ def products(
                     products_data, products_ids, store_id, end_date_obj, today
                 )
 
+            # Ensure all days in range are present for each product
+            all_dates = pd.date_range(
+                start=start_date_obj.strftime("%Y-%m-%d"),
+                end=end_date_obj.strftime("%Y-%m-%d"),
+            )
+            for pname, arr in products_data.items():
+                date_map = {d[0]: d for d in arr}
+                filled = []
+                for dt in all_dates:
+                    date_str = dt.strftime("%Y-%m-%d")
+                    if date_str in date_map:
+                        filled.append(date_map[date_str])
+                    else:
+                        filled.append([date_str, 0, False])
+                products_data[pname] = filled
+
             return products_data
 
     except Exception as e:
         logging.error(f"Error in products endpoint: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/shifts-analytics")
+def shifts_analytics(
+    store_id: int,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    bills_type: List[str] = None,
+) -> JSONResponse:
+    """
+    Get the total sales for each shift with ML-based prediction support.
+    Uses 60+ days of historical data for training, similar to other analytics endpoints.
+    """
+    if bills_type is None:
+        bills_type = ["sell", "return"]
+
+    try:
+        # Parse dates
+        if end_date:
+            end_date_obj = parse_date(end_date)
+            start_date_obj = parse_date(start_date)
+            today = datetime.now()
+            is_future_prediction = end_date_obj.date() > today.date()
+            historical_end_date = min(end_date_obj, today - timedelta(days=1))
+        else:
+            end_date_obj = datetime.now()
+            start_date_obj = parse_date(start_date)
+            today = datetime.now()
+            is_future_prediction = False
+            historical_end_date = today - timedelta(days=1)
+
+        # Get extended historical data for ML training (similar to other endpoints)
+        training_start_date = historical_end_date - timedelta(
+            days=120
+        )  # 4 months for better training
+
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get all historical shift data for training
+            cur.execute(
+                """
+                SELECT
+                    start_date_time,
+                    end_date_time,
+                    (
+                        SELECT COALESCE(SUM(total), 0)
+                        FROM bills
+                        WHERE time >= start_date_time
+                        AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
+                        AND type IN %s
+                        AND store_id = %s
+                    ) AS total
+                FROM shifts
+                WHERE start_date_time >= %s
+                AND start_date_time <= %s
+                AND store_id = %s
+                AND current = FALSE
+                ORDER BY start_date_time
+                """,
+                (
+                    tuple(bills_type),
+                    store_id,
+                    training_start_date,
+                    historical_end_date,
+                    store_id,
+                ),
+            )
+
+            training_rows = cur.fetchall()
+
+            # Get data for the requested date range
+            cur.execute(
+                """
+                SELECT
+                    start_date_time,
+                    end_date_time,
+                    (
+                        SELECT COALESCE(SUM(total), 0)
+                        FROM bills
+                        WHERE time >= start_date_time
+                        AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
+                        AND type IN %s
+                        AND store_id = %s
+                    ) AS total
+                FROM shifts
+                WHERE start_date_time >= %s
+                AND start_date_time <= %s
+                AND store_id = %s
+                AND current = FALSE
+                ORDER BY start_date_time
+                """,
+                (
+                    tuple(bills_type),
+                    store_id,
+                    start_date_obj,
+                    historical_end_date,
+                    store_id,
+                ),
+            )
+
+            requested_rows = cur.fetchall()
+
+        # Process historical data for display
+        historical_data = []
+        for row in requested_rows:
+            start_dt = pd.to_datetime(row["start_date_time"])
+            end_dt = pd.to_datetime(row["end_date_time"])
+            duration_hours = max(1, int((end_dt - start_dt).total_seconds() / 3600))
+            historical_data.append(
+                {
+                    "start_date_time": str(row["start_date_time"]),
+                    "end_date_time": str(row["end_date_time"]),
+                    "duration_hours": duration_hours,
+                    "total": float(row["total"]),
+                    "is_prediction": False,
+                }
+            )
+
+        # Prepare training data
+        training_data = []
+        for row in training_rows:
+            start_dt = pd.to_datetime(row["start_date_time"])
+            end_dt = pd.to_datetime(row["end_date_time"])
+            duration_hours = max(1, int((end_dt - start_dt).total_seconds() / 3600))
+            training_data.append(
+                {
+                    "start_date_time": start_dt,
+                    "end_date_time": end_dt,
+                    "duration_hours": duration_hours,
+                    "total": float(row["total"]),
+                }
+            )
+
+        # Check if we have enough data for ML
+        if len(training_data) < 14:
+            # Not enough data for ML, use simple average
+            avg_shift_total = (
+                float(np.mean([d["total"] for d in training_data]))
+                if training_data
+                else 0
+            )
+            avg_duration = (
+                float(np.mean([d["duration_hours"] for d in training_data]))
+                if training_data
+                else 8
+            )
+
+            result = historical_data.copy()
+            if is_future_prediction:
+                current_date = today.date() + timedelta(days=1)
+                while current_date <= end_date_obj.date():
+                    # Use consistent shift timing (8 AM to 6 PM as default)
+                    start_hour = 8
+                    end_hour = 18
+                    result.append(
+                        {
+                            "start_date_time": f"{current_date.strftime('%Y-%m-%d')} {start_hour:02d}:00:00",
+                            "end_date_time": f"{current_date.strftime('%Y-%m-%d')} {end_hour:02d}:00:00",
+                            "duration_hours": int(avg_duration),
+                            "total": round(avg_shift_total, 2),
+                            "is_prediction": True,
+                        }
+                    )
+                    current_date += timedelta(days=1)
+            return JSONResponse(content=result)
+
+        # Train ML model similar to other endpoints
+        df = pd.DataFrame(training_data)
+        df["start_dt"] = pd.to_datetime(df["start_date_time"])
+        df["end_dt"] = pd.to_datetime(df["end_date_time"])
+
+        # Create features similar to sales prediction
+        df["day_of_week"] = df["start_dt"].dt.dayofweek
+        df["day_of_month"] = df["start_dt"].dt.day
+        df["month"] = df["start_dt"].dt.month
+        df["start_hour"] = df["start_dt"].dt.hour
+        df["end_hour"] = df["end_dt"].dt.hour
+        df["is_weekend"] = (df["start_dt"].dt.dayofweek >= 5).astype(int)
+
+        # Add lag features
+        df = df.sort_values("start_dt").reset_index(drop=True)
+        for lag in [1, 3, 7]:
+            if len(df) > lag:
+                df[f"lag_{lag}_total"] = (
+                    df["total"].shift(lag).fillna(df["total"].mean())
+                )
+                df[f"lag_{lag}_duration"] = (
+                    df["duration_hours"].shift(lag).fillna(df["duration_hours"].mean())
+                )
+
+        # Train models
+        feature_cols = [
+            "day_of_week",
+            "day_of_month",
+            "month",
+            "duration_hours",
+            "is_weekend",
+        ]
+        for lag in [1, 3, 7]:
+            if f"lag_{lag}_total" in df.columns:
+                feature_cols.extend([f"lag_{lag}_total", f"lag_{lag}_duration"])
+
+        # Remove rows with NaN values
+        mask = ~df[feature_cols + ["total"]].isna().any(axis=1)
+        X_train = df[mask][feature_cols]
+        y_train = df[mask]["total"]
+
+        if len(X_train) < 5:
+            # Fallback to weighted average
+            weights = np.exp(np.linspace(-1, 0, len(training_data)))
+            weights /= weights.sum()
+            weighted_avg = np.dot(weights, [d["total"] for d in training_data])
+            avg_duration = np.mean([d["duration_hours"] for d in training_data])
+
+            result = historical_data.copy()
+            if is_future_prediction:
+                current_date = today.date() + timedelta(days=1)
+                while current_date <= end_date_obj.date():
+                    result.append(
+                        {
+                            "start_date_time": f"{current_date.strftime('%Y-%m-%d')} 08:00:00",
+                            "end_date_time": f"{current_date.strftime('%Y-%m-%d')} 18:00:00",
+                            "duration_hours": int(avg_duration),
+                            "total": round(weighted_avg, 2),
+                            "is_prediction": True,
+                        }
+                    )
+                    current_date += timedelta(days=1)
+            return JSONResponse(content=result)
+
+        # Train XGBoost model
+        model_sales = xgb.XGBRegressor(
+            n_estimators=400,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            min_child_weight=3,
+            gamma=0.05,
+            reg_alpha=0.05,
+            reg_lambda=1.0,
+            random_state=42,
+            n_jobs=-1,
+        )
+        model_sales.fit(X_train, y_train)
+
+        # Make predictions if needed
+        result = historical_data.copy()
+        if is_future_prediction:
+            current_date = today.date() + timedelta(days=1)
+            recent_data = df.tail(7)  # Last week for lag features
+
+            while current_date <= end_date_obj.date():
+                # Predict shift characteristics
+                dow = current_date.weekday()
+                is_weekend = 1 if dow >= 5 else 0
+
+                # Use average duration from recent shifts
+                avg_duration = int(recent_data["duration_hours"].mean())
+
+                # Estimate shift times based on patterns
+                avg_start_hour = int(recent_data["start_hour"].mean())
+                avg_end_hour = int(recent_data["end_hour"].mean())
+
+                # Create features for prediction
+                pred_features = {
+                    "day_of_week": dow,
+                    "day_of_month": current_date.day,
+                    "month": current_date.month,
+                    "duration_hours": avg_duration,
+                    "is_weekend": is_weekend,
+                }
+
+                # Add lag features from recent data
+                for lag in [1, 3, 7]:
+                    if f"lag_{lag}_total" in feature_cols and len(recent_data) >= lag:
+                        pred_features[f"lag_{lag}_total"] = recent_data["total"].iloc[
+                            -lag
+                        ]
+                        pred_features[f"lag_{lag}_duration"] = recent_data[
+                            "duration_hours"
+                        ].iloc[-lag]
+                    elif f"lag_{lag}_total" in feature_cols:
+                        pred_features[f"lag_{lag}_total"] = recent_data["total"].mean()
+                        pred_features[f"lag_{lag}_duration"] = recent_data[
+                            "duration_hours"
+                        ].mean()
+
+                # Ensure all required features are present
+                pred_df = pd.DataFrame([pred_features])
+                for col in feature_cols:
+                    if col not in pred_df.columns:
+                        pred_df[col] = 0
+
+                pred_df = pred_df[feature_cols]
+
+                # Predict sales
+                pred_total = float(model_sales.predict(pred_df)[0])
+                pred_total = max(0, pred_total)
+
+                result.append(
+                    {
+                        "start_date_time": f"{current_date.strftime('%Y-%m-%d')} {avg_start_hour:02d}:00:00",
+                        "end_date_time": f"{current_date.strftime('%Y-%m-%d')} {avg_end_hour:02d}:00:00",
+                        "duration_hours": avg_duration,
+                        "total": round(pred_total, 0),
+                        "is_prediction": True,
+                    }
+                )
+
+                current_date += timedelta(days=1)
+
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logging.error(f"Error in shifts analytics: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e

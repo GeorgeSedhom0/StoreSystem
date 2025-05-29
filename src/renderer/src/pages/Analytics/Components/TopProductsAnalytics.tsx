@@ -18,7 +18,7 @@ import { exportToExcel } from "../utils";
 import { StoreContext } from "@renderer/StoreDataProvider";
 
 export interface ProductsAnalyticsType {
-  [key: string]: [string, number][];
+  [key: string]: [string, number, boolean?][];
 }
 
 const getAnalytics = async (
@@ -93,44 +93,17 @@ const TopProductsAnalytics = () => {
             title: "Export to Excel",
             icon: `image://${tableIcon}`,
             onclick: () => {
-              const groupedByDate = new Map<string, Map<string, number>>();
-              const allDates = new Set<string>();
-              const allProducts = new Set<string>();
-
-              Object.entries(data).forEach(([name, values]) => {
-                allProducts.add(name);
-                values.forEach(([date, _]) => {
-                  allDates.add(date);
-                });
-              });
-
-              allDates.forEach((date) => {
-                if (!groupedByDate.has(date)) {
-                  groupedByDate.set(date, new Map<string, number>());
-                }
-                allProducts.forEach((product) => {
-                  groupedByDate.get(date)!.set(product, 0);
-                });
-              });
-
-              Object.entries(data).forEach(([name, values]) => {
-                values.forEach(([date, value]) => {
-                  groupedByDate.get(date)!.set(name, value);
-                });
-              });
-
               const exportData = [
-                ["التاريخ", "المنتج", "الكمية المباعة"],
-                ...Array.from(groupedByDate.entries()).flatMap(
-                  ([date, products]) =>
-                    Array.from(products.entries()).map(([name, value]) => [
-                      date,
-                      name,
-                      value,
-                    ]),
+                ["التاريخ", "المنتج", "الكمية المباعة", "نوع البيانات"],
+                ...Object.entries(data).flatMap(([name, values]) =>
+                  values.map(([date, value, is_prediction]) => [
+                    date,
+                    name,
+                    value,
+                    is_prediction ? "توقع" : "فعلي",
+                  ]),
                 ),
               ];
-
               exportToExcel(exportData);
             },
           },
@@ -147,7 +120,17 @@ const TopProductsAnalytics = () => {
         name,
         type: "line",
         smooth: true,
-        data: values.map(([date, value]) => [date, value]),
+        data: values.map(([date, value, is_prediction]) => ({
+          value: [date, value],
+          itemStyle: is_prediction
+            ? {
+                color: "rgba(255, 165, 0, 0.6)",
+                borderColor: "#FFA500",
+                borderWidth: 2,
+                borderType: "dashed",
+              }
+            : undefined,
+        })),
         lineStyle: {
           type: "solid",
         },
@@ -165,6 +148,13 @@ const TopProductsAnalytics = () => {
             <Typography variant="body1">
               قم بتحديد الفترة لعرض الاحصائيات
             </Typography>
+            {Object.values(data).some((arr) =>
+              arr.some(([, , is_prediction]) => is_prediction),
+            ) && (
+              <Typography variant="body2" sx={{ color: "orange", mt: 1 }}>
+                🔮 يتضمن التقرير توقعات للتواريخ المستقبلية
+              </Typography>
+            )}
           </Grid2>
 
           <Grid2 container gap={3} size={12}>

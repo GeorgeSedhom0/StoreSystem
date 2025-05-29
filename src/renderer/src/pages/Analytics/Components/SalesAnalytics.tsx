@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
-import { useCallback, useMemo, useState, useContext } from "react";
+import { useCallback, useContext, useMemo, useState } from "react";
 import {
   Button,
   ButtonGroup,
@@ -21,7 +21,7 @@ import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
 import { StoreContext } from "@renderer/StoreDataProvider";
 
-type SalesAnalyticsType = [string, number][];
+type SalesAnalyticsType = [string, number, boolean?][];
 const getAnalytics = async (
   startDate: string,
   endDate: string,
@@ -102,7 +102,16 @@ const SalesAnalytics = () => {
             title: "Export to Excel",
             icon: `image://${tableIcon}`,
             onclick: () => {
-              const exportData = [["التاريخ", "الاجمالى"], ...data];
+              const exportData = [
+                ["التاريخ", "الاجمالى", "نوع البيانات"],
+                ...data.map(
+                  ([date, value, is_prediction]: [
+                    string,
+                    number,
+                    boolean?,
+                  ]) => [date, value, is_prediction ? "توقع" : "فعلي"],
+                ),
+              ];
 
               exportToExcel(exportData);
             },
@@ -121,7 +130,19 @@ const SalesAnalytics = () => {
           name: "الاجمالى",
           type: "bar",
           smooth: true,
-          data: data,
+          data: data.map(
+            ([date, value, is_prediction]: [string, number, boolean?]) => ({
+              value: [date, value],
+              itemStyle: is_prediction
+                ? {
+                    color: "rgba(255, 165, 0, 0.6)",
+                    borderColor: "#FFA500",
+                    borderWidth: 2,
+                    borderType: "dashed",
+                  }
+                : undefined,
+            }),
+          ),
         },
       ],
     }),
@@ -197,7 +218,8 @@ const SalesAnalytics = () => {
             </ButtonGroup>
           </Grid2>
           <Grid2 size={12}>
-            الاجمالى: {data.reduce((acc, [_, v]) => acc + v, 0)}
+            الاجمالى:{" "}
+            {data.reduce((acc, [_, v]) => acc + v, 0).toLocaleString()}
           </Grid2>
           <Grid2 size={12}>
             <EChartsReact
@@ -205,6 +227,13 @@ const SalesAnalytics = () => {
               style={{ height: 500 }}
               theme={mode}
               notMerge={true}
+              loadingOption={{
+                text: "جار التحميل...",
+                color: "#1890ff",
+                textColor: "#fff",
+                maskColor: "rgba(0, 0, 0, 0.45)",
+              }}
+              showLoading={isFetching}
             />
           </Grid2>
         </Grid2>

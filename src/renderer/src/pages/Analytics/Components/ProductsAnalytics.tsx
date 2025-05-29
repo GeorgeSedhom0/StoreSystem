@@ -159,36 +159,17 @@ const ProductsAnalytics = () => {
             title: "Export to Excel",
             icon: `image://${tableIcon}`,
             onclick: () => {
-              const allDates = new Set<string>();
-              const productMap = new Map<string, Map<string, number>>();
-
-              Object.entries(actualData).forEach(([name, values]) => {
-                if (!productMap.has(name)) {
-                  productMap.set(name, new Map<string, number>());
-                }
-
-                values.forEach(([date, value]) => {
-                  allDates.add(date);
-                  productMap.get(name)!.set(date, value);
-                });
-              });
-
-              const sortedDates = Array.from(allDates).sort();
-
-              const dataRows = Array.from(productMap.entries()).flatMap(
-                ([productName, dateValues]) => {
-                  return sortedDates.map((date) => {
-                    const value = dateValues.get(date) || 0;
-                    return [productName, date, value];
-                  });
-                },
-              );
-
               const exportData = [
-                ["المنتج", "التاريخ", "الكمية المباعة"],
-                ...dataRows,
+                ["المنتج", "التاريخ", "الكمية المباعة", "نوع البيانات"],
+                ...Object.entries(actualData).flatMap(([productName, values]) =>
+                  values.map(([date, value, is_prediction]) => [
+                    productName,
+                    date,
+                    value,
+                    is_prediction ? "توقع" : "فعلي",
+                  ]),
+                ),
               ];
-
               exportToExcel(exportData);
             },
           },
@@ -205,7 +186,17 @@ const ProductsAnalytics = () => {
         name,
         type: "line",
         smooth: true,
-        data: values.map(([date, value]) => [date, value]),
+        data: values.map(([date, value, is_prediction]) => ({
+          value: [date, value],
+          itemStyle: is_prediction
+            ? {
+                color: "rgba(255, 165, 0, 0.6)",
+                borderColor: "#FFA500",
+                borderWidth: 2,
+                borderType: "dashed",
+              }
+            : undefined,
+        })),
         lineStyle: {
           type: "solid",
         },
@@ -237,6 +228,13 @@ const ProductsAnalytics = () => {
               قم بتحديد الفترة و المنتجات لعرض الاحصائيات
             </Typography>
             <Typography variant="body1">يمكن اختيار اكثر من منتج</Typography>
+            {Object.values(actualData).some((arr) =>
+              arr.some(([, , is_prediction]) => is_prediction),
+            ) && (
+              <Typography variant="body2" sx={{ color: "orange", mt: 1 }}>
+                🔮 يتضمن التقرير توقعات للتواريخ المستقبلية
+              </Typography>
+            )}
           </Grid2>
 
           <Grid2 container gap={3} size={12}>

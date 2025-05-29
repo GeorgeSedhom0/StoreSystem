@@ -1510,61 +1510,6 @@ async def inventory_as_admin():
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.post("/shifts-analytics")
-def shifts_analytics(
-    store_id: int,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    bills_type: list[str] = ["sell", "return"],
-) -> JSONResponse:
-    """
-    Get the total sales for each shift
-
-    Args:
-        start_date (Optional[str]): The start date of the shifts
-        end_date (Optional[str]): The end date of the shifts
-
-    Returns:
-        JSONResponse: The total sales for each shift
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT
-                    start_date_time,
-                    end_date_time,
-                    (
-                        SELECT COALESCE(SUM(total), 0)
-                        FROM bills
-                        WHERE time >= start_date_time
-                        AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
-                        AND type IN %s
-                        AND store_id = %s
-                    ) AS total
-                FROM shifts
-                WHERE start_date_time >= %s
-                AND start_date_time <= %s
-                AND store_id = %s
-                AND current = False
-                ORDER BY start_date_time
-                """,
-                (tuple(bills_type), store_id, start_date, end_date, store_id),
-            )
-            data = [
-                {
-                    "start_date_time": str(row["start_date_time"]),
-                    "end_date_time": str(row["end_date_time"]),
-                    "total": row["total"],
-                }
-                for row in cur.fetchall()
-            ]
-            return JSONResponse(content=data)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
 @app.get("/backup")
 async def backup():
     """

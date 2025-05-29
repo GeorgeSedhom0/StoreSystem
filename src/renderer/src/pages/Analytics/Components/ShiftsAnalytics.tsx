@@ -25,6 +25,7 @@ interface ShiftsAnalytics {
   start_date_time: string;
   end_date_time: string;
   total: number;
+  is_prediction?: boolean;
 }
 const getAnalytics = async (
   startDate: string,
@@ -109,24 +110,32 @@ const ShiftsAnalytics = () => {
             icon: `image://${tableIcon}`,
             onclick: () => {
               exportToExcel([
-                ["بداية الشفت", "نهاية الشفت", "الاجمالى"],
-                ...data.map(({ start_date_time, end_date_time, total }) => [
-                  new Date(start_date_time).toLocaleString("ar-eg", {
-                    year: "numeric",
-                    month: "numeric",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "numeric",
-                  }),
-                  new Date(end_date_time).toLocaleString("ar-eg", {
-                    year: "numeric",
-                    month: "numeric",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "numeric",
-                  }),
-                  total,
-                ]),
+                ["بداية الشفت", "نهاية الشفت", "الاجمالى", "نوع البيانات"],
+                ...data.map(
+                  ({
+                    start_date_time,
+                    end_date_time,
+                    total,
+                    is_prediction,
+                  }) => [
+                    new Date(start_date_time).toLocaleString("ar-eg", {
+                      year: "numeric",
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "numeric",
+                    }),
+                    new Date(end_date_time).toLocaleString("ar-eg", {
+                      year: "numeric",
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "numeric",
+                    }),
+                    total,
+                    is_prediction ? "توقع" : "فعلي",
+                  ],
+                ),
               ]);
             },
           },
@@ -135,8 +144,8 @@ const ShiftsAnalytics = () => {
       },
       xAxis: {
         type: "category",
-        data: data.map(
-          ({ start_date_time, end_date_time }) =>
+        data: data.map(({ start_date_time, end_date_time, is_prediction }) => {
+          const label =
             new Date(start_date_time).toLocaleString("ar-eg", {
               year: "numeric",
               month: "numeric",
@@ -151,8 +160,10 @@ const ShiftsAnalytics = () => {
               day: "numeric",
               hour: "numeric",
               minute: "numeric",
-            }),
-        ),
+            });
+
+          return is_prediction ? `🔮 ${label}` : label;
+        }),
       },
       yAxis: {
         type: "value",
@@ -161,7 +172,18 @@ const ShiftsAnalytics = () => {
         {
           type: "bar",
           smooth: true,
-          data: data.map(({ total }) => total),
+          data: data.map(({ total, is_prediction }) => ({
+            value: total,
+            itemStyle: is_prediction
+              ? {
+                  color: "rgba(255, 165, 0, 0.6)",
+                  borderColor: "#FFA500",
+                  borderWidth: 2,
+                  borderType: "dashed",
+                }
+              : undefined,
+            is_prediction,
+          })),
         },
       ],
     }),
@@ -254,6 +276,13 @@ const ShiftsAnalytics = () => {
               style={{ height: 500 }}
               theme={mode}
               notMerge={true}
+              loadingOption={{
+                text: "جار التحميل...",
+                color: "#1890ff",
+                textColor: "#fff",
+                maskColor: "rgba(0, 0, 0, 0.45)",
+              }}
+              showLoading={isFetching}
             />
           </Grid2>
         </Grid2>
