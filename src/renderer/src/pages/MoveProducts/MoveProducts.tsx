@@ -19,7 +19,7 @@ import {
   DialogActions,
   TextField,
 } from "@mui/material";
-import { useCallback, useState, useContext } from "react";
+import { useCallback, useState, useContext, useRef } from "react";
 import { Product, SCProduct, StoreData } from "../../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -61,6 +61,10 @@ const MoveProducts = () => {
   const [billId, setBillId] = useState<string>("");
   const [isLoadingBillProducts, setIsLoadingBillProducts] =
     useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Add ref to track submission progress
+  const submissionInProgress = useRef<boolean>(false);
 
   const { storeId } = useContext(StoreContext);
 
@@ -104,9 +108,41 @@ const MoveProducts = () => {
 
   useBarcodeDetection(products, addToCart, setMsg);
   useQuickHandle(shoppingCart, setShoppingCart);
-
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[]) => {
+      // Prevent multiple submissions
+      if (isSubmitting || submissionInProgress.current) {
+        console.log(
+          "Submission already in progress, ignoring duplicate request",
+        );
+        return;
+      }
+
+      // Set submission states immediately to prevent race conditions
+      setIsSubmitting(true);
+      submissionInProgress.current = true;
+
+      // Validate inputs
+      if (shoppingCart.length === 0) {
+        setMsg({
+          type: "error",
+          text: "لا توجد منتجات في السلة",
+        });
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
+        return;
+      }
+
+      if (!destinationStoreId) {
+        setMsg({
+          type: "error",
+          text: "يرجى اختيار المتجر الوجهة",
+        });
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
+        return;
+      }
+
       try {
         const bill = {
           time: new Date().toLocaleString(),
@@ -142,9 +178,13 @@ const MoveProducts = () => {
           type: "error",
           text: "حدث خطأ أثناء نقل المنتجات",
         });
+      } finally {
+        // Always reset submission state
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
       }
     },
-    [destinationStoreId, storeId, updateProducts],
+    [destinationStoreId, storeId, updateProducts, isSubmitting],
   );
 
   const handleStartFromBill = async () => {
@@ -231,12 +271,15 @@ const MoveProducts = () => {
 
   return (
     <Grid2 container spacing={3}>
-      <AlertMessage message={msg} setMessage={setMsg} />
-
+      <AlertMessage message={msg} setMessage={setMsg} />{" "}
       <LoadingScreen
-        loading={isProductsLoading || isStoresLoading || isLoadingBillProducts}
+        loading={
+          isProductsLoading ||
+          isStoresLoading ||
+          isLoadingBillProducts ||
+          isSubmitting
+        }
       />
-
       {/* Bill ID Dialog */}
       <Dialog open={billDialogOpen} onClose={() => setBillDialogOpen(false)}>
         <DialogTitle>ابدأ من فاتورة</DialogTitle>
@@ -250,17 +293,24 @@ const MoveProducts = () => {
             value={billId}
             onChange={(e) => setBillId(e.target.value)}
           />
-        </DialogContent>
+        </DialogContent>{" "}
         <DialogActions>
-          <Button onClick={() => setBillDialogOpen(false)} color="secondary">
+          <Button
+            onClick={() => setBillDialogOpen(false)}
+            color="secondary"
+            disabled={isLoadingBillProducts}
+          >
             إلغاء
           </Button>
-          <Button onClick={handleStartFromBill} color="primary">
-            تأكيد
+          <Button
+            onClick={handleStartFromBill}
+            color="primary"
+            disabled={isLoadingBillProducts}
+          >
+            {isLoadingBillProducts ? "جاري التحميل..." : "تأكيد"}
           </Button>
         </DialogActions>
       </Dialog>
-
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 3 }}>
           <Grid2 container spacing={3} alignItems="center">
@@ -307,10 +357,14 @@ const MoveProducts = () => {
               <Button
                 variant="contained"
                 onClick={() => submitBill(shoppingCart)}
-                disabled={shoppingCart.length === 0 || !destinationStoreId}
+                disabled={
+                  shoppingCart.length === 0 ||
+                  !destinationStoreId ||
+                  isSubmitting
+                }
                 fullWidth
               >
-                نقل المنتجات
+                {isSubmitting ? "جاري النقل..." : "نقل المنتجات"}
               </Button>
             </Grid2>
 
@@ -336,7 +390,6 @@ const MoveProducts = () => {
           </Grid2>
         </Card>
       </Grid2>
-
       <Grid2 size={12}>
         <Card elevation={3}>
           <TableContainer

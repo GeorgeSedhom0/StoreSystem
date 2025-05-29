@@ -10,13 +10,17 @@ import Themes from "./Components/Themes";
 import PrinterSettings from "./Components/PrinterSettings";
 
 const Settings = () => {
-  const [tab, setTab] = useState("1");
+  const [tab, setTab] = useState(sessionStorage.getItem("settingsTab") || "1");
   const parent = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!parent.current) return;
     autoAnimate(parent.current);
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem("settingsTab", tab);
+  }, [tab]);
 
   return (
     <Card elevation={3} sx={{ px: 3, py: 2 }}>

@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from datetime import datetime
+import logging
 
 
 # Feature engineering for sales prediction
@@ -142,3 +143,95 @@ def predict_product_sales(
         return predictions
     except Exception:
         return None
+
+
+def train_shifts_prediction_model(historical_data: List[Dict]):
+    """Train XGBoost model for shifts sales prediction"""
+    try:
+        if len(historical_data) < 5:
+            return None
+
+        df = pd.DataFrame(historical_data)
+
+        # Create lag features
+        df = df.sort_values("start_date_time").reset_index(drop=True)
+        for lag in [1, 3, 7]:
+            if len(df) > lag:
+                df[f"lag_{lag}_total"] = (
+                    df["total"].shift(lag).fillna(df["total"].mean())
+                )
+                df[f"lag_{lag}_duration"] = (
+                    df["duration_hours"].shift(lag).fillna(df["duration_hours"].mean())
+                )
+
+        # Define feature columns
+        feature_cols = [
+            "day_of_week",
+            "day_of_month",
+            "month",
+            "duration_hours",
+            "is_weekend",
+            "start_hour",
+            "end_hour",
+        ]
+        for lag in [1, 3, 7]:
+            if f"lag_{lag}_total" in df.columns:
+                feature_cols.extend([f"lag_{lag}_total", f"lag_{lag}_duration"])
+
+        # Remove rows with NaN values
+        mask = ~df[feature_cols + ["total"]].isna().any(axis=1)
+        X_train = df[mask][feature_cols]
+        y_train = df[mask]["total"]
+
+        if len(X_train) < 5:
+            return None
+
+        # Train XGBoost model
+        model = xgb.XGBRegressor(
+            n_estimators=400,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            min_child_weight=3,
+            gamma=0.05,
+            reg_alpha=0.05,
+            reg_lambda=1.0,
+            random_state=42,
+            n_jobs=-1,
+        )
+        model.fit(X_train, y_train)
+        return model
+
+    except Exception as e:
+        logging.error(f"Error training shifts model: {e}")
+        return None
+
+
+def create_features_for_shifts(
+    date, duration_hours: int, start_hour: int, end_hour: int, recent_data: pd.DataFrame
+) -> List[float]:
+    """Create features for shifts prediction"""
+    dow = date.weekday()
+    is_weekend = 1 if dow >= 5 else 0
+
+    features = [
+        dow,  # day_of_week
+        date.day,  # day_of_month
+        date.month,  # month
+        duration_hours,  # duration_hours
+        is_weekend,  # is_weekend
+        start_hour,  # start_hour
+        end_hour,  # end_hour
+    ]
+
+    # Add lag features from recent data
+    for lag in [1, 3, 7]:
+        if len(recent_data) >= lag:
+            features.append(recent_data["total"].iloc[-lag])  # lag_X_total
+            features.append(recent_data["duration_hours"].iloc[-lag])  # lag_X_duration
+        else:
+            features.append(recent_data["total"].mean())
+            features.append(recent_data["duration_hours"].mean())
+
+    return features

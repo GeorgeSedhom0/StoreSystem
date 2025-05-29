@@ -171,10 +171,12 @@ const StockColumn = ({ stock }: { stock: number }) => {
 const PrintBarCodeColumn = ({
   product,
   isPrintingCode,
+  initialQuantity,
   setIsPrintingCode,
 }: {
   product: SCProduct;
   isPrintingCode: boolean;
+  initialQuantity?: number;
   setIsPrintingCode: Dispatch<SetStateAction<boolean>>;
 }) => {
   return (
@@ -184,6 +186,7 @@ const PrintBarCodeColumn = ({
           code={product.barCode || ""}
           name={product.name}
           price={product.price}
+          initialQuantity={initialQuantity}
           setOpen={setIsPrintingCode}
         />
       )}
@@ -293,6 +296,7 @@ const Column = ({
       <PrintBarCodeColumn
         product={product}
         isPrintingCode={isPrintingCode}
+        initialQuantity={product.quantity}
         setIsPrintingCode={setIsPrintingCode}
       />
     );

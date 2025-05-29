@@ -231,7 +231,6 @@ const Buy = () => {
                   </Select>
                 </FormControl>
               </Grid2>
-
               <Grid2 size={3}>
                 <TextField
                   size="small"
@@ -241,8 +240,7 @@ const Buy = () => {
                   onChange={(e) => setDiscount(+e.target.value)}
                   fullWidth
                 />
-              </Grid2>
-
+              </Grid2>{" "}
               <Grid2 size={3}>
                 <Button
                   variant="contained"
@@ -250,10 +248,9 @@ const Buy = () => {
                   disabled={isSubmitDisabled}
                   fullWidth
                 >
-                  اضافة فاتورة
+                  {isSubmitting ? "جاري الحفظ..." : "اضافة فاتورة"}
                 </Button>
               </Grid2>
-
               <Grid2 size={3}>
                 <Typography variant="h6" align="center">
                   الاجمالي:{" "}

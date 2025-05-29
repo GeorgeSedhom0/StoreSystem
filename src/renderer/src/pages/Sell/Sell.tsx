@@ -122,7 +122,6 @@ const Sell = () => {
   }, [isCreatingBill, isSubmitting]);
 
   const loading = isProductsLoading || isShiftLoading;
-
   const addToCart = useCallback((product: Product | null) => {
     if (!product) return;
     setShoppingCart((prev) => {
@@ -144,6 +143,7 @@ const Sell = () => {
             wholesale_price: product.wholesale_price,
             quantity: 1,
             stock: product.stock,
+            barCode: product.bar_code,
           },
         ];
       }
