@@ -16,14 +16,27 @@ import {
   FormControlLabel,
   Switch,
   Box,
+  Table,
+  TableBody,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  TableSortLabel,
+  Chip,
+  InputAdornment,
+  TablePagination,
+  Typography,
 } from "@mui/material";
+import {
+  Search as SearchIcon,
+  Download as DownloadIcon,
+  TrendingUp as TrendingUpIcon,
+  TrendingDown as TrendingDownIcon,
+  AccountBalance as AccountBalanceIcon,
+} from "@mui/icons-material";
 import { CashFlow, Party } from "../../utils/types";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { TableVirtuoso } from "react-virtuoso";
-import {
-  fixedHeaderContent,
-  VirtuosoTableComponents,
-} from "./Components/VirtualTableHelpers";
 import dayjs, { Dayjs } from "dayjs";
 import { useQuery } from "@tanstack/react-query";
 import { DateTimePicker, LocalizationProvider } from "@mui/x-date-pickers";
@@ -32,6 +45,7 @@ import { useParams } from "react-router-dom";
 import FormatedNumber from "../Shared/FormatedNumber";
 import useParties from "../Shared/hooks/useParties";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { exportToExcel } from "../Analytics/utils";
 
 const getCashFlow = async (
   startDate: Dayjs,
@@ -74,7 +88,13 @@ const Cash = () => {
     }
     return false;
   });
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+
+  // New state for enhanced table functionality
+  const [searchTerm, setSearchTerm] = useState("");
+  const [orderBy, setOrderBy] = useState<keyof CashFlow>("time");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const { partyId } = useParams();
   const { storeId } = useContext(StoreContext);
@@ -115,38 +135,116 @@ const Cash = () => {
     initialData: [],
   });
 
-  const availableTypes = useMemo(() => {
-    const types = new Set<string>();
-    rawCashFlow.forEach((row) => {
-      types.add(row.description);
-    });
-    return Array.from(types);
-  }, [rawCashFlow]);
-
   const cashFlow = useMemo(() => {
-    // Step 1: Filter the rawCashFlow based on selectedTypes
-    const filteredCashFlow = rawCashFlow.filter((row) =>
-      selectedTypes.length > 0 ? selectedTypes.includes(row.description) : true,
-    );
-
-    // Step 2: Process the filtered data
+    // Process the raw data
     const localCashFlow: CashFlow[] = [];
     if (localTotal) {
       // override the total column to have the first total as 0
       let total = 0;
-      for (let i = filteredCashFlow.length - 1; i >= 0; i--) {
-        const row = filteredCashFlow[i];
+      for (let i = rawCashFlow.length - 1; i >= 0; i--) {
+        const row = rawCashFlow[i];
         total += row.amount;
         localCashFlow.unshift({ ...row, total });
       }
     } else {
-      localCashFlow.push(...filteredCashFlow);
+      localCashFlow.push(...rawCashFlow);
     }
 
     return localCashFlow;
-  }, [rawCashFlow, localTotal, selectedTypes]);
+  }, [rawCashFlow, localTotal]);
+
+  // Enhanced filtering and sorting logic
+  const filteredAndSortedCashFlow = useMemo(() => {
+    let filtered = cashFlow.filter((item) => {
+      const matchesSearch =
+        item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.party_name &&
+          item.party_name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      return matchesSearch;
+    });
+
+    // Sort the filtered data
+    filtered.sort((a, b) => {
+      const aValue = a[orderBy];
+      const bValue = b[orderBy];
+
+      if (orderBy === "time") {
+        const aTime = new Date(aValue as string).getTime();
+        const bTime = new Date(bValue as string).getTime();
+        return order === "asc" ? aTime - bTime : bTime - aTime;
+      }
+
+      if (orderBy === "amount" || orderBy === "total") {
+        const aNum = Number(aValue) || 0;
+        const bNum = Number(bValue) || 0;
+        return order === "asc" ? aNum - bNum : bNum - aNum;
+      }
+
+      const aStr = String(aValue || "").toLowerCase();
+      const bStr = String(bValue || "").toLowerCase();
+      return order === "asc"
+        ? aStr.localeCompare(bStr)
+        : bStr.localeCompare(aStr);
+    });
+
+    return filtered;
+  }, [cashFlow, searchTerm, orderBy, order]);
+
+  // Statistics calculations
+  const statistics = useMemo(() => {
+    const totalIn = filteredAndSortedCashFlow
+      .filter((item) => item.type === "in")
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    const totalOut = filteredAndSortedCashFlow
+      .filter((item) => item.type === "out")
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    const netFlow = totalIn - totalOut;
+
+    return {
+      totalIn,
+      totalOut,
+      netFlow,
+      totalTransactions: filteredAndSortedCashFlow.length,
+    };
+  }, [filteredAndSortedCashFlow]);
 
   const loading = isShiftLoading || isCashFlowLoading;
+
+  // Handler functions for enhanced functionality
+  const handleSort = (property: keyof CashFlow) => {
+    const isAsc = orderBy === property && order === "asc";
+    setOrder(isAsc ? "desc" : "asc");
+    setOrderBy(property);
+  };
+
+  const handleChangePage = (_: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const handleExportToExcel = () => {
+    const exportData = [
+      ["الوقت", "المبلغ", "نوع الحركة", "الوصف", "المجموع", "الطرف الثاني"],
+      ...filteredAndSortedCashFlow.map((item) => [
+        new Date(item.time).toLocaleString("ar-EG"),
+        item.amount,
+        item.type === "in" ? "دخول" : "خروج",
+        item.description,
+        item.total,
+        item.party_name || "بدون طرف ثاني",
+      ]),
+    ];
+    exportToExcel(exportData);
+  };
 
   const setRange = useCallback(
     (range: "shift" | "day" | "week" | "month") => {
@@ -216,14 +314,111 @@ const Cash = () => {
       setMsg({ type: "error", text: "لم تتم الإضافة بنجاح" });
     }
   };
-
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <LoadingScreen loading={loading} />
       <Grid2 container spacing={3}>
+        {/* Statistics Cards - full width, own card */}
+        <Grid2 size={12}>
+          <Card elevation={3} sx={{ p: 2, mt: 2 }}>
+            <Grid2 container spacing={2}>
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: "center",
+                    bgcolor: "success.light",
+                    color: "success.contrastText",
+                    boxShadow: 2,
+                    borderRadius: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <TrendingUpIcon sx={{ fontSize: 32, mb: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "1rem" }}
+                  >
+                    إجمالي الدخل
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                    <FormatedNumber>{statistics.totalIn}</FormatedNumber>
+                  </Typography>
+                </Card>
+              </Grid2>
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: "center",
+                    bgcolor: "error.light",
+                    color: "error.contrastText",
+                    boxShadow: 2,
+                    borderRadius: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <TrendingDownIcon sx={{ fontSize: 32, mb: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "1rem" }}
+                  >
+                    إجمالي الخروج
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                    <FormatedNumber>{statistics.totalOut}</FormatedNumber>
+                  </Typography>
+                </Card>
+              </Grid2>
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: "center",
+                    bgcolor: "primary.light",
+                    color: "primary.contrastText",
+                    boxShadow: 2,
+                    borderRadius: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <AccountBalanceIcon sx={{ fontSize: 32, mb: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "1rem" }}
+                  >
+                    عدد المعاملات
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                    {statistics.totalTransactions}
+                  </Typography>
+                </Card>
+              </Grid2>
+            </Grid2>
+          </Card>
+        </Grid2>
+
+        {/* Add Cash Flow Form */}
         <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 3 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                mb: 2,
+                color: "primary.main",
+                fontWeight: 600,
+                fontSize: "1.2rem",
+              }}
+            >
+              إضافة حركة نقدية جديدة
+            </Typography>
             <Grid2 container spacing={3}>
               <Grid2 container size={12} justifyContent="space-between">
                 <Box display="flex" alignItems="center" gap={3}>
@@ -243,9 +438,7 @@ const Cash = () => {
                       onChange={(e) =>
                         setMoveType(e.target.value as "in" | "out")
                       }
-                      sx={{
-                        minWidth: 120,
-                      }}
+                      sx={{ minWidth: 120 }}
                     >
                       <MenuItem value="in">دخول</MenuItem>
                       <MenuItem value="out">خروج</MenuItem>
@@ -256,7 +449,12 @@ const Cash = () => {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                   />
-                  <Button onClick={addCashFlow} disabled={loading}>
+                  <Button
+                    onClick={addCashFlow}
+                    disabled={loading}
+                    variant="contained"
+                    sx={{ minWidth: 120 }}
+                  >
                     إضافة تدفق نقدي
                   </Button>
                 </Box>
@@ -268,7 +466,6 @@ const Cash = () => {
                   label="إظهار الإجمالى المحلي"
                 />
               </Grid2>
-
               <Grid2 container gap={3} size={12}>
                 <LocalizationProvider
                   dateAdapter={AdapterDayjs}
@@ -284,7 +481,6 @@ const Cash = () => {
                     disableFuture
                   />
                 </LocalizationProvider>
-
                 <LocalizationProvider
                   dateAdapter={AdapterDayjs}
                   adapterLocale="ar-sa"
@@ -298,21 +494,7 @@ const Cash = () => {
                     }}
                   />
                 </LocalizationProvider>
-
-                <Autocomplete
-                  multiple
-                  options={availableTypes}
-                  value={selectedTypes}
-                  onChange={(_, value) => setSelectedTypes(value)}
-                  renderInput={(params) => (
-                    <TextField {...params} label="الأنواع" />
-                  )}
-                  sx={{
-                    minWidth: 250,
-                  }}
-                />
               </Grid2>
-
               <Grid2 size={12}>
                 <ButtonGroup>
                   <Button onClick={() => setRange("shift")}>اخر شيفت</Button>
@@ -321,7 +503,6 @@ const Cash = () => {
                   <Button onClick={() => setRange("month")}>هذا الشهر</Button>
                 </ButtonGroup>
               </Grid2>
-
               <Grid2 size={12}>
                 <Autocomplete
                   options={
@@ -410,9 +591,7 @@ const Cash = () => {
                       onChange={(e) =>
                         setNewParty({ ...newParty, type: e.target.value })
                       }
-                      sx={{
-                        width: 200,
-                      }}
+                      sx={{ width: 200 }}
                     >
                       <MenuItem value="عميل">عميل</MenuItem>
                       <MenuItem value="مورد">مورد</MenuItem>
@@ -423,42 +602,164 @@ const Cash = () => {
             </Grid2>
           </Card>
         </Grid2>
+        {/* Search and Table Section */}
         <Grid2 size={12}>
-          <Card
-            elevation={3}
-            sx={{
-              position: "relative",
-              height: 600,
-            }}
-          >
-            <TableVirtuoso
-              fixedHeaderContent={fixedHeaderContent}
-              components={VirtuosoTableComponents}
-              data={cashFlow}
-              itemContent={(_, row) => (
-                <>
-                  <TableCell>
-                    {new Date(row.time).toLocaleString("ar-EG", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    <FormatedNumber>{row.amount}</FormatedNumber>
-                  </TableCell>
-                  <TableCell>{row.type === "in" ? "دخول" : "خروج"}</TableCell>
-                  <TableCell>{row.description}</TableCell>
-                  <TableCell>
-                    <FormatedNumber>{row.total}</FormatedNumber>
-                  </TableCell>
-                  <TableCell>
-                    {row.party_name ? row.party_name : "بدون طرف ثانى"}
-                  </TableCell>
-                </>
-              )}
+          <Card elevation={3} sx={{ p: 2 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                mb: 2,
+                color: "primary.main",
+                fontWeight: 600,
+                fontSize: "1.2rem",
+              }}
+            >
+              البحث في جدول التدفقات النقدية
+            </Typography>
+            <Grid2 container spacing={2} alignItems="center">
+              <Grid2 size={{ xs: 12, md: 4 }}>
+                <TextField
+                  fullWidth
+                  placeholder="البحث في الوصف أو الطرف الثاني..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon />
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                  size="small"
+                />
+              </Grid2>
+              <Grid2 size={{ xs: 12, md: 2 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={handleExportToExcel}
+                  fullWidth
+                >
+                  تصدير Excel
+                </Button>
+              </Grid2>
+            </Grid2>
+          </Card>
+        </Grid2>
+
+        {/* Enhanced Table */}
+        <Grid2 size={12}>
+          <Card elevation={3}>
+            <TableContainer component={Paper}>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>
+                      <TableSortLabel
+                        active={orderBy === "time"}
+                        direction={orderBy === "time" ? order : "asc"}
+                        onClick={() => handleSort("time")}
+                      >
+                        الوقت
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={orderBy === "amount"}
+                        direction={orderBy === "amount" ? order : "asc"}
+                        onClick={() => handleSort("amount")}
+                      >
+                        المبلغ
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={orderBy === "type"}
+                        direction={orderBy === "type" ? order : "asc"}
+                        onClick={() => handleSort("type")}
+                      >
+                        نوع الحركة
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={orderBy === "description"}
+                        direction={orderBy === "description" ? order : "asc"}
+                        onClick={() => handleSort("description")}
+                      >
+                        الوصف
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={orderBy === "total"}
+                        direction={orderBy === "total" ? order : "asc"}
+                        onClick={() => handleSort("total")}
+                      >
+                        المجموع
+                      </TableSortLabel>
+                    </TableCell>
+                    <TableCell>
+                      <TableSortLabel
+                        active={orderBy === "party_name"}
+                        direction={orderBy === "party_name" ? order : "asc"}
+                        onClick={() => handleSort("party_name")}
+                      >
+                        الطرف الثاني
+                      </TableSortLabel>
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredAndSortedCashFlow
+                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                    .map((row, index) => (
+                      <TableRow key={index} hover>
+                        <TableCell>
+                          {new Date(row.time).toLocaleString("ar-EG", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          <FormatedNumber>{row.amount}</FormatedNumber>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={row.type === "in" ? "دخول" : "خروج"}
+                            color={row.type === "in" ? "success" : "error"}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>{row.description}</TableCell>
+                        <TableCell>
+                          <FormatedNumber>{row.total}</FormatedNumber>
+                        </TableCell>
+                        <TableCell>
+                          {row.party_name ? row.party_name : "بدون طرف ثاني"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <TablePagination
+              rowsPerPageOptions={[10, 25, 50, 100]}
+              component="div"
+              count={filteredAndSortedCashFlow.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+              labelRowsPerPage="عدد الصفوف لكل صفحة:"
+              labelDisplayedRows={({ from, to, count }) =>
+                `${from}-${to} من ${count}`
+              }
             />
           </Card>
         </Grid2>
