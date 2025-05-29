@@ -13,6 +13,13 @@ import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LoadingButton } from "@mui/lab";
 import { Scope } from "../../../utils/types";
+import {
+  Person as PersonIcon,
+  Lock as LockIcon,
+  Email as EmailIcon,
+  Phone as PhoneIcon,
+  Security as SecurityIcon,
+} from "@mui/icons-material";
 
 const signup = async ({
   username,
@@ -71,39 +78,95 @@ const SignUp = () => {
     queryFn: getScopes,
     initialData: [],
   });
-
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 container spacing={3}>
         <Grid2 size={12}>
-          <Typography variant="h6">تسجيل مستخدم جديد</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            قم بإدخال بيانات المستخدم الجديد
+          </Typography>
         </Grid2>
-        <Grid2 container gap={3}>
+
+        <Grid2 size={12}>
           <TextField
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             label="اسم المستخدم"
             fullWidth
+            InputProps={{
+              startAdornment: (
+                <PersonIcon sx={{ mr: 1, color: "text.secondary" }} />
+              ),
+            }}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 2,
+              },
+            }}
           />
+        </Grid2>
+
+        <Grid2 size={12}>
           <TextField
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             label="كلمة المرور"
+            type="password"
             fullWidth
+            InputProps={{
+              startAdornment: (
+                <LockIcon sx={{ mr: 1, color: "text.secondary" }} />
+              ),
+            }}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 2,
+              },
+            }}
           />
+        </Grid2>
+
+        <Grid2 size={12}>
           <TextField
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            label="البريد الالكتروني"
+            label="البريد الإلكتروني"
+            type="email"
             fullWidth
+            InputProps={{
+              startAdornment: (
+                <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
+              ),
+            }}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 2,
+              },
+            }}
           />
+        </Grid2>
+
+        <Grid2 size={12}>
           <TextField
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             label="رقم الهاتف"
             fullWidth
+            InputProps={{
+              startAdornment: (
+                <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
+              ),
+            }}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 2,
+              },
+            }}
           />
+        </Grid2>
+
+        <Grid2 size={12}>
           <FormControl fullWidth>
             <InputLabel>الصلاحيات</InputLabel>
             <Select
@@ -112,6 +175,12 @@ const SignUp = () => {
               value={scope}
               onChange={(e) => setScope(e.target.value as number)}
               disabled={isScopesLoading}
+              startAdornment={
+                <SecurityIcon sx={{ mr: 1, color: "text.secondary" }} />
+              }
+              sx={{
+                borderRadius: 2,
+              }}
             >
               {scopes.map((scope) => (
                 <MenuItem key={scope.id} value={scope.id}>
@@ -121,6 +190,7 @@ const SignUp = () => {
             </Select>
           </FormControl>
         </Grid2>
+
         <Grid2 size={12}>
           <LoadingButton
             variant="contained"
@@ -135,8 +205,17 @@ const SignUp = () => {
             }
             loading={isScopesLoading || isAddingUser}
             disabled={!username || !password || !email || !phone || !scope}
+            fullWidth
+            size="large"
+            sx={{
+              borderRadius: 2,
+              py: 1.5,
+              textTransform: "none",
+              fontWeight: 600,
+              fontSize: "1.1rem",
+            }}
           >
-            تسجيل المستخدم
+            إضافة المستخدم
           </LoadingButton>
         </Grid2>
       </Grid2>

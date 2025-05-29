@@ -17,18 +17,6 @@ const Themes = () => {
     getThemeName();
   }, []);
 
-  useEffect(() => {
-    const setTheme = async () => {
-      await window.electron.ipcRenderer.invoke(
-        "set",
-        "themeName",
-        selectedTheme,
-      );
-    };
-
-    setTheme();
-  }, [selectedTheme]);
-
   return (
     <Grid2 container spacing={2}>
       {themes.map((theme) => (
@@ -39,6 +27,8 @@ const Themes = () => {
               color: theme.mode === "dark" ? "#fff" : "#000",
               padding: "16px",
               textAlign: "center",
+              border:
+                selectedTheme === theme.name ? "2px solid #1976d2" : "none",
             }}
           >
             <Typography variant="h6">{theme.name}</Typography>
@@ -59,8 +49,13 @@ const Themes = () => {
             <Button
               variant="contained"
               color="primary"
-              onClick={() => {
+              onClick={async () => {
                 setSelectedTheme(theme.name);
+                await window.electron.ipcRenderer.invoke(
+                  "set",
+                  "themeName",
+                  theme.name,
+                );
                 window.location.reload();
               }}
             >
