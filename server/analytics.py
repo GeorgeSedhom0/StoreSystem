@@ -623,9 +623,11 @@ def process_products_data_with_predictions(
 
         # Get predictions
         predictions = predict_product_sales(
-            product_id, store_id, prediction_days,
+            product_id,
+            store_id,
+            prediction_days,
             get_product_info=get_product_info,
-            get_historical_sales_data=get_historical_sales_data
+            get_historical_sales_data=get_historical_sales_data,
         )
 
         if predictions:

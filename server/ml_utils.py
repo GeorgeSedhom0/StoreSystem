@@ -4,6 +4,7 @@ import xgboost as xgb
 from typing import List, Tuple, Optional
 from datetime import datetime
 
+
 # Feature engineering for sales prediction
 def create_features_for_sales(dates) -> pd.DataFrame:
     features = pd.DataFrame()
@@ -19,8 +20,11 @@ def create_features_for_sales(dates) -> pd.DataFrame:
         features["is_weekend"] = (dates.dt.dayofweek >= 5).astype(int)
     return features
 
+
 # Train XGBoost model for sales prediction
-def train_sales_prediction_model(historical_data: List[Tuple[datetime, float]]) -> Optional[xgb.XGBRegressor]:
+def train_sales_prediction_model(
+    historical_data: List[Tuple[datetime, float]],
+) -> Optional[xgb.XGBRegressor]:
     if len(historical_data) < 14:
         return None
     try:
@@ -30,7 +34,9 @@ def train_sales_prediction_model(historical_data: List[Tuple[datetime, float]]) 
         features = create_features_for_sales(df["date"])
         for lag in [1, 3, 7]:
             if len(df) > lag:
-                features[f"lag_{lag}"] = df["sales"].shift(lag).fillna(df["sales"].mean())
+                features[f"lag_{lag}"] = (
+                    df["sales"].shift(lag).fillna(df["sales"].mean())
+                )
         mask = ~features.isna().any(axis=1)
         X_train = features[mask]
         y_train = df["sales"][mask]
@@ -54,23 +60,32 @@ def train_sales_prediction_model(historical_data: List[Tuple[datetime, float]]) 
     except Exception:
         return None
 
+
 # Calculate days until stock runs out
-def calculate_days_until_stockout(current_stock: float, daily_consumption: float) -> int:
+def calculate_days_until_stockout(
+    current_stock: float, daily_consumption: float
+) -> int:
     if daily_consumption <= 0:
         return 999
     days_left = current_stock / daily_consumption
     return max(0, int(np.floor(days_left)))
 
+
 def predict_product_sales(
-    product_id: int, store_id: int, days_to_predict: int = 15,
-    get_product_info=None, get_historical_sales_data=None
+    product_id: int,
+    store_id: int,
+    days_to_predict: int = 15,
+    get_product_info=None,
+    get_historical_sales_data=None,
 ) -> Optional[List[Tuple[str, float]]]:
     """
     Predict sales for a product for the next N days.
     get_product_info and get_historical_sales_data should be passed from the caller (for DB access).
     """
     if get_product_info is None or get_historical_sales_data is None:
-        raise ValueError("get_product_info and get_historical_sales_data must be provided.")
+        raise ValueError(
+            "get_product_info and get_historical_sales_data must be provided."
+        )
     try:
         product_info = get_product_info(product_id, store_id)
         if not product_info:
@@ -92,7 +107,7 @@ def predict_product_sales(
             weights = np.exp(np.linspace(-2, 0, min(14, len(historical_data))))
             weights /= weights.sum()
             recent_sales = [sales for _, sales in historical_data[-14:]]
-            weighted_avg = np.dot(weights, recent_sales[-len(weights):])
+            weighted_avg = np.dot(weights, recent_sales[-len(weights) :])
             predictions = []
             for i in range(days_to_predict):
                 date = (datetime.now() + pd.Timedelta(days=i)).strftime("%Y-%m-%d")
@@ -105,7 +120,7 @@ def predict_product_sales(
         recent_sales = [sales for _, sales in historical_data[-7:]]
         avg_recent = np.mean(recent_sales) if recent_sales else 0
         for lag in [1, 3, 7]:
-            if f"lag_{lag}" in getattr(model, 'feature_names_in_', []):
+            if f"lag_{lag}" in getattr(model, "feature_names_in_", []):
                 if lag <= len(recent_sales):
                     future_features[f"lag_{lag}"] = recent_sales[-lag]
                 else:
