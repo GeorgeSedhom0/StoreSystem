@@ -161,15 +161,82 @@ def get_installments(
 
 @router.post("/installments/pay/{installment_id}")
 def add_flow(installment_id: int, amount: float) -> JSONResponse:
-    query = """
+    # Input validation
+    if amount <= 0:
+        raise HTTPException(
+            status_code=400, detail="Payment amount must be greater than zero"
+        )
+
+    # Check if installment exists and get its details for validation
+    check_query = """
+    SELECT 
+        i.id,
+        i.paid,
+        i.bill_id,
+        COALESCE(bill_data.total, 0) as total,
+        COALESCE(flow_data.total_flow, 0) as total_flow_paid
+    FROM installments i
+    LEFT JOIN (
+        SELECT 
+            b.id as bill_id,
+            SUM(COALESCE(pf.price, 0) * COALESCE(pf.amount, 0)) AS total
+        FROM bills b
+        LEFT JOIN products_flow pf ON b.id = pf.bill_id
+        WHERE b.id = (SELECT bill_id FROM installments WHERE id = %s)
+        GROUP BY b.id
+    ) AS bill_data ON i.bill_id = bill_data.bill_id
+    LEFT JOIN (
+        SELECT 
+            installment_id,
+            SUM(amount) as total_flow
+        FROM installments_flow 
+        WHERE installment_id = %s
+        GROUP BY installment_id
+    ) AS flow_data ON i.id = flow_data.installment_id
+    WHERE i.id = %s
+    """
+
+    insert_query = """
     INSERT INTO installments_flow (installment_id, amount, time)
     VALUES (%s, %s, NOW())
     """
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(query, (installment_id, amount))
-            return JSONResponse(content={"status": "success"})
+            # Check installment details
+            cur.execute(check_query, (installment_id, installment_id, installment_id))
+            installment_data = cur.fetchone()
+
+            if not installment_data:
+                raise HTTPException(status_code=404, detail="Installment not found")
+
+            # Calculate remaining amount
+            total_bill = abs(installment_data["total"] or 0)
+            paid_deposit = installment_data["paid"] or 0
+            total_flow_paid = installment_data["total_flow_paid"] or 0
+            total_paid = paid_deposit + total_flow_paid
+            remaining_amount = total_bill - total_paid
+
+            # Validate payment amount doesn't exceed remaining
+            if amount > remaining_amount + 0.01:  # Small tolerance for floating point
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Payment amount ({amount:.2f}) exceeds remaining amount ({remaining_amount:.2f})",
+                )
+
+            # Insert the payment
+            cur.execute(insert_query, (installment_id, amount))
+            return JSONResponse(
+                content={
+                    "status": "success",
+                    "message": "Payment recorded successfully",
+                    "payment_amount": amount,
+                    "remaining_amount": max(0, remaining_amount - amount),
+                }
+            )
+
     except psycopg2.Error as e:
-        logging.error(e)
-        raise HTTPException(status_code=500, detail="Database error") from e
+        logging.error(f"Database error in payment processing: {e}")
+        raise HTTPException(
+            status_code=500, detail="Database error during payment processing"
+        ) from e
