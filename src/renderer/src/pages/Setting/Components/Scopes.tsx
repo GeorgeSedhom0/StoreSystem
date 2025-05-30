@@ -245,10 +245,12 @@ const Scopes = () => {
                   onChange={(e) =>
                     setSelectedScope({ ...selectedScope, name: e.target.value })
                   }
-                  InputProps={{
-                    startAdornment: (
-                      <SecurityIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <SecurityIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      ),
+                    },
                   }}
                 />
               </Box>

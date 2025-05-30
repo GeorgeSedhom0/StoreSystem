@@ -64,8 +64,10 @@ const PriceColumn = ({
             ),
           );
         }}
-        inputProps={{
-          inputMode: "decimal",
+        slotProps={{
+          input: {
+            inputMode: "decimal",
+          },
         }}
         disabled={disbaled}
       />
@@ -98,8 +100,10 @@ const WholesalePriceColumn = ({
             ),
           );
         }}
-        inputProps={{
-          inputMode: "decimal",
+        slotProps={{
+          input: {
+            inputMode: "decimal",
+          },
         }}
       />
     </TableCell>
@@ -119,8 +123,10 @@ const WholesalePriceDisplayColumn = ({
         value={wholesalePrice}
         variant="standard"
         disabled={true}
-        InputProps={{
-          readOnly: true,
+        slotProps={{
+          input: {
+            readOnly: true,
+          },
         }}
       />
     </TableCell>

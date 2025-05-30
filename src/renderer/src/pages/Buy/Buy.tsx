@@ -213,10 +213,6 @@ const Buy = () => {
               <Typography variant="h6">
                 اختار منتج ليتم اضافته الى الفاتورة
               </Typography>
-              <Typography variant="subtitle1">
-                يمكنك اضافة منتج الى الفاتورة و جعل الكمية 0 لتغير سعر الشراء او
-                البيع للمنتج
-              </Typography>
             </Grid2>
 
             <Grid2 size={12} container>
@@ -351,7 +347,7 @@ const Buy = () => {
           <TableContainer
             ref={cartTableRef}
             sx={{
-              height: "60vh",
+              height: "50vh",
               overflowY: "auto",
             }}
           >

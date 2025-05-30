@@ -404,7 +404,7 @@ const MoveProducts = () => {
           <TableContainer
             ref={cartTableRef}
             sx={{
-              height: "60vh",
+              height: "50vh",
               overflowY: "auto",
             }}
           >

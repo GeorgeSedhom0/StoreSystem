@@ -236,10 +236,12 @@ const UpdateUser = () => {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     label="اسم المستخدم"
-                    InputProps={{
-                      startAdornment: (
-                        <PersonIcon sx={{ mr: 1, color: "text.secondary" }} />
-                      ),
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <PersonIcon sx={{ mr: 1, color: "text.secondary" }} />
+                        ),
+                      },
                     }}
                   />
                 </Grid2>
@@ -252,10 +254,12 @@ const UpdateUser = () => {
                     label="كلمة المرور"
                     type="password"
                     placeholder="اتركه فارغاً إذا كنت لا تريد تغيير كلمة المرور"
-                    InputProps={{
-                      startAdornment: (
-                        <LockIcon sx={{ mr: 1, color: "text.secondary" }} />
-                      ),
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <LockIcon sx={{ mr: 1, color: "text.secondary" }} />
+                        ),
+                      },
                     }}
                   />
                 </Grid2>
@@ -267,10 +271,12 @@ const UpdateUser = () => {
                     onChange={(e) => setEmail(e.target.value)}
                     label="البريد الإلكتروني"
                     type="email"
-                    InputProps={{
-                      startAdornment: (
-                        <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
-                      ),
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
+                        ),
+                      },
                     }}
                   />
                 </Grid2>
@@ -281,10 +287,12 @@ const UpdateUser = () => {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     label="رقم الهاتف"
-                    InputProps={{
-                      startAdornment: (
-                        <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
-                      ),
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
+                        ),
+                      },
                     }}
                   />
                 </Grid2>

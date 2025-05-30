@@ -13,6 +13,11 @@ import {
   FormControlLabel,
   Switch,
 } from "@mui/material";
+import {
+  TrendingUp as TrendingUpIcon,
+  Receipt as ReceiptIcon,
+  Percent as PercentIcon,
+} from "@mui/icons-material";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -176,6 +181,29 @@ const Bills = () => {
     return filteredBills;
   }, [bills, filters, selectedProduct, showExpandedBill]);
 
+  // Statistics calculations
+  const statistics = useMemo(() => {
+    // Only count non-expanded bills for accurate statistics
+    const actualBills = showExpandedBill
+      ? filteredBills.filter((_, index) => index % 2 === 0)
+      : filteredBills;
+
+    const totalAmount = actualBills.reduce((sum, bill) => sum + bill.total, 0);
+
+    const totalDiscount = actualBills.reduce((sum, bill) => {
+      return sum + (bill.discount || 0);
+    }, 0);
+
+    const averageDiscount =
+      actualBills.length > 0 ? totalDiscount / actualBills.length : 0;
+
+    return {
+      totalTransactions: actualBills.length,
+      totalAmount,
+      averageDiscount,
+    };
+  }, [filteredBills, showExpandedBill]);
+
   useEffect(() => {
     localStorage.setItem(
       "showExpandedBill",
@@ -183,17 +211,106 @@ const Bills = () => {
     );
   }, [showExpandedBill]);
 
-  const total = filteredBills.reduce(
-    (acc, bill) => acc + parseFloat(bill.total.toFixed(2)),
-    0,
-  );
-
   const loading = isShiftLoading || isBillsLoading;
 
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 container spacing={3}>
+        {/* Statistics Cards */}
+        <Grid2 size={12}>
+          <Card elevation={3} sx={{ p: 2, mt: 2 }}>
+            <Grid2 container spacing={2}>
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: "center",
+                    bgcolor: "primary.light",
+                    color: "primary.contrastText",
+                    boxShadow: 2,
+                    borderRadius: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <ReceiptIcon sx={{ fontSize: 32, mb: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "0.9rem" }}
+                  >
+                    عدد الفواتير
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    {statistics.totalTransactions}
+                  </Typography>
+                </Card>
+              </Grid2>
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: "center",
+                    bgcolor: "success.light",
+                    color: "success.contrastText",
+                    boxShadow: 2,
+                    borderRadius: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <TrendingUpIcon sx={{ fontSize: 32, mb: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "0.9rem" }}
+                  >
+                    إجمالي الفواتير
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    {new Intl.NumberFormat("ar-EG", {
+                      style: "currency",
+                      currency: "EGP",
+                      minimumFractionDigits: 0,
+                    }).format(statistics.totalAmount)}
+                  </Typography>
+                </Card>
+              </Grid2>
+              <Grid2 size={{ xs: 12, sm: 4 }}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: "center",
+                    bgcolor: "warning.light",
+                    color: "warning.contrastText",
+                    boxShadow: 2,
+                    borderRadius: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <PercentIcon sx={{ fontSize: 32, mb: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "0.9rem" }}
+                  >
+                    متوسط الخصم للفاتورة
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    {new Intl.NumberFormat("ar-EG", {
+                      style: "currency",
+                      currency: "EGP",
+                      minimumFractionDigits: 0,
+                    }).format(statistics.averageDiscount)}
+                  </Typography>
+                </Card>
+              </Grid2>
+            </Grid2>
+          </Card>
+        </Grid2>
+
         <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 2 }}>
             <Grid2 container spacing={3}>
@@ -334,12 +451,6 @@ const Bills = () => {
                     return filtered;
                   }}
                 />
-              </Grid2>
-
-              <Grid2 size={12}>
-                <Typography variant="body2">
-                  المجموع: {total.toFixed(2)}
-                </Typography>
               </Grid2>
             </Grid2>
           </Card>

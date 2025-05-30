@@ -426,8 +426,10 @@ const Cash = () => {
                     label="المبلغ"
                     value={amount}
                     onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                    inputProps={{
-                      inputMode: "decimal",
+                    slotProps={{
+                      input: {
+                        inputMode: "decimal",
+                      },
                     }}
                   />
                   <FormControl>

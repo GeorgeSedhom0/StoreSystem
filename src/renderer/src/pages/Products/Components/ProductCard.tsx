@@ -1,4 +1,10 @@
-import { Button, InputAdornment, TableCell, TextField } from "@mui/material";
+import {
+  Button,
+  InputAdornment,
+  TableCell,
+  TableRow,
+  TextField,
+} from "@mui/material";
 import { Product } from "../../../utils/types";
 import { useMemo, useState } from "react";
 import PrintBarCode from "@renderer/pages/Shared/PrintBarCode";
@@ -35,7 +41,7 @@ const ProductCard = ({
   );
 
   return (
-    <>
+    <TableRow key={`${product.id}-${product.bar_code}-${product.name}`}>
       {isPrintingCode && (
         <PrintBarCode
           code={product.bar_code}
@@ -85,12 +91,14 @@ const ProductCard = ({
               return newProducts;
             })
           }
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <Button onClick={() => setIsPrintingCode(true)}>طباعة</Button>
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Button onClick={() => setIsPrintingCode(true)}>طباعة</Button>
+                </InputAdornment>
+              ),
+            },
           }}
         />
       </TableCell>
@@ -216,7 +224,7 @@ const ProductCard = ({
           </Button>
         )}
       </TableCell>
-    </>
+    </TableRow>
   );
 };
 

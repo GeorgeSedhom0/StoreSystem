@@ -1,4 +1,10 @@
-import { Button, InputAdornment, TableCell, TextField } from "@mui/material";
+import {
+  Button,
+  InputAdornment,
+  TableCell,
+  TableRow,
+  TextField,
+} from "@mui/material";
 import { AdminProduct } from "../../../utils/types";
 import { useMemo, useState } from "react";
 import PrintBarCode from "@renderer/pages/Shared/PrintBarCode";
@@ -29,7 +35,7 @@ const AdminProductCard = ({
   );
 
   return (
-    <>
+    <TableRow key={`${product.id}-${product.bar_code}-${product.name}`}>
       {isPrintingCode && (
         <PrintBarCode
           code={product.bar_code}
@@ -79,12 +85,14 @@ const AdminProductCard = ({
               return newProducts;
             })
           }
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <Button onClick={() => setIsPrintingCode(true)}>طباعة</Button>
-              </InputAdornment>
-            ),
+          slotProps={{
+            input: {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Button onClick={() => setIsPrintingCode(true)}>طباعة</Button>
+                </InputAdornment>
+              ),
+            },
           }}
         />
       </TableCell>
@@ -140,14 +148,14 @@ const AdminProductCard = ({
         />
       </TableCell>
 
-      {Object.values(product.stock_by_store).map((stock) => (
-        <TableCell>
+      {Object.entries(product.stock_by_store).map(([store, stock]) => (
+        <TableCell key={store}>
           <TextField disabled={true} value={stock} variant="standard" />
         </TableCell>
       ))}
 
-      {Object.keys(product.stock_by_store).map((store) => (
-        <TableCell>
+      {Object.entries(product.stock_by_store).map(([store, _]) => (
+        <TableCell key={`${store}-reserved`}>
           <TextField
             disabled={true}
             value={reserved ? (reserved[store] ?? 0) : 0}
@@ -177,7 +185,7 @@ const AdminProductCard = ({
           }
         />
       </TableCell>
-    </>
+    </TableRow>
   );
 };
 

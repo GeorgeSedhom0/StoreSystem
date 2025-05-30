@@ -336,16 +336,13 @@ const PayInstallment = ({
                     error={!!amountError}
                     helperText={amountError || "أدخل المبلغ المراد دفعه"}
                     fullWidth
-                    inputProps={{
-                      inputMode: "decimal",
-                      min: 0,
-                      max: remainingAmount,
-                      step: 0.01,
-                    }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">ج.م</InputAdornment>
-                      ),
+                    slotProps={{
+                      input: {
+                        inputMode: "decimal",
+                        startAdornment: (
+                          <InputAdornment position="start">ج.م</InputAdornment>
+                        ),
+                      },
                     }}
                     sx={{ mb: 2 }}
                   />

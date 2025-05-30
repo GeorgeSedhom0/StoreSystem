@@ -166,10 +166,12 @@ const PrinterSettings = () => {
                   type="number"
                   value={settings.billPrinterWidth}
                   onChange={handleChange("billPrinterWidth")}
-                  InputProps={{
-                    startAdornment: (
-                      <SizeIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <SizeIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      ),
+                    },
                   }}
                   helperText="مطلوب*"
                 />
@@ -182,10 +184,12 @@ const PrinterSettings = () => {
                   type="number"
                   value={settings.billPrinterHeight}
                   onChange={handleChange("billPrinterHeight")}
-                  InputProps={{
-                    startAdornment: (
-                      <SizeIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <SizeIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      ),
+                    },
                   }}
                 />
               </Grid2>
@@ -249,10 +253,12 @@ const PrinterSettings = () => {
                   type="number"
                   value={settings.barcodePrinterWidth}
                   onChange={handleChange("barcodePrinterWidth")}
-                  InputProps={{
-                    startAdornment: (
-                      <SizeIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <SizeIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      ),
+                    },
                   }}
                   helperText="مطلوب*"
                 />
@@ -265,10 +271,12 @@ const PrinterSettings = () => {
                   type="number"
                   value={settings.barcodePrinterHeight}
                   onChange={handleChange("barcodePrinterHeight")}
-                  InputProps={{
-                    startAdornment: (
-                      <SizeIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <SizeIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      ),
+                    },
                   }}
                   helperText="مطلوب*"
                 />

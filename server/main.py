@@ -471,7 +471,6 @@ def update_product(products: list[Product], store_id: int):
 
                         if stock_difference != 0:
                             # Create a products_flow entry to update stock
-                            # Using special bill_id with store_id prefix to indicate inventory adjustment
                             cur.execute(
                                 """
                                 INSERT INTO products_flow (
@@ -1259,35 +1258,101 @@ def shift_total(
     store_id: int,
 ):
     """
-    Get the total sales for the current shift
+    Get comprehensive shift data including sales, purchases, returns and cash flow
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get current shift start time
             cur.execute(
                 """
-                SELECT type, COALESCE(SUM(total), 0) AS total
+                SELECT start_date_time FROM shifts
+                WHERE current = True AND store_id = %s
+                """,
+                (store_id,),
+            )
+            shift_start = cur.fetchone()
+
+            if not shift_start:
+                return {
+                    "sell_total": 0,
+                    "buy_total": 0,
+                    "return_total": 0,
+                    "installment_total": 0,
+                    "cash_in": 0,
+                    "cash_out": 0,
+                    "net_cash_flow": 0,
+                    "transaction_count": 0,
+                    "shift_start": None,
+                }
+
+            shift_start_time = shift_start["start_date_time"]
+
+            # Get bill totals by type
+            cur.execute(
+                """
+                SELECT type, COALESCE(SUM(total), 0) AS total, COUNT(*) as count
                 FROM bills
-                WHERE time >= (
-                    SELECT start_date_time FROM shifts
-                    WHERE current = True AND store_id = %s
-                )
+                WHERE time >= %s
                 AND bills.store_id = %s
                 GROUP BY type
                 """,
-                (store_id, store_id),
+                (shift_start_time, store_id),
             )
-            data = cur.fetchall()
+            bill_data = cur.fetchall()
 
-        totals = {"sell_total": 0, "buy_total": 0, "return_total": 0}
-        for row in data:
+            # Get cash flow data
+            cur.execute(
+                """
+                SELECT 
+                    type,
+                    COALESCE(SUM(amount), 0) AS total
+                FROM cash_flow
+                WHERE time >= %s
+                AND store_id = %s
+                GROUP BY type
+                """,
+                (shift_start_time, store_id),
+            )
+            cash_flow_data = cur.fetchall()
+
+        # Process bill totals
+        totals = {
+            "sell_total": 0,
+            "buy_total": 0,
+            "return_total": 0,
+            "installment_total": 0,
+            "transaction_count": 0,
+        }
+
+        for row in bill_data:
             if row["type"] == "sell":
                 totals["sell_total"] += row["total"]
             elif row["type"] == "buy":
                 totals["buy_total"] += row["total"]
             elif row["type"] == "return":
                 totals["return_total"] += row["total"]
+            elif row["type"] == "installment":
+                totals["installment_total"] += row["total"]
+            totals["transaction_count"] += row["count"]
 
-        return totals
+        # Process cash flow
+        cash_in = 0
+        cash_out = 0
+        for row in cash_flow_data:
+            if row["type"] == "in":
+                cash_in += row["total"]
+            elif row["type"] == "out":
+                cash_out += abs(row["total"])  # Make positive for display
+
+        net_cash_flow = cash_in - cash_out
+
+        return {
+            **totals,
+            "cash_in": cash_in,
+            "cash_out": cash_out,
+            "net_cash_flow": net_cash_flow,
+            "shift_start": shift_start_time.isoformat() if shift_start_time else None,
+        }
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e

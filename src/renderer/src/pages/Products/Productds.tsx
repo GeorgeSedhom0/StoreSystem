@@ -185,6 +185,24 @@ const Products = () => {
     exportToExcel(exportData);
   };
 
+  const statCardsData = useMemo(() => {
+    return {
+      totalProducts: filteredAndSortedProducts.length,
+      lowStock: filteredAndSortedProducts.filter(
+        (p) => p.stock > 0 && p.stock <= 10,
+      ).length,
+      outOfStock: filteredAndSortedProducts.filter((p) => p.stock <= 0).length,
+      totalValue: filteredAndSortedProducts.reduce(
+        (acc, product) => acc + product.price * product.stock,
+        0,
+      ),
+      totalWholesaleValue: filteredAndSortedProducts.reduce(
+        (acc, product) => acc + product.wholesale_price * product.stock,
+        0,
+      ),
+    };
+  }, [filteredAndSortedProducts]);
+
   const getInventory = useCallback(async () => {
     setLoading(true);
     try {
@@ -322,12 +340,14 @@ const Products = () => {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   fullWidth
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Search />
-                      </InputAdornment>
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search />
+                        </InputAdornment>
+                      ),
+                    },
                   }}
                 />
               </Grid2>
@@ -388,18 +408,32 @@ const Products = () => {
             {/* Statistics Cards */}
             <Box sx={{ p: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
               <Chip
-                label={`إجمالي المنتجات: ${filteredAndSortedProducts.length}`}
+                label={`إجمالي المنتجات: ${statCardsData.totalProducts}`}
                 color="primary"
                 variant="outlined"
               />
               <Chip
-                label={`مخزون منخفض: ${filteredAndSortedProducts.filter((p) => p.stock <= 10 && p.stock > 0).length}`}
+                label={`مخزون منخفض: ${statCardsData.lowStock}`}
                 color="warning"
                 variant="outlined"
               />
               <Chip
-                label={`نفد المخزون: ${filteredAndSortedProducts.filter((p) => p.stock <= 0).length}`}
+                label={`نفد المخزون: ${statCardsData.outOfStock}`}
                 color="error"
+                variant="outlined"
+              />
+              <Chip
+                label={`إجمالي قيمة المخزون: ${statCardsData.totalValue.toFixed(
+                  2,
+                )}`}
+                color="success"
+                variant="outlined"
+              />
+              <Chip
+                label={`إجمالي قيمة الشراء: ${statCardsData.totalWholesaleValue.toFixed(
+                  2,
+                )}`}
+                color="info"
                 variant="outlined"
               />
             </Box>
@@ -470,17 +504,16 @@ const Products = () => {
                 </TableHead>
                 <TableBody>
                   {paginatedProducts.map((product) => (
-                    <TableRow key={product.id || product.bar_code}>
-                      <ProductCard
-                        product={product}
-                        reserved={reservedProducts[product.id!]?.stock || 0}
-                        setEditedProducts={setEditedProducts}
-                        editedProducts={editedProducts}
-                        deleteProduct={deleteProduct}
-                        restoreProduct={restoreProduct}
-                        isShowingDeleted={showDeleted}
-                      />
-                    </TableRow>
+                    <ProductCard
+                      key={product.id || product.bar_code}
+                      product={product}
+                      reserved={reservedProducts[product.id!]?.stock || 0}
+                      setEditedProducts={setEditedProducts}
+                      editedProducts={editedProducts}
+                      deleteProduct={deleteProduct}
+                      restoreProduct={restoreProduct}
+                      isShowingDeleted={showDeleted}
+                    />
                   ))}
                 </TableBody>
               </Table>

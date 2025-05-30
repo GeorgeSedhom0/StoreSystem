@@ -73,8 +73,10 @@ const PaySalary = ({
               type="number"
               value={bonus}
               onChange={(e) => setBonus(parseFloat(e.target.value) || 0)}
-              inputProps={{
-                inputMode: "decimal",
+              slotProps={{
+                input: {
+                  inputMode: "decimal",
+                },
               }}
             />
             <TextField
@@ -82,8 +84,10 @@ const PaySalary = ({
               type="number"
               value={deductions}
               onChange={(e) => setDeductions(parseFloat(e.target.value) || 0)}
-              inputProps={{
-                inputMode: "decimal",
+              slotProps={{
+                input: {
+                  inputMode: "decimal",
+                },
               }}
             />
             <LocalizationProvider

@@ -219,6 +219,8 @@ def create_all_tables(cur):
     )
     """)
 
+    cur.execute("""INSERT INTO bills (id, store_id) VALUES (-1, 0)""")
+
     # Create the bills_collections table
     cur.execute("""
     CREATE TABLE bills_collections (
@@ -614,7 +616,7 @@ def create_all_triggers(cur):
     CREATE OR REPLACE FUNCTION update_product_price_after_insert()
     RETURNS TRIGGER AS $$
     BEGIN
-      IF (SELECT type FROM bills WHERE id = NEW.bill_id LIMIT 1) = 'buy' THEN 
+      IF (SELECT type FROM bills WHERE id = NEW.bill_id AND store_id = new.store_id LIMIT 1) = 'buy' THEN 
         UPDATE products
         SET
           wholesale_price = NEW.wholesale_price,
@@ -714,6 +716,23 @@ def create_all_triggers(cur):
     AFTER UPDATE ON bills
     FOR EACH ROW
     EXECUTE FUNCTION update_cash_flow_after_update();
+    """)
+
+    # Trigger to add the -1 bill after adding a new store
+    cur.execute("""
+    -- Trigger to add the -1 bill after adding a new store
+    CREATE OR REPLACE FUNCTION add_negative_one_bill()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        INSERT INTO bills (id, store_id)
+        VALUES (-1, NEW.id);
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER trigger_add_negative_one_bill
+    AFTER INSERT ON store_data
+    FOR EACH ROW
+    EXECUTE FUNCTION add_negative_one_bill();
     """)
 
 

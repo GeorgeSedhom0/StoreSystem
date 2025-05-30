@@ -210,6 +210,53 @@ const ProductsAdmin = () => {
     const exportData = [headerRow, ...dataRows];
     exportToExcel(exportData);
   };
+
+  const statCardsData = useMemo(() => {
+    // logging each store wholesale total value
+    const storeWholesaleValues = availableStores.reduce(
+      (acc, store) => {
+        acc[store] = filteredAndSortedProducts.reduce((sum, product) => {
+          const stock = product.stock_by_store?.[store] || 0;
+          return sum + product.wholesale_price * stock;
+        }, 0);
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+    console.log("Store Wholesale Values:", storeWholesaleValues);
+    return {
+      totalProducts: filteredAndSortedProducts.length,
+      lowStock: filteredAndSortedProducts.filter((p) => {
+        const totalStock = Object.values(p.stock_by_store || {}).reduce(
+          (sum, stock) => sum + stock,
+          0,
+        );
+        return totalStock > 0 && totalStock <= 10;
+      }).length,
+      outOfStock: filteredAndSortedProducts.filter((p) => {
+        const totalStock = Object.values(p.stock_by_store || {}).reduce(
+          (sum, stock) => sum + stock,
+          0,
+        );
+        return totalStock <= 0;
+      }).length,
+      totalValue: filteredAndSortedProducts.reduce((acc, product) => {
+        const totalStock = Object.values(product.stock_by_store || {}).reduce(
+          (sum, stock) => sum + stock,
+          0,
+        );
+        return acc + product.price * totalStock;
+      }, 0),
+      totalWholesaleValue: filteredAndSortedProducts.reduce((acc, product) => {
+        const totalStock = Object.values(product.stock_by_store || {}).reduce(
+          (sum, stock) => sum + stock,
+          0,
+        );
+        return acc + product.wholesale_price * totalStock;
+      }, 0),
+    };
+  }, [filteredAndSortedProducts]);
+
   const getInventory = useCallback(async () => {
     setLoading(true);
     try {
@@ -299,12 +346,14 @@ const ProductsAdmin = () => {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   fullWidth
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Search />
-                      </InputAdornment>
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search />
+                        </InputAdornment>
+                      ),
+                    },
                   }}
                 />
               </Grid2>
@@ -365,32 +414,32 @@ const ProductsAdmin = () => {
             {/* Statistics Cards */}
             <Box sx={{ p: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
               <Chip
-                label={`إجمالي المنتجات: ${filteredAndSortedProducts.length}`}
+                label={`إجمالي المنتجات: ${statCardsData.totalProducts}`}
                 color="primary"
                 variant="outlined"
               />
               <Chip
-                label={`مخزون منخفض: ${
-                  filteredAndSortedProducts.filter((p) => {
-                    const totalStock = Object.values(
-                      p.stock_by_store || {},
-                    ).reduce((sum, stock) => sum + stock, 0);
-                    return totalStock <= 10 && totalStock > 0;
-                  }).length
-                }`}
+                label={`مخزون منخفض: ${statCardsData.lowStock}`}
                 color="warning"
                 variant="outlined"
               />
               <Chip
-                label={`نفد المخزون: ${
-                  filteredAndSortedProducts.filter((p) => {
-                    const totalStock = Object.values(
-                      p.stock_by_store || {},
-                    ).reduce((sum, stock) => sum + stock, 0);
-                    return totalStock <= 0;
-                  }).length
-                }`}
+                label={`نفد المخزون: ${statCardsData.outOfStock}`}
                 color="error"
+                variant="outlined"
+              />
+              <Chip
+                label={`إجمالي قيمة المخزون: ${statCardsData.totalValue.toFixed(
+                  2,
+                )}`}
+                color="success"
+                variant="outlined"
+              />
+              <Chip
+                label={`إجمالي قيمة الشراء: ${statCardsData.totalWholesaleValue.toFixed(
+                  2,
+                )}`}
+                color="info"
                 variant="outlined"
               />
             </Box>
@@ -456,14 +505,13 @@ const ProductsAdmin = () => {
                 </TableHead>
                 <TableBody>
                   {paginatedProducts.map((product) => (
-                    <TableRow key={product.id || product.bar_code}>
-                      <AdminProductCard
-                        product={product}
-                        reserved={reservedProducts[product.id!]}
-                        setEditedProducts={setEditedProducts}
-                        editedProducts={editedProducts}
-                      />
-                    </TableRow>
+                    <AdminProductCard
+                      key={product.id || product.bar_code}
+                      product={product}
+                      reserved={reservedProducts[product.id!]}
+                      setEditedProducts={setEditedProducts}
+                      editedProducts={editedProducts}
+                    />
                   ))}
                 </TableBody>
               </Table>

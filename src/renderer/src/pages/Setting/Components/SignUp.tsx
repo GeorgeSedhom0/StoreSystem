@@ -94,10 +94,12 @@ const SignUp = () => {
             onChange={(e) => setUsername(e.target.value)}
             label="اسم المستخدم"
             fullWidth
-            InputProps={{
-              startAdornment: (
-                <PersonIcon sx={{ mr: 1, color: "text.secondary" }} />
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <PersonIcon sx={{ mr: 1, color: "text.secondary" }} />
+                ),
+              },
             }}
             sx={{
               "& .MuiOutlinedInput-root": {
@@ -114,10 +116,12 @@ const SignUp = () => {
             label="كلمة المرور"
             type="password"
             fullWidth
-            InputProps={{
-              startAdornment: (
-                <LockIcon sx={{ mr: 1, color: "text.secondary" }} />
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <LockIcon sx={{ mr: 1, color: "text.secondary" }} />
+                ),
+              },
             }}
             sx={{
               "& .MuiOutlinedInput-root": {
@@ -134,10 +138,12 @@ const SignUp = () => {
             label="البريد الإلكتروني"
             type="email"
             fullWidth
-            InputProps={{
-              startAdornment: (
-                <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
+                ),
+              },
             }}
             sx={{
               "& .MuiOutlinedInput-root": {
@@ -153,10 +159,12 @@ const SignUp = () => {
             onChange={(e) => setPhone(e.target.value)}
             label="رقم الهاتف"
             fullWidth
-            InputProps={{
-              startAdornment: (
-                <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
+                ),
+              },
             }}
             sx={{
               "& .MuiOutlinedInput-root": {

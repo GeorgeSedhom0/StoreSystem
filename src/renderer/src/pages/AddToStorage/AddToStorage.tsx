@@ -112,18 +112,20 @@ const Storage = () => {
               onChange={(e) =>
                 setProduct({ ...product, bar_code: e.target.value })
               }
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button
-                      onClick={() => setIsPrintingCode(true)}
-                      disabled={product.bar_code === ""}
-                    >
-                      طباعة باركود
-                    </Button>
-                    <Button onClick={getBarcode}>احصل على باركود</Button>
-                  </InputAdornment>
-                ),
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Button
+                        onClick={() => setIsPrintingCode(true)}
+                        disabled={product.bar_code === ""}
+                      >
+                        طباعة باركود
+                      </Button>
+                      <Button onClick={getBarcode}>احصل على باركود</Button>
+                    </InputAdornment>
+                  ),
+                },
               }}
             />
             <TextField

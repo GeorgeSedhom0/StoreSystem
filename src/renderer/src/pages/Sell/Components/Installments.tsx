@@ -44,8 +44,10 @@ const Installments = ({
           value={paid}
           onChange={(e) => setPaid(parseFloat(e.target.value) || 0)}
           size="small"
-          inputProps={{
-            inputMode: "decimal",
+          slotProps={{
+            input: {
+              inputMode: "decimal",
+            },
           }}
         />
       </Grid2>

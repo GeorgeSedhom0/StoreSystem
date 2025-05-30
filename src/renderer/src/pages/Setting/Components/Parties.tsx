@@ -177,10 +177,12 @@ const Parties = () => {
                   label="الاسم"
                   value={partyName}
                   onChange={(e) => setPartyName(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <PersonIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <PersonIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      ),
+                    },
                   }}
                 />
               </Grid2>
@@ -191,10 +193,12 @@ const Parties = () => {
                   label="الهاتف"
                   value={partyPhone}
                   onChange={(e) => setPartyPhone(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      ),
+                    },
                   }}
                 />
               </Grid2>
@@ -207,17 +211,19 @@ const Parties = () => {
                   onChange={(e) => setPartyAddress(e.target.value)}
                   multiline
                   rows={3}
-                  InputProps={{
-                    startAdornment: (
-                      <LocationIcon
-                        sx={{
-                          mr: 1,
-                          color: "text.secondary",
-                          alignSelf: "flex-start",
-                          mt: 1,
-                        }}
-                      />
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <LocationIcon
+                          sx={{
+                            mr: 1,
+                            color: "text.secondary",
+                            alignSelf: "flex-start",
+                            mt: 1,
+                          }}
+                        />
+                      ),
+                    },
                   }}
                 />
               </Grid2>
