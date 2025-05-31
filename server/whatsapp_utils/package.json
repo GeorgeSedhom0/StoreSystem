@@ -1,0 +1,16 @@
+{
+  "name": "whatsapp-utils",
+  "version": "1.0.0",
+  "description": "WhatsApp Web utilities for the store system",
+  "main": "whatsapp_handler.js",
+  "scripts": {
+    "start": "node whatsapp_handler.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.28.0",
+    "qrcode": "^1.5.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

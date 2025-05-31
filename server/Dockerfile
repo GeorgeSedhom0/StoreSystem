@@ -2,8 +2,12 @@ FROM python:3.9
 
 WORKDIR /app
 
-# Update and install basic dependencies
-RUN apt-get update && apt-get install -y wget gnupg2 lsb-release
+# Update and install basic dependencies including Node.js
+RUN apt-get update && apt-get install -y wget gnupg2 lsb-release curl
+
+# Install Node.js 18.x (LTS)
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+RUN apt-get install -y nodejs
 
 # Add PostgreSQL repository properly
 RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -16,6 +20,44 @@ RUN apt-get clean && apt-get update
 RUN apt-get install -y postgresql-client-17 openssl tzdata && \
     apt-get remove -y postgresql-client-15 || true
 
+# Install dependencies for Chrome/Puppeteer (needed for whatsapp-web.js)
+RUN apt-get install -y \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxss1 \
+    libgtk-3-0 \
+    libxrandr2 \
+    libasound2 \
+    libpangocairo-1.0-0 \
+    libatk1.0-0 \
+    libcairo-gobject2 \
+    libgtk-3-0 \
+    libgdk-pixbuf2.0-0 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrender1 \
+    libxtst6 \
+    libgconf-2-4 \
+    libnss3-dev \
+    libxss1 \
+    libasound2-dev \
+    libgbm1 \
+    libxkbcommon0 \
+    libatspi2.0-0 \
+    libdrm2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm-dev \
+    libxkbcommon-dev
+
 # Verify the installed version
 RUN pg_dump --version
 
@@ -27,6 +69,17 @@ RUN dpkg-reconfigure -f noninteractive tzdata
 # Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Create WhatsApp data directories
+RUN mkdir -p /app/whatsapp_data /app/whatsapp_utils
+
+# Copy WhatsApp utilities
+COPY whatsapp_utils/ /app/whatsapp_utils/
+
+# Install Node.js dependencies for WhatsApp
+WORKDIR /app/whatsapp_utils
+RUN npm install
+WORKDIR /app
 
 # Create SSL directory
 RUN mkdir -p /app/ssl

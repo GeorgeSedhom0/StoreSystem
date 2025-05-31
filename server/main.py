@@ -22,6 +22,7 @@ from parties import router as party_router
 from installment import router as installment_router
 from analytics import router as analytics_router
 from employee import router as employee_router
+from whatsapp import router as whatsapp_router
 
 load_dotenv()
 
@@ -42,6 +43,7 @@ app.include_router(party_router)
 app.include_router(installment_router)
 app.include_router(analytics_router)
 app.include_router(employee_router)
+app.include_router(whatsapp_router)
 
 origins = [
     "http://localhost",
