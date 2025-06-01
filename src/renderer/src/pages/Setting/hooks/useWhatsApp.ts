@@ -1,15 +1,12 @@
 import axios from "axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Dispatch, SetStateAction, useEffect, useState, useRef } from "react";
+import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { AlertMsg } from "../../Shared/AlertMessage";
 
 // Types
 export interface WhatsAppStatus {
   connected: boolean;
-  authenticating?: boolean;
   phone_number: string | null;
-  qr_code: string | null;
-  qr_timestamp?: number;
 }
 
 export interface WhatsAppConfigRequest {
@@ -31,6 +28,8 @@ export interface WhatsAppApiResponse {
   message?: string;
   status?: WhatsAppStatus;
   phone_number?: string | null;
+  qr_code?: string | null;
+  connected?: boolean;
 }
 
 // API Functions
@@ -73,9 +72,9 @@ const useWhatsApp = (
 ) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [showQrDialog, setShowQrDialog] = useState(false);
-  const lastQrTimestamp = useRef<number>(0);
+  const [currentQrCode, setCurrentQrCode] = useState<string | null>(null);
 
-  // Status query with polling
+  // Status query
   const {
     data: statusData,
     isLoading: statusLoading,
@@ -83,17 +82,11 @@ const useWhatsApp = (
   } = useQuery({
     queryKey: ["whatsapp", "status"],
     queryFn: getWhatsAppStatus,
-    // Poll more frequently when we're in connecting/authenticating state
-    refetchInterval: 5000,
-    retry: 1,
     initialData: {
       success: false,
       status: {
         connected: false,
-        authenticating: false,
         phone_number: null,
-        qr_code: null,
-        qr_timestamp: 0,
       },
     },
   });
@@ -114,6 +107,7 @@ const useWhatsApp = (
     onMutate: (data) => {
       if (data.action === "connect") {
         setIsConnecting(true);
+        setCurrentQrCode(null);
       }
     },
     onSuccess: (data, variables) => {
@@ -121,16 +115,29 @@ const useWhatsApp = (
         if (variables.action === "disconnect") {
           setIsConnecting(false);
           setShowQrDialog(false);
+          setCurrentQrCode(null);
           setMsg({
             type: "success",
             text: "تم قطع الاتصال بنجاح",
           });
         } else {
-          // For connect, just wait for polling to show QR or connection
-          setMsg({
-            type: "success",
-            text: "جاري الاتصال بواتساب، انتظر للحصول على رمز QR",
-          });
+          // For connect action
+          if (data.connected) {
+            // Already connected
+            setIsConnecting(false);
+            setMsg({
+              type: "success",
+              text: "تم الاتصال بواتساب بنجاح",
+            });
+          } else if (data.qr_code) {
+            // QR code received
+            setCurrentQrCode(data.qr_code);
+            setShowQrDialog(true);
+            setMsg({
+              type: "info",
+              text: "امسح رمز QR باستخدام هاتفك لإتمام الاتصال",
+            });
+          }
         }
       } else {
         setMsg({
@@ -146,6 +153,7 @@ const useWhatsApp = (
     onError: () => {
       setMsg({ type: "error", text: "حدث خطأ أثناء تكوين واتساب" });
       setIsConnecting(false);
+      setCurrentQrCode(null);
     },
   });
   const { mutate: sendTestMessageMutation, isPending: testMessageLoading } =
@@ -188,43 +196,23 @@ const useWhatsApp = (
       },
     });
 
-  // Effect to handle QR code and connection status updates
+  // Effect to handle connection status updates
   useEffect(() => {
     const status = statusData?.status;
 
     if (!status) return;
 
-    // Check if we're connected
-    if (status.connected) {
-      if (isConnecting) {
-        setIsConnecting(false);
-        setShowQrDialog(false);
-
-        // Show success message for successful connection
-        setMsg({
-          type: "success",
-          text: "تم الاتصال بواتساب بنجاح",
-        });
-      }
-    }
-    // Check if authentication is in progress
-    else if (status.authenticating) {
-      setIsConnecting(true);
-
-      // Show QR code if available and it's a new QR code
-      if (
-        status.qr_code &&
-        status.qr_timestamp &&
-        status.qr_timestamp > lastQrTimestamp.current
-      ) {
-        lastQrTimestamp.current = status.qr_timestamp;
-        setShowQrDialog(true);
-      }
-    }
-    // If not connected and not authenticating, reset state
-    else if (isConnecting) {
+    // Check if we're connected and were previously connecting
+    if (status.connected && isConnecting) {
       setIsConnecting(false);
       setShowQrDialog(false);
+      setCurrentQrCode(null);
+
+      // Show success message for successful connection
+      setMsg({
+        type: "success",
+        text: "تم الاتصال بواتساب بنجاح",
+      });
     }
   }, [statusData?.status, isConnecting, setMsg]);
 
@@ -232,10 +220,7 @@ const useWhatsApp = (
     // Status data
     status: statusData?.status || {
       connected: false,
-      authenticating: false,
       phone_number: null,
-      qr_code: null,
-      qr_timestamp: 0,
     },
     storeNumber: storeNumberData?.phone_number || null,
     statusLoading,
@@ -244,6 +229,7 @@ const useWhatsApp = (
     // QR dialog control
     showQrDialog,
     setShowQrDialog,
+    qrCode: currentQrCode,
 
     // Actions
     configure,

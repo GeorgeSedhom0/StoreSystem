@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from "react";
+import { useState, useContext, useEffect } from "react";
 import {
   Box,
   Paper,
@@ -46,6 +46,7 @@ const WhatsApp = () => {
     isConnecting,
     showQrDialog,
     setShowQrDialog,
+    qrCode,
     configure,
     configureLoading,
     sendTestMessage,
@@ -54,22 +55,15 @@ const WhatsApp = () => {
     setStoreNumberLoading,
     refetchStatus,
   } = useWhatsApp(setMsg, storeId);
+
   const isConnected = status?.connected || false;
   const phoneNumber = status?.phone_number;
-  const qrCode = status?.qr_code;
 
   useEffect(() => {
     if (storeNumber) {
       setStoreNumberInput(storeNumber);
     }
   }, [storeNumber]);
-
-  // Auto open QR dialog when code becomes available during connection
-  useEffect(() => {
-    if (qrCode) {
-      setShowQrDialog(true);
-    }
-  }, [qrCode, setShowQrDialog]);
 
   const handleConnect = () => {
     configure({ action: "connect" });
@@ -416,7 +410,7 @@ const WhatsApp = () => {
                 }}
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                سيتم تحديث رمز QR تلقائيًا كل بضع دقائق
+                انتظر حتى يتم الاتصال أو أعد المحاولة إذا انتهت صلاحية الرمز
               </Typography>
             </Box>
           ) : (
@@ -436,7 +430,7 @@ const WhatsApp = () => {
             startIcon={<RefreshIcon />}
             disabled={statusLoading}
           >
-            تحديث
+            تحديث الحالة
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,4 +1,18 @@
 services:
+  whatsapp:
+    build:
+      context: .
+      dockerfile: Dockerfile.whatsapp
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+    environment:
+      - TZ=Africa/Cairo
+    volumes:
+      - whatsapp_data:/app/whatsapp_data
+    networks:
+      - app-network
+
   web:
     build: .
     ports:
@@ -13,12 +27,16 @@ services:
       - ALGORITHM=${ALGORITHM}
       - TZ=Africa/Cairo
       - PGTZ=Africa/Cairo
+      - WHATSAPP_SERVICE_URL=http://whatsapp:3001
     depends_on:
       - db
+      - whatsapp
     volumes:
       - ./:/app
       - ssl_certs:/app/ssl
-    command: uvicorn main_wrapper:app --host 0.0.0.0 --port 8000 --ssl-keyfile=/app/ssl/key.pem --ssl-certfile=/app/ssl/cert.pem --reload  
+    networks:
+      - app-network
+    command: uvicorn main_wrapper:app --host 0.0.0.0 --port 8000 --ssl-keyfile=/app/ssl/key.pem --ssl-certfile=/app/ssl/cert.pem --reload
  
   db:
     image: postgres:17
@@ -33,7 +51,14 @@ services:
       - PGTZ=Africa/Cairo 
     ports:
       - "5433:5432"
+    networks:
+      - app-network
 
 volumes:
   postgres_data:
   ssl_certs:
+  whatsapp_data:
+
+networks:
+  app-network:
+    driver: bridge

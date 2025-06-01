@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import json
-import subprocess
+import requests
 import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -23,9 +23,8 @@ DATABASE = getenv("DATABASE")
 USER = getenv("USER")
 PASS = getenv("PASS")
 
-# WhatsApp Node.js handler paths
-WHATSAPP_HANDLER_PATH = "/app/whatsapp_utils/whatsapp_handler.js"
-WHATSAPP_DATA_PATH = "/app/whatsapp_data"
+# WhatsApp Service URL
+WHATSAPP_SERVICE_URL = getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
 
 
 class WhatsAppConfigRequest(BaseModel):
@@ -42,55 +41,32 @@ class WhatsAppStoreNumberRequest(BaseModel):
     phone_number: str
 
 
-def run_node_command(command_args, timeout=30):
-    """Run a Node.js WhatsApp command and return the result"""
+def call_whatsapp_service(endpoint, method="GET", data=None, timeout=30):
+    """Call the WhatsApp service API"""
     try:
-        cmd = ["node", "whatsapp_handler.js"] + command_args
-        logger.info(f"Running WhatsApp command: {cmd}")
+        url = f"{WHATSAPP_SERVICE_URL}/{endpoint}"
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd="/app/whatsapp_utils",
-        )
+        if method == "GET":
+            response = requests.get(url, timeout=timeout)
+        elif method == "POST":
+            response = requests.post(url, json=data, timeout=timeout)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
 
-        if result.stdout:
-            # Trim any potential extra output and find the JSON part
-            stdout = result.stdout.strip()
-            # Try to find JSON object start and end
-            start_idx = stdout.find("{")
-            if start_idx >= 0:
-                try:
-                    # Parse just the JSON part
-                    return json.loads(stdout[start_idx:])
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON parsing error: {e}")
-                    logger.error(f"Problematic stdout: {stdout}")
-                    return {
-                        "success": False,
-                        "message": "Invalid JSON response format",
-                    }
-            else:
-                logger.error(f"No JSON object found in: {stdout}")
-                return {
-                    "success": False,
-                    "message": "No valid JSON response found",
-                }
+        response.raise_for_status()
+        return response.json()
 
-        if result.stderr:
-            # Just log stderr for debugging, don't use it for parsing
-            logger.debug(f"Node.js stderr output: {result.stderr}")
-
-        # If we got here, there was no valid JSON output
-        return {"success": False, "message": "No response from WhatsApp handler"}
-
-    except subprocess.TimeoutExpired:
-        logger.error(f"Command timeout: {command_args}")
-        return {"success": False, "message": "Command timeout"}
+    except requests.exceptions.ConnectionError:
+        logger.error("Cannot connect to WhatsApp service. Is it running?")
+        return {"success": False, "message": "WhatsApp service unavailable"}
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout calling WhatsApp service: {endpoint}")
+        return {"success": False, "message": "Request timeout"}
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error calling WhatsApp service: {e}")
+        return {"success": False, "message": str(e)}
     except Exception as e:
-        logger.error(f"Error running command {command_args}: {e}")
+        logger.error(f"Unexpected error calling WhatsApp service: {e}")
         return {"success": False, "message": str(e)}
 
 
@@ -99,21 +75,17 @@ async def configure_whatsapp(request: WhatsAppConfigRequest):
     """Configure WhatsApp connection"""
     try:
         if request.action == "connect":
-            # Start new connection - on-demand approach
+            # Start new connection and wait for QR code or connection
             logger.info("Initiating new WhatsApp connection")
-            result = run_node_command(["connect"], timeout=60)
+            result = call_whatsapp_service("connect", method="POST", timeout=60)
 
             if result.get("success"):
-                # Just return the status, QR code will be fetched in polling
-                status = result.get("status", {})
-                logger.info(
-                    "WhatsApp connection initiated, polling for QR code will begin"
-                )
-
+                # Return the result which includes QR code or connection status
                 return {
                     "success": True,
-                    "message": "WhatsApp connection initiated, polling for QR code",
-                    "status": status,
+                    "message": result.get("message", "WhatsApp connection initiated"),
+                    "qr_code": result.get("qr_code"),
+                    "connected": result.get("connected", False),
                 }
             else:
                 return {
@@ -123,13 +95,12 @@ async def configure_whatsapp(request: WhatsAppConfigRequest):
 
         elif request.action == "disconnect":
             logger.info("Disconnecting WhatsApp")
-            result = run_node_command(["disconnect"], timeout=20)
+            result = call_whatsapp_service("disconnect", method="POST", timeout=20)
 
             if result.get("success"):
                 return {
                     "success": True,
                     "message": "WhatsApp disconnected successfully",
-                    "status": get_whatsapp_status(),
                 }
             else:
                 return {
@@ -148,13 +119,9 @@ async def configure_whatsapp(request: WhatsAppConfigRequest):
 async def get_whatsapp_status_endpoint():
     """Get current WhatsApp connection status"""
     try:
-        # Always get fresh status directly from Node.js handler
+        # Get fresh status directly from Node.js handler
         logger.info("Getting fresh WhatsApp status")
         status = get_whatsapp_status()
-
-        # Log if a QR code is available
-        if status.get("qr_code"):
-            logger.info("QR code is available in status response")
 
         return {"success": True, "status": status}
     except Exception as e:
@@ -163,8 +130,8 @@ async def get_whatsapp_status_endpoint():
 
 
 def get_whatsapp_status():
-    """Get current WhatsApp status directly from the Node.js handler"""
-    result = run_node_command(["status"], timeout=15)
+    """Get current WhatsApp status directly from the WhatsApp service"""
+    result = call_whatsapp_service("status", timeout=10)
 
     # Convert to the expected format
     if result.get("success"):
@@ -172,28 +139,19 @@ def get_whatsapp_status():
         if isinstance(status, dict):
             return {
                 "connected": status.get("connected", False),
-                "authenticating": status.get("authenticating", False),
                 "phone_number": status.get("phone_number"),
-                "qr_code": status.get("qr_code"),
-                "qr_timestamp": status.get("qr_timestamp", 0),
             }
         else:
             logger.warning(f"Unexpected status format: {status}")
             return {
                 "connected": False,
-                "authenticating": False,
                 "phone_number": None,
-                "qr_code": None,
-                "qr_timestamp": 0,
             }
     else:
         logger.error(f"Failed to get WhatsApp status: {result.get('message')}")
         return {
             "connected": False,
-            "authenticating": False,
             "phone_number": None,
-            "qr_code": None,
-            "qr_timestamp": 0,
         }
 
 
@@ -273,9 +231,14 @@ async def send_test_message(request: WhatsAppTestMessageRequest):
         # Format phone number
         phone = format_phone_number(request.phone_number)
 
-        # Send message using Node.js handler
+        # Send message using WhatsApp service
         logger.info(f"Sending test message to {phone}")
-        result = run_node_command(["send", phone, request.message], timeout=30)
+        result = call_whatsapp_service(
+            "send",
+            method="POST",
+            data={"phone_number": phone, "message": request.message},
+            timeout=30,
+        )
 
         if result.get("success"):
             return {"success": True, "message": "Test message sent successfully"}
@@ -335,9 +298,14 @@ def send_notification_to_store(store_id: int, message: str):
         # Format phone number
         phone = format_phone_number(phone_number)
 
-        # Send message using Node.js handler with longer timeout
+        # Send message using WhatsApp service
         logger.info(f"Sending notification to store {store_id} at {phone}")
-        result = run_node_command(["send", phone, message], timeout=45)
+        result = call_whatsapp_service(
+            "send",
+            method="POST",
+            data={"phone_number": phone, "message": message},
+            timeout=45,
+        )
 
         if result.get("success"):
             logger.info(f"Notification sent to store {store_id}")
@@ -351,3 +319,30 @@ def send_notification_to_store(store_id: int, message: str):
     except Exception as e:
         logger.error(f"Error sending notification to store {store_id}: {e}")
         return False
+
+
+@router.get("/whatsapp/service-health")
+async def get_service_health():
+    """Get WhatsApp service health status for debugging"""
+    try:
+        # Try to get detailed status from service
+        service_status = None
+        is_healthy = False
+
+        try:
+            # Check if service is responding
+            response = requests.get(f"{WHATSAPP_SERVICE_URL}/health", timeout=5)
+            is_healthy = response.status_code == 200
+            service_status = call_whatsapp_service("status", timeout=5)
+        except Exception as e:
+            logger.error(f"Error getting service status: {e}")
+
+        return {
+            "success": True,
+            "service_healthy": is_healthy,
+            "service_url": WHATSAPP_SERVICE_URL,
+            "service_status": service_status,
+        }
+    except Exception as e:
+        logger.error(f"Error checking service health: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

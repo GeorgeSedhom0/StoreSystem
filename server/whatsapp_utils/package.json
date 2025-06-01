@@ -1,14 +1,17 @@
 {
   "name": "whatsapp-utils",
-  "version": "1.0.0",
-  "description": "WhatsApp Web utilities for the store system",
-  "main": "whatsapp_handler.js",
+  "version": "2.0.0",
+  "description": "WhatsApp Web service for the store system",
+  "main": "whatsapp_service.js",
   "scripts": {
-    "start": "node whatsapp_handler.js"
+    "start": "node whatsapp_service.js",
+    "dev": "node whatsapp_service.js",
+    "test": "node test_service.js"
   },
   "dependencies": {
     "whatsapp-web.js": "^1.28.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "express": "^4.18.2"
   },
   "engines": {
     "node": ">=18.0.0"
