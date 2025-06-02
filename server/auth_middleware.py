@@ -1,7 +1,7 @@
 import jwt
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from fastapi import HTTPException, Request, Depends, Cookie
+from fastapi import HTTPException, Cookie
 from dotenv import load_dotenv
 from os import getenv
 import logging

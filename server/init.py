@@ -383,7 +383,14 @@ def create_all_triggers(cur):
     -- Trigger to insert into cash_flow after inserting a bill
     CREATE OR REPLACE FUNCTION insert_cash_flow_after_insert()
     RETURNS TRIGGER AS $$
-    BEGIN
+    BEGIN  
+        -- If the bill ID is negative, skip cash flow insertion
+        -- This is used for the -1 bill that is created for each store
+        -- and it could represent a bill update      
+        IF NEW.id < 0 THEN
+            RETURN NEW;
+        END IF;
+                
         INSERT INTO cash_flow (
             store_id,
             time,
@@ -639,26 +646,31 @@ def create_all_triggers(cur):
     CREATE OR REPLACE FUNCTION update_total_after_insert()
     RETURNS TRIGGER AS $$
     DECLARE
-        latest_total FLOAT;
+        latest_total NUMERIC;
+        latest_record RECORD;
     BEGIN
-        IF NEW.bill_id < 0 THEN
-            RETURN NEW;
-        END IF;
-
-        SELECT total INTO latest_total FROM cash_flow
+        -- Lock the latest cash_flow record for this store to prevent race conditions
+        SELECT id, total INTO latest_record
+        FROM cash_flow
         WHERE store_id = NEW.store_id
-        AND id != NEW.id
+        AND (time < NEW.time OR (time = NEW.time AND id < NEW.id))
         ORDER BY time DESC, id DESC
-        LIMIT 1;
+        LIMIT 1
+        FOR UPDATE;
 
-        IF latest_total IS NULL THEN
+        -- If no previous record exists, start from 0
+        IF latest_record.total IS NULL THEN
             latest_total := 0;
+        ELSE
+            latest_total := latest_record.total;
         END IF;
 
+        -- Update the total for the current row
         UPDATE cash_flow
-        SET total = NEW.amount + latest_total
+        SET total = COALESCE(NEW.amount, 0) + latest_total
         WHERE id = NEW.id
         AND store_id = NEW.store_id;
+
         RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
@@ -675,16 +687,53 @@ def create_all_triggers(cur):
     CREATE OR REPLACE FUNCTION bubble_fix_total_after_update()
     RETURNS TRIGGER AS $$
     DECLARE
-        amount_diff FLOAT;
+        previous_total NUMERIC;
+        current_total NUMERIC;
+        rec RECORD;
     BEGIN
-        amount_diff := NEW.amount - OLD.amount;
+        -- Only process if amount actually changed
+        IF NEW.amount = OLD.amount THEN
+            RETURN NEW;
+        END IF;
 
-        -- Bubble correct the total on all rows that were inserted after the updated row
-        -- for the same store
+        -- First, fix the total of the current row
+        -- Get the previous row's total
+        SELECT total INTO previous_total
+        FROM cash_flow
+        WHERE store_id = NEW.store_id
+        AND (time < NEW.time OR (time = NEW.time AND id < NEW.id))
+        ORDER BY time DESC, id DESC
+        LIMIT 1;
+        
+        IF previous_total IS NULL THEN
+            previous_total := 0;
+        END IF;
+        
+        -- Update the current row's total
         UPDATE cash_flow
-        SET total = total + amount_diff
-        WHERE store_id = OLD.store_id
-        AND time > OLD.time;
+        SET total = NEW.amount + previous_total
+        WHERE id = NEW.id
+        AND store_id = NEW.store_id;
+        
+        -- Get the updated total
+        current_total := NEW.amount + previous_total;
+
+        -- Now update all subsequent records
+        FOR rec IN 
+            SELECT id, amount
+            FROM cash_flow
+            WHERE store_id = NEW.store_id
+            AND (time > NEW.time OR (time = NEW.time AND id > NEW.id))
+            ORDER BY time ASC, id ASC
+            FOR UPDATE
+        LOOP
+            current_total := current_total + rec.amount;
+            
+            UPDATE cash_flow
+            SET total = current_total
+            WHERE id = rec.id
+            AND store_id = NEW.store_id;
+        END LOOP;
 
         RETURN NEW;
     END;
@@ -703,11 +752,14 @@ def create_all_triggers(cur):
     CREATE OR REPLACE FUNCTION update_cash_flow_after_update()
     RETURNS TRIGGER AS $$
     BEGIN
-        UPDATE cash_flow
-        SET
-            amount = NEW.total,
-            total = total + NEW.total - OLD.total
-        WHERE bill_id = NEW.id; 
+        -- Only update if total actually changed
+        IF NEW.total != OLD.total THEN
+            -- Just update the amount - let the cash_flow update trigger handle the bubble fix
+            UPDATE cash_flow
+            SET amount = NEW.total
+            WHERE bill_id = NEW.id
+            AND store_id = NEW.store_id;
+        END IF;
         RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
@@ -729,6 +781,7 @@ def create_all_triggers(cur):
         RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
+    
     CREATE TRIGGER trigger_add_negative_one_bill
     AFTER INSERT ON store_data
     FOR EACH ROW
