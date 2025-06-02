@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -10,6 +10,7 @@ from os import getenv
 from fastapi import APIRouter
 from typing import Optional
 import json
+from auth_middleware import get_current_user
 
 load_dotenv()
 
@@ -74,7 +75,7 @@ class Party(BaseModel):
 
 
 @router.get("/parties")
-async def get_parties() -> JSONResponse:
+async def get_parties(current_user: dict = Depends(get_current_user)) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute("""
         SELECT * FROM assosiated_parties
@@ -83,7 +84,9 @@ async def get_parties() -> JSONResponse:
 
 
 @router.post("/party")
-async def add_party(party: Party) -> JSONResponse:
+async def add_party(
+    party: Party, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute(
             """
@@ -109,7 +112,9 @@ async def add_party(party: Party) -> JSONResponse:
 
 
 @router.delete("/party")
-async def delete_party(party_id: int) -> JSONResponse:
+async def delete_party(
+    party_id: int, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute(
             """
@@ -126,6 +131,7 @@ async def delete_party(party_id: int) -> JSONResponse:
 async def edit_party(
     party_id: int,
     party: Party,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute(
@@ -151,6 +157,7 @@ async def get_party_bills(
     party_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Get all bills from the database for a specific party
@@ -203,7 +210,9 @@ async def get_party_bills(
 
 
 @router.get("/party/details")
-async def get_party_details(party_id: int) -> JSONResponse:
+async def get_party_details(
+    party_id: int, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     """
     Get the details of a specific party, total bills, total amount, etc.
     """
@@ -260,7 +269,9 @@ async def get_party_details(party_id: int) -> JSONResponse:
 
 
 @router.get("/parties/long-missed")
-async def get_long_missed_parties() -> JSONResponse:
+async def get_long_missed_parties(
+    current_user: dict = Depends(get_current_user),
+) -> JSONResponse:
     """
     Get all parties that have not made any purchases in the last 1 month
     """
@@ -307,6 +318,7 @@ def get_parties_open_bills(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     party_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Get all bills details of parties that have open bills, grouped by collection_id
@@ -430,6 +442,7 @@ def get_parties_open_bills(
 def close_party_bills(
     party_id: int,
     store_id: int,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Mark all bills for a party as closed

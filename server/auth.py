@@ -3,13 +3,14 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from fastapi import Cookie, Form
+from fastapi import Cookie, Form, Depends
 from datetime import datetime
 import logging
 from dotenv import load_dotenv
 from os import getenv
 import jwt
 from fastapi import APIRouter
+from auth_middleware import get_current_user, get_store_info
 
 load_dotenv()
 
@@ -66,17 +67,17 @@ class Database:
 
 
 @router.get("/profile")
-def get_user_profile(access_token=Cookie()) -> JSONResponse:
+def get_user_profile(user: dict = Depends(get_current_user)) -> JSONResponse:
     """
     Get the user profile
     """
     try:
-        user = jwt.decode(access_token, SECRET, algorithms=[ALGORITHM])
+        store = get_store_info(1)  # Default store ID
+
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
                 SELECT
-                    username,
                     ARRAY_AGG(pages.name) AS pages,
                     ARRAY_AGG(pages.path) AS paths
                 FROM users
@@ -85,18 +86,20 @@ def get_user_profile(access_token=Cookie()) -> JSONResponse:
                 WHERE username = %s
                 GROUP BY username
                 """,
-                (user["sub"],),
+                (user["username"],),
             )
-            user = cur.fetchone()
-            cur.execute("SELECT * FROM store_data WHERE id = %s", (1,))
-            store = cur.fetchone()
+            user_pages = cur.fetchone()
+            if user_pages:
+                user.update(user_pages)
+
             cur.execute("SELECT * FROM shifts WHERE current = True")
             shift = cur.fetchone()
             if not shift:
                 raise HTTPException(status_code=401, detail="Shift not started")
+
             return JSONResponse(content={"user": user, "store": store})
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error("Error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -271,7 +274,7 @@ def add_user(
 
 
 @router.get("/users")
-def get_users() -> JSONResponse:
+def get_users(current_user: dict = Depends(get_current_user)) -> JSONResponse:
     """
     Get all users
     """
@@ -294,6 +297,7 @@ def update_user(
     email: str = Form(...),
     phone: str = Form(...),
     scope_id: int = Form(...),
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Update a user

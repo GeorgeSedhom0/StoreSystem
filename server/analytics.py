@@ -1,4 +1,4 @@
-from fastapi import HTTPException, APIRouter
+from fastapi import HTTPException, APIRouter, Depends
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -17,6 +17,7 @@ from analytics_utils import (
     process_products_data_with_predictions,
     predict_total_sales,
 )
+from auth_middleware import get_current_user
 
 load_dotenv()
 
@@ -75,7 +76,7 @@ class Database:
 
 
 @router.get("/analytics/alerts")
-def alerts(store_id: int):
+def alerts(store_id: int, current_user: dict = Depends(get_current_user)):
     """Get alerts for products running low in stock using statistical methods"""
     try:
         with Database(HOST, DATABASE, USER, PASS) as cursor:
@@ -217,6 +218,7 @@ def sales(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     types: Optional[List[str]] = None,
+    current_user: dict = Depends(get_current_user),
 ):
     """Get daily sales for a specific store with prediction support"""
     if start_date is None:
@@ -299,6 +301,7 @@ def income_analytics(
     store_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
 ):
     """Get income analytics including cash flow and profit data"""
     if start_date is None:
@@ -417,6 +420,7 @@ def top_products(
     store_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
 ):
     """Get daily selling series of top 5 products"""
     if start_date is None:
@@ -531,6 +535,7 @@ def products(
     products_ids: List[int],
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
 ):
     """Get daily selling series for specific products"""
     if start_date is None:
@@ -623,6 +628,7 @@ def shifts_analytics(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     bills_type: List[str] = ["sell", "return"],
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Get the total sales for each shift with ML-based prediction support.

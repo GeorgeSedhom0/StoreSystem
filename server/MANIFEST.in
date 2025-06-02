@@ -1,0 +1,13 @@
+include *.md
+include *.txt
+include *.yml
+include *.yaml
+include *.sql
+include *.json
+include *.html
+include *.bat
+recursive-include ssl *.pem
+recursive-include tests *
+recursive-include whatsapp_utils *
+global-exclude __pycache__
+global-exclude *.py[co]

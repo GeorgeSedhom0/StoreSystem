@@ -24,9 +24,16 @@ ENV TZ=Africa/Cairo
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN dpkg-reconfigure -f noninteractive tzdata
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy package files first for better caching
+COPY requirements.txt setup.py pyproject.toml MANIFEST.in ./
+COPY __init__.py ./
+
+# Install the package in editable mode (this will install dependencies)
+RUN pip install --no-cache-dir -e .
+
+# Install test requirements if they exist
+COPY tests/test_requirements.txt .
+RUN pip install --no-cache-dir -r test_requirements.txt
 
 # Create SSL directory
 RUN mkdir -p /app/ssl

@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
 from typing import Literal, Any
@@ -13,9 +13,9 @@ import logging
 from dotenv import load_dotenv
 from os import getenv
 from openpyxl import Workbook
-from reset_db import reset_db
 import subprocess
 import os
+from reset_db import reset_db
 from auth import router as auth_router
 from settings import router as setting_router
 from parties import router as party_router
@@ -23,6 +23,11 @@ from installment import router as installment_router
 from analytics import router as analytics_router
 from employee import router as employee_router
 from whatsapp import router as whatsapp_router
+from auth_middleware import get_current_user, get_store_info
+from whatsapp_utils import (
+    send_whatsapp_notification_background,
+    format_excessive_discount_message,
+)
 
 load_dotenv()
 
@@ -190,7 +195,7 @@ def test():
 
 
 @app.get("/barcode")
-def get_bar_code():
+def get_bar_code(current_user: dict = Depends(get_current_user)):
     """
     Get the first available barcode where the number right after it is available.
     """
@@ -233,6 +238,7 @@ def get_bar_code():
 def get_products(
     store_id: int,
     is_deleted: Optional[bool] = False,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get all products from the database for a specific store
@@ -295,7 +301,7 @@ def get_products(
 
 
 @app.get("/admin/products")
-def get_products_as_admin():
+def get_products_as_admin(current_user: dict = Depends(get_current_user)):
     """
     Get all products from the database for all stores as admin
 
@@ -378,7 +384,9 @@ def get_products_as_admin():
 
 
 @app.post("/product")
-def add_product(product: Product, store_id: int):
+def add_product(
+    product: Product, store_id: int, current_user: dict = Depends(get_current_user)
+):
     """
     Add a product to the database
 
@@ -418,7 +426,11 @@ def add_product(product: Product, store_id: int):
 
 
 @app.put("/products")
-def update_product(products: list[Product], store_id: int):
+def update_product(
+    products: list[Product],
+    store_id: int,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Update products in the database
 
@@ -514,7 +526,9 @@ def update_product(products: list[Product], store_id: int):
 
 
 @app.put("/product/delete")
-def delete_product(product_id: int, store_id: int):
+def delete_product(
+    product_id: int, store_id: int, current_user: dict = Depends(get_current_user)
+):
     """
     Mark a product as deleted in a specific store
 
@@ -546,7 +560,9 @@ def delete_product(product_id: int, store_id: int):
 
 
 @app.put("/product/restore")
-def restore_product(product_id: int, store_id: int):
+def restore_product(
+    product_id: int, store_id: int, current_user: dict = Depends(get_current_user)
+):
     """
     Restore a product that was marked as deleted in a specific store
 
@@ -581,6 +597,7 @@ def get_bills(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     party_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get all bills from the database
@@ -645,7 +662,9 @@ def get_bills(
 
 
 @app.put("/bill")
-def update_bill(bill: dbBill, store_id: int):
+def update_bill(
+    bill: dbBill, store_id: int, current_user: dict = Depends(get_current_user)
+):
     """
     Update a bill in the database
 
@@ -775,6 +794,8 @@ def add_bill(
     paid: Optional[float] = None,
     installments: Optional[int] = None,
     installment_interval: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Add a bill to the database
@@ -788,6 +809,8 @@ def add_bill(
         paid (Optional[float]): The amount paid
         installments (Optional[int]): The number of installments
         installment_interval (Optional[int]): The interval between installments
+        current_user (dict): Current authenticated user (required)
+        background_tasks (BackgroundTasks): FastAPI background tasks
 
     Returns:
         Dict: A message indicating the result of the operation
@@ -799,8 +822,73 @@ def add_bill(
         if move_type in ["buy", "return"]
         else 0
     )
+
+    # Get store information
+    try:
+        store_info = get_store_info(store_id)
+    except HTTPException:
+        store_info = None
+
+    # Store data for potential WhatsApp notification
+    should_notify = False
+    notification_data = {}
+
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Check for excessive discount in sell transactions
+            if move_type in ["sell", "installment"]:
+                # Calculate wholesale sum
+                wholesale_sum = sum(
+                    product_flow.quantity * product_flow.wholesale_price
+                    for product_flow in bill.products_flow
+                )
+
+                # Check if bill total (after discount) is less than wholesale sum
+                if bill.total < wholesale_sum:
+                    should_notify = True
+
+                    # Get party name if exists
+                    party_name = "غير محدد"
+                    if party_id:
+                        cur.execute(
+                            "SELECT name FROM assosiated_parties WHERE id = %s",
+                            (party_id,),
+                        )
+                        party_result = cur.fetchone()
+                        if party_result:
+                            party_name = party_result["name"]
+
+                    # Get product details for the message
+                    product_details = []
+                    for product_flow in bill.products_flow:
+                        cur.execute(
+                            "SELECT name FROM products WHERE id = %s",
+                            (product_flow.id,),
+                        )
+                        product_result = cur.fetchone()
+                        if product_result:
+                            product_details.append(
+                                {
+                                    "name": product_result["name"],
+                                    "quantity": product_flow.quantity,
+                                    "wholesale_price": product_flow.wholesale_price,
+                                    "sale_price": product_flow.price,
+                                }
+                            )
+
+                    # Store notification data for background task
+                    notification_data = {
+                        "move_type": move_type,
+                        "party_name": party_name,
+                        "bill_time": bill.time,
+                        "wholesale_sum": wholesale_sum,
+                        "bill_total": bill.total,
+                        "actual_discount": bill.discount,
+                        "product_details": product_details,
+                        "store_name": store_info.get("name") if store_info else None,
+                        "user_name": current_user.get("username"),
+                    }
+
             cur.execute(
                 """
                 INSERT INTO bills (store_id, time, discount, total, type, party_id)
@@ -820,6 +908,16 @@ def add_bill(
             if not result:
                 raise HTTPException(status_code=400, detail="Insert into bills failed")
             bill_id = result["id"]
+
+            # Schedule WhatsApp notification as background task if needed
+            if should_notify:
+                notification_data["bill_id"] = bill_id
+                notification_str = format_excessive_discount_message(
+                    **notification_data
+                )
+                background_tasks.add_task(
+                    send_whatsapp_notification_background, store_id, notification_str
+                )
 
             # Create a list of tuples
             values = [
@@ -905,11 +1003,11 @@ def add_bill(
                 (bill_id,),
             )
 
-            bill = cur.fetchone()
+            bill_result = cur.fetchone()
 
-        return {"message": "Bill added successfully", "bill": bill}
+        return {"message": "Bill added successfully", "bill": bill_result}
     except Exception as e:
-        print(f"Error: {e}")
+        print("Error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -918,6 +1016,7 @@ def move_products(
     bill: Bill,
     source_store_id: int,
     destination_store_id: int,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Move products from one store to another by
@@ -928,6 +1027,7 @@ def move_products(
         bill (Bill): The bill to move products
         source_store_id (int): The source store ID
         destination_store_id (int): The destination store ID
+        current_user (dict): Current authenticated user (required)
 
     Returns:
         Dict: A message indicating the result of the operation
@@ -977,6 +1077,7 @@ def move_products(
             "sell",
             source_store_id,
             destination_party_id,  # Use destination store's associated party ID
+            current_user=current_user,
         )
 
         # Add buy bill to destination store (with source store as party)
@@ -985,6 +1086,7 @@ def move_products(
             "buy",
             destination_store_id,
             source_party_id,  # Use source store's associated party ID
+            current_user=current_user,
         )
 
         return {"message": "Products moved successfully"}
@@ -994,7 +1096,9 @@ def move_products(
 
 
 @app.get("/end-reservation")
-def end_reservation(bill_id: str, store_id: int):
+def end_reservation(
+    bill_id: str, store_id: int, current_user: dict = Depends(get_current_user)
+):
     """
     End a reservation for all products in a reservation bill
     """
@@ -1046,7 +1150,9 @@ def end_reservation(bill_id: str, store_id: int):
 
 
 @app.get("/complete-bnpl-payment")
-def complete_bnpl_payment(bill_id: str, store_id: int):
+def complete_bnpl_payment(
+    bill_id: str, store_id: int, current_user: dict = Depends(get_current_user)
+):
     """
     Complete payment for a BNPL (Buy Now Pay Later) bill by changing it to a regular sell bill
     and updating the bill total to reflect the actual payment received.
@@ -1106,6 +1212,7 @@ def get_cash_flow(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     party_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Get all cash flow records from the database
@@ -1164,6 +1271,7 @@ def add_cash_flow(
     description: str,
     store_id: int,
     party_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Add a cash flow record to the database
@@ -1203,6 +1311,7 @@ def add_cash_flow(
 @app.get("/current-shift")
 def current_shift(
     store_id: int,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get the current shift
@@ -1228,6 +1337,7 @@ def current_shift(
 @app.get("/last-shift")
 def last_shift(
     store_id: int,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get the last shift
@@ -1258,6 +1368,7 @@ def last_shift(
 @app.get("/shift-total")
 def shift_total(
     store_id: int,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get comprehensive shift data including sales, purchases, returns and cash flow
@@ -1388,197 +1499,8 @@ def generate_xlsx(data):
     return output
 
 
-@app.get("/inventory")
-async def inventory(store_id: int):
-    """
-    Get the products in the inventory and their total value for a specific store
-
-    Args:
-        store_id (int): The store ID to get inventory for
-
-    Returns:
-        StreamingResponse: Excel file with inventory data
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT
-                    p.name,
-                    pi.stock,
-                    p.wholesale_price,
-                    pi.stock * p.wholesale_price AS total_value
-                FROM products p
-                JOIN product_inventory pi ON p.id = pi.product_id
-                WHERE pi.store_id = %s AND pi.is_deleted = FALSE
-                """,
-                (store_id,),
-            )
-            # make an .xlsx file and return it
-            data = cur.fetchall()
-
-            output = generate_xlsx(data)
-
-            return StreamingResponse(
-                output,
-                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={"Content-Disposition": "attachment;filename=inventory.xlsx"},
-            )
-
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-def generate_xlsx_admin(data, store_names):
-    # Create an in-memory output file for the new workbook
-    output = io.BytesIO()
-
-    # Create a workbook and select the active worksheet
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Inventory"
-
-    # Create headers with store names
-    headers = ["اسم المنتج", "الباركود", "سعر الشراء", "سعر البيع", "القسم"]
-    for store_name in store_names:
-        headers.append(f"كمية {store_name}")
-    headers.append("الكمية الإجمالية")
-    headers.append("إجمالي القيمة")
-
-    ws.append(headers)
-
-    # Calculate store totals and grand total
-    store_totals = {store_name: 0 for store_name in store_names}
-    grand_total = 0
-
-    for row in data:
-        # Prepare row data
-        row_data = [
-            row["name"],
-            row["bar_code"],
-            row["wholesale_price"],
-            row["price"],
-            row["category"],
-        ]
-
-        # Add quantities for each store
-        total_qty = 0
-        for store_name in store_names:
-            qty = row["stock_by_store"].get(store_name, 0)
-            total_qty += qty
-            row_data.append(qty)
-
-        # Add total quantity and value
-        row_data.append(total_qty)
-        total_value = total_qty * float(row["wholesale_price"])
-        row_data.append(total_value)
-
-        # Update totals
-        for i, store_name in enumerate(store_names):
-            store_totals[store_name] += row["stock_by_store"].get(
-                store_name, 0
-            ) * float(row["wholesale_price"])
-        grand_total += total_value
-
-        ws.append(row_data)
-
-    # Add totals row
-    total_row = ["الإجمالي", "", "", "", ""]
-    for store_name in store_names:
-        total_row.append("")
-    total_row.append("")
-    total_row.append(grand_total)
-    ws.append(total_row)
-
-    # Add store subtotals
-    for store_name, total in store_totals.items():
-        subtotal_row = [f"إجمالي {store_name}", "", "", "", ""]
-        for _ in range(len(store_names)):
-            subtotal_row.append("")
-        subtotal_row.append("")
-        subtotal_row.append(total)
-        ws.append(subtotal_row)
-
-    # Save the workbook to the in-memory file
-    wb.save(output)
-    output.seek(0)
-
-    return output
-
-
-@app.get("/admin/inventory")
-async def inventory_as_admin():
-    """
-    Get the products in the inventory and their total value for all stores with totals separately and combined
-
-    Returns:
-        StreamingResponse: Excel file with inventory data
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            # Get all store names
-            cur.execute(
-                """
-                SELECT id, name FROM store_data
-                ORDER BY id
-                """
-            )
-            stores = cur.fetchall()
-            store_names = [
-                store["name"]
-                if store["name"] and store["name"] != ""
-                else str(store["id"])
-                for store in stores
-            ]
-
-            # Get all products with their stock by store
-            cur.execute(
-                """
-                WITH all_stores AS (
-                SELECT id, name FROM store_data
-                ),
-                product_stocks AS (
-                    SELECT 
-                        p.id,
-                        p.name,
-                        p.bar_code,
-                        p.wholesale_price,
-                        p.price,
-                        p.category,
-                        jsonb_object_agg(
-                            CASE 
-                                WHEN s.name IS NOT NULL AND s.name != '' THEN s.name 
-                                ELSE s.id::text 
-                            END, 
-                            COALESCE(pi.stock, 0)
-                        ) AS stock_by_store
-                    FROM products p
-                    CROSS JOIN all_stores s
-                    LEFT JOIN product_inventory pi ON p.id = pi.product_id AND s.id = pi.store_id AND pi.is_deleted = FALSE
-                    GROUP BY p.id, p.name, p.bar_code, p.wholesale_price, p.price, p.category
-                )
-                SELECT * FROM product_stocks
-                ORDER BY name
-                """
-            )
-
-            data = cur.fetchall()
-            output = generate_xlsx_admin(data, store_names)
-
-            return StreamingResponse(
-                output,
-                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={"Content-Disposition": "attachment;filename=inventory.xlsx"},
-            )
-
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
 @app.get("/backup")
-async def backup():
+async def backup(current_user: dict = Depends(get_current_user)):
     """
     Backs up everything in the database as a save point to restore later
     """
@@ -1603,7 +1525,9 @@ async def backup():
 
 
 @app.post("/restore")
-async def restore(file: UploadFile = File(...)):
+async def restore(
+    file: UploadFile = File(...), current_user: dict = Depends(get_current_user)
+):
     """
     Restores the database to a previous save point
     """
@@ -1632,7 +1556,9 @@ async def restore(file: UploadFile = File(...)):
 
 # Add this new endpoint after the other bill-related endpoints
 @app.get("/bill-products")
-def get_bill_products(bill_id: str, store_id: int):
+def get_bill_products(
+    bill_id: str, store_id: int, current_user: dict = Depends(get_current_user)
+):
     """
     Get all products from a specific bill by ID
 

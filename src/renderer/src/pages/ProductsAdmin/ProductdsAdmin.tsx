@@ -257,25 +257,6 @@ const ProductsAdmin = () => {
     };
   }, [filteredAndSortedProducts]);
 
-  const getInventory = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get("/admin/inventory", {
-        responseType: "blob", // important
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", "جرد المنتجات.xlsx");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (error) {
-      console.log(error);
-    }
-    setLoading(false);
-  }, []);
-
   const submitProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -335,9 +316,6 @@ const ProductsAdmin = () => {
                   variant="contained"
                 >
                   {changedOnly ? "عرض الكل" : "عرض المعدلة فقط"}
-                </Button>
-                <Button onClick={getInventory} variant="contained">
-                  تحميل جرد المنتجات
                 </Button>
               </Grid2>{" "}
               <Grid2 size={12}>
