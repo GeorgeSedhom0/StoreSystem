@@ -6,6 +6,7 @@ import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
+import time
 
 # Load environment variables
 load_dotenv()
@@ -313,3 +314,202 @@ def format_excessive_discount_message(
 🤖 _تم إرسال هذا التنبيه تلقائياً من نظام إدارة المتجر_"""
 
     return message
+
+
+def format_low_stock_message(
+    products_below_zero: List[Dict[str, Any]],
+    store_name: str = None,
+    user_name: str = None,
+) -> str:
+    """
+    Format WhatsApp message for low/negative stock notification in Arabic
+
+    Args:
+        products_below_zero: List of products with stock below 0
+        store_name: Name of the store where transaction occurred
+        user_name: Username who created the bill
+
+    Returns:
+        Formatted Arabic message string
+    """
+    from datetime import datetime
+
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # Format store and user information
+    store_display = store_name if store_name else "غير محدد"
+    user_display = user_name if user_name else "غير محدد"
+
+    # Create products list
+    products_text = ""
+    for i, product in enumerate(products_below_zero, 1):
+        name = product["name"]
+        current_stock = product["stock"]
+        quantity_sold = product.get("quantity_sold", "غير متاح")
+
+        products_text += f"{i}. {name}\n"
+        products_text += f"   🛒 الكمية المباعة: {quantity_sold} قطعة\n"
+        products_text += f"   ⚠️ المخزون الحالي: {current_stock} قطعة\n"
+
+        if i < len(products_below_zero):
+            products_text += "\n"
+
+    message = f"""⚠️ *تنبيه مخزون سالب* ⚠️
+
+🏪 *المتجر:* {store_display}
+👨‍💼 *الموظف:* {user_display}
+📅 *التاريخ:* {current_time}
+
+━━━━━━━━━━━━━━━━━━━━
+
+📦 *منتجات بمخزون سالب:*
+
+{products_text}
+
+━━━━━━━━━━━━━━━━━━━━
+
+🔴 *تحذير مهم:*
+⚠️ هذه المنتجات وصلت لمخزون سالب
+💸 النقص في المخزون يحتاج لإعادة تعبئة فورية
+📞 يرجى مراجعة المخزون وإعادة تعبئة هذه المنتجات
+🛒 قد تحتاج لتجديد طلبيات الشراء عاجلاً
+
+━━━━━━━━━━━━━━━━━━━━
+
+🤖 _تم إرسال هذا التنبيه تلقائياً من نظام إدارة المتجر_"""
+
+    return message
+
+
+def check_stock_levels_after_sale(store_id: int, sold_products: List[Dict[str, Any]]):
+    """
+    Check stock levels after a sale and return products that are below or equal to 0
+
+    Args:
+        store_id: Store ID
+        sold_products: List of products that were sold with their quantities
+
+    Returns:
+        List of products with stock <= 0
+    """
+    try:
+        # Wait 1 second for database triggers to complete
+        time.sleep(1)
+
+        if not sold_products:
+            logger.info("No products sold, skipping stock check")
+            return []
+
+        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        products_below_zero = []
+
+        for sold_product in sold_products:
+            product_id = sold_product["id"]
+            quantity_sold = sold_product["quantity"]
+
+            # Get current stock after the sale
+            cur.execute(
+                """
+                SELECT p.name, pi.stock
+                FROM products p
+                JOIN product_inventory pi ON p.id = pi.product_id
+                WHERE p.id = %s AND pi.store_id = %s
+                """,
+                (product_id, store_id),
+            )
+
+            result = cur.fetchone()
+            if result:
+                current_stock = result["stock"]
+
+                # Check if the product stock is <= 0
+                if current_stock <= 0:
+                    logger.warning(
+                        f"Product '{result['name']}' stock is low/negative: {current_stock}"
+                    )
+                    products_below_zero.append(
+                        {
+                            "name": result["name"],
+                            "stock": current_stock,
+                            "product_id": product_id,
+                            "quantity_sold": quantity_sold,
+                        }
+                    )
+            else:
+                logger.warning(
+                    f"Product ID {product_id} not found in inventory for store {store_id}"
+                )
+
+        if products_below_zero:
+            logger.info(f"Found {len(products_below_zero)} products with stock <= 0")
+
+        cur.close()
+        conn.close()
+
+        return products_below_zero
+
+    except Exception as e:
+        logger.error(f"Error checking stock levels: {e}")
+        return []
+
+
+def send_low_stock_notification_background(
+    store_id: int,
+    products_below_zero: List[Dict[str, Any]],
+    store_name: str = None,
+    user_name: str = None,
+):
+    """Background task to send low stock WhatsApp notification"""
+    try:
+        if not products_below_zero:
+            return
+
+        message = format_low_stock_message(
+            products_below_zero=products_below_zero,
+            store_name=store_name,
+            user_name=user_name,
+        )
+
+        success = send_notification_to_store(store_id, message)
+
+        if success:
+            logging.info(
+                "Low stock WhatsApp notification sent for %d products",
+                len(products_below_zero),
+            )
+        else:
+            logging.warning(
+                "Failed to send low stock WhatsApp notification for %d products",
+                len(products_below_zero),
+            )
+    except Exception as e:
+        logging.error(
+            "Error in background task sending low stock WhatsApp notification: %s", e
+        )
+
+
+def check_and_send_low_stock_notification(
+    store_id: int,
+    sold_products: List[Dict[str, Any]],
+    store_name: str = None,
+    user_name: str = None,
+):
+    """
+    Background task wrapper that checks stock levels and sends notification if needed
+    """
+    try:
+        # Check stock levels (includes 1-second wait)
+        products_below_zero = check_stock_levels_after_sale(store_id, sold_products)
+
+        # Send notification if any products are below zero
+        if products_below_zero:
+            send_low_stock_notification_background(
+                store_id, products_below_zero, store_name, user_name
+            )
+        else:
+            logging.info("All products have positive stock")
+
+    except Exception as e:
+        logging.error(f"Error in background stock check task: {e}")

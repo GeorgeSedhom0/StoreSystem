@@ -27,6 +27,7 @@ from auth_middleware import get_current_user, get_store_info
 from whatsapp_utils import (
     send_whatsapp_notification_background,
     format_excessive_discount_message,
+    check_and_send_low_stock_notification,
 )
 
 load_dotenv()
@@ -949,6 +950,21 @@ def add_bill(
             if cur.rowcount != len(values):
                 raise HTTPException(
                     status_code=400, detail="Insert into products_flow failed"
+                )
+
+            # Check for low stock after sales transactions (as background task)
+            if move_type in ["sell", "BNPL", "installment", "buy-return"]:
+                sold_products = [
+                    {"id": pf.id, "quantity": pf.quantity} for pf in bill.products_flow
+                ]
+
+                # Schedule the stock check as a background task
+                background_tasks.add_task(
+                    check_and_send_low_stock_notification,
+                    store_id,
+                    sold_products,
+                    store_info.get("name") if store_info else None,
+                    current_user.get("username"),
                 )
 
             if move_type == "reserve":
