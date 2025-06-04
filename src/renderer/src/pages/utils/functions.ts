@@ -1,4 +1,4 @@
-import { AlertMsg } from "../pages/Shared/AlertMessage";
+import { AlertMsg } from "../Shared/AlertMessage";
 import JsBarcode from "jsbarcode";
 import printJS from "print-js";
 

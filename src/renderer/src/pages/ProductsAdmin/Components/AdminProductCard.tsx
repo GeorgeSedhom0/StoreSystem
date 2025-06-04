@@ -5,7 +5,7 @@ import {
   TableRow,
   TextField,
 } from "@mui/material";
-import { AdminProduct } from "../../../utils/types";
+import { AdminProduct } from "../../utils/types";
 import { useMemo, useState } from "react";
 import PrintBarCode from "@renderer/pages/Shared/PrintBarCode";
 

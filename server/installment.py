@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from os import getenv
 from fastapi import APIRouter
 import json
+from auth_middleware import get_current_user
 
 load_dotenv()
 
@@ -55,6 +56,7 @@ class Database:
 @router.get("/installments")
 def get_installments(
     store_id: int,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     query = """
     SELECT
@@ -160,7 +162,9 @@ def get_installments(
 
 
 @router.post("/installments/pay/{installment_id}")
-def add_flow(installment_id: int, amount: float) -> JSONResponse:
+def add_flow(
+    installment_id: int, amount: float, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     # Input validation
     if amount <= 0:
         raise HTTPException(

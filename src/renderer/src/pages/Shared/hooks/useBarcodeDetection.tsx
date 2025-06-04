@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction, useEffect } from "react";
-import { Product } from "../../../utils/types";
+import { Product } from "../../utils/types";
 import { AlertMsg } from "../AlertMessage";
 
 const useBarcodeDetection = (

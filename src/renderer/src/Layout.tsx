@@ -7,6 +7,7 @@ import {
   Select,
   MenuItem,
   InputLabel,
+  IconButton,
 } from "@mui/material";
 import { ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -16,8 +17,9 @@ import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import SetBaseUrl from "./SetBaseUrl";
-import { StoreData } from "./utils/types";
+import { StoreData } from "./pages/utils/types";
 import LoadingScreen from "./pages/Shared/LoadingScreen";
+import AddIcon from "@mui/icons-material/Add";
 
 const logoutWihtoutEndingShift = async () => {
   await axios.get("/switch", {
@@ -122,11 +124,11 @@ const Layout = ({
         ref={topNavRef}
       >
         <Toolbar sx={{ width: "100%" }}>
-          <Grid2 container spacing={3} p={2} width="100%">
+          <Grid2 container spacing={2} py={2} px={1} width="100%">
             <Grid2
               container
-              size={9}
-              gap={3}
+              size={9.5}
+              gap={2}
               sx={{
                 ".active > Button": {
                   borderBottom: 1,
@@ -148,8 +150,8 @@ const Layout = ({
             </Grid2>
             <Grid2
               container
-              size={3}
-              gap={3}
+              size={2.5}
+              gap={2}
               justifyContent="flex-end"
               alignItems="flex-start"
             >
@@ -175,17 +177,21 @@ const Layout = ({
                   </Select>
                 </FormControl>
               )}
-              <Button variant="contained" onClick={() => switchAccount()}>
-                تبديل المستخدم
-              </Button>
               <Button
                 variant="contained"
+                onClick={() => switchAccount()}
+                color="error"
+              >
+                تبديل المستخدم
+              </Button>
+              <IconButton
                 onClick={() => {
                   window.electron.ipcRenderer.invoke("open-new-window");
                 }}
+                color="primary"
               >
-                +
-              </Button>
+                <AddIcon />
+              </IconButton>
             </Grid2>
           </Grid2>
         </Toolbar>

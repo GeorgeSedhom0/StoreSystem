@@ -1,5 +1,5 @@
 import axios from "axios";
-import { DBProducts } from "../../../utils/types";
+import { DBProducts } from "../../utils/types";
 import { useQuery } from "@tanstack/react-query";
 import { useContext } from "react";
 import { StoreContext } from "@renderer/StoreDataProvider";

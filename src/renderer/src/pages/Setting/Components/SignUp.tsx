@@ -12,7 +12,7 @@ import axios from "axios";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LoadingButton } from "@mui/lab";
-import { Scope } from "../../../utils/types";
+import { Scope } from "../../utils/types";
 import {
   Person as PersonIcon,
   Lock as LockIcon,

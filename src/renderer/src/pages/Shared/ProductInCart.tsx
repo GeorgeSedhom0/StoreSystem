@@ -1,5 +1,5 @@
 import { Button, TextField, TableRow, TableCell } from "@mui/material";
-import { SCProduct } from "../../utils/types";
+import { SCProduct } from "../utils/types";
 import { Dispatch, SetStateAction, useState } from "react";
 import PrintBarCode from "./PrintBarCode";
 

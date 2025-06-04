@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -10,6 +10,7 @@ from os import getenv
 from fastapi import APIRouter
 from typing import Optional
 import json
+from auth_middleware import get_current_user
 
 load_dotenv()
 
@@ -74,7 +75,7 @@ class Party(BaseModel):
 
 
 @router.get("/parties")
-async def get_parties() -> JSONResponse:
+async def get_parties(current_user: dict = Depends(get_current_user)) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute("""
         SELECT * FROM assosiated_parties
@@ -83,7 +84,9 @@ async def get_parties() -> JSONResponse:
 
 
 @router.post("/party")
-async def add_party(party: Party) -> JSONResponse:
+async def add_party(
+    party: Party, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute(
             """
@@ -109,7 +112,9 @@ async def add_party(party: Party) -> JSONResponse:
 
 
 @router.delete("/party")
-async def delete_party(party_id: int) -> JSONResponse:
+async def delete_party(
+    party_id: int, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute(
             """
@@ -126,6 +131,7 @@ async def delete_party(party_id: int) -> JSONResponse:
 async def edit_party(
     party_id: int,
     party: Party,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute(
@@ -151,6 +157,7 @@ async def get_party_bills(
     party_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Get all bills from the database for a specific party
@@ -202,65 +209,138 @@ async def get_party_bills(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@router.get("/party/details")
-async def get_party_details(party_id: int) -> JSONResponse:
+@router.get("/parties/bills")
+def get_parties_open_bills(
+    store_id: int,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    party_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+) -> JSONResponse:
     """
-    Get the details of a specific party, total bills, total amount, etc.
+    Get all bills details of parties that have open bills, grouped by collection_id
     """
-
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT
-                    assosiated_parties.id,
-                    assosiated_parties.name
-                FROM assosiated_parties
-                WHERE assosiated_parties.id = %s
-                """,
-                (party_id,),
-            )
-            party = cur.fetchone()
+            # Build the query conditions
+            extra_condition = ""
+            params = [
+                start_date if start_date else "1970-01-01",
+                end_date if end_date else datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                store_id,
+            ]
+
+            if party_id:
+                extra_condition = "AND ap.id = %s"
+                params.append(party_id)
+
+            # First, find collection_ids that have at least one bill in the date range
+            collections_with_bills_in_range_query = f"""
+                SELECT DISTINCT bc.collection_id
+                FROM bills_collections bc
+                JOIN bills b ON bc.bill_id = b.id AND bc.store_id = b.store_id
+                JOIN assosiated_parties ap ON bc.party_id = ap.id
+                WHERE b.time >= %s
+                AND b.time <= %s
+                AND bc.store_id = %s
+                AND b.id > 0
+                {extra_condition}
+            """
+
+            cur.execute(collections_with_bills_in_range_query, params)
+            collection_ids_in_range = [row["collection_id"] for row in cur.fetchall()]
+
+            if not collection_ids_in_range:
+                return JSONResponse(content=[], status_code=200)
+
+            # Now get all collections with their bills and products in a single query
+            collections_with_bills_query = f"""
+                WITH collection_bills AS (
+                    SELECT 
+                        bc.collection_id,
+                        ap.id AS party_id,
+                        ap.name AS party_name,
+                        ap.type AS party_type,
+                        bc.is_closed,
+                        b.id AS bill_id,
+                        TO_CHAR(b.time, 'YYYY-MM-DD HH24:MI:SS') AS bill_time,
+                        b.discount,
+                        b.total,
+                        b.type AS bill_type,
+                        json_agg(
+                            json_build_object(
+                                'id', pf.product_id,
+                                'name', p.name,
+                                'bar_code', p.bar_code,
+                                'amount', pf.amount,
+                                'wholesale_price', pf.wholesale_price,
+                                'price', pf.price
+                            ) ORDER BY pf.product_id
+                        ) FILTER (WHERE pf.product_id IS NOT NULL) AS products
+                    FROM bills_collections bc
+                    JOIN bills b ON bc.bill_id = b.id AND bc.store_id = b.store_id
+                    JOIN assosiated_parties ap ON bc.party_id = ap.id
+                    LEFT JOIN products_flow pf ON b.id = pf.bill_id AND b.store_id = pf.store_id
+                    LEFT JOIN products p ON pf.product_id = p.id
+                    WHERE bc.collection_id = ANY(%s::uuid[])
+                    AND bc.store_id = %s
+                    AND b.id > 0
+                    {extra_condition if party_id else ""}
+                    GROUP BY bc.collection_id, ap.id, ap.name, ap.type, bc.is_closed, 
+                             b.id, b.time, b.discount, b.total, b.type
+                )
+                SELECT 
+                    collection_id::text,
+                    party_id,
+                    party_name,
+                    party_type,
+                    is_closed,
+                    MIN(bill_time) AS first_bill_time,
+                    SUM(total) AS total_amount,
+                    json_agg(
+                        json_build_object(
+                            'id', bill_id,
+                            'time', bill_time,
+                            'discount', COALESCE(discount, 0),
+                            'total', total,
+                            'type', bill_type,
+                            'products', COALESCE(products, '[]'::json)
+                        ) ORDER BY bill_time
+                    ) AS bills
+                FROM collection_bills
+                GROUP BY collection_id, party_id, party_name, party_type, is_closed
+                ORDER BY party_name, MIN(bill_time)
+            """
 
             cur.execute(
-                """
-                SELECT
-                    COUNT(bills.id) AS total_bills,
-                    SUM(bills.total) AS total_amount
-                FROM bills
-                WHERE bills.party_id = %s
-                """,
-                (party_id,),
+                collections_with_bills_query,
+                [collection_ids_in_range, store_id] + ([party_id] if party_id else []),
             )
-            details = cur.fetchone()
 
-            cur.execute(
-                """
-                SELECT
-                    SUM(amount) AS total_cash
-                FROM cash_flow
-                WHERE cash_flow.party_id = %s
-                """,
-                (party_id,),
-            )
-            cash = cur.fetchone()
+            result = []
+            for row in cur.fetchall():
+                collection_record = {
+                    "collection_id": row["collection_id"],
+                    "party_id": row["party_id"],
+                    "party_name": row["party_name"],
+                    "party_type": row["party_type"],
+                    "time": str(row["first_bill_time"]),
+                    "total": row["total_amount"],
+                    "is_closed": row["is_closed"],
+                    "bills": row["bills"],
+                }
+                result.append(collection_record)
 
-            party["total_bills"] = (
-                details["total_bills"] if details["total_bills"] else 0
-            )
-            party["total_amount"] = (
-                details["total_amount"] if details["total_amount"] else 0
-            )
-            party["total_cash"] = cash["total_cash"] if cash["total_cash"] else 0
-
-            return JSONResponse(content=party, status_code=200)
+            return JSONResponse(content=result, status_code=200)
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/parties/long-missed")
-async def get_long_missed_parties() -> JSONResponse:
+async def get_long_missed_parties(
+    current_user: dict = Depends(get_current_user),
+) -> JSONResponse:
     """
     Get all parties that have not made any purchases in the last 1 month
     """
@@ -307,6 +387,7 @@ def get_parties_open_bills(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     party_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Get all bills details of parties that have open bills, grouped by collection_id
@@ -430,6 +511,7 @@ def get_parties_open_bills(
 def close_party_bills(
     party_id: int,
     store_id: int,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
     Mark all bills for a party as closed

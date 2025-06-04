@@ -14,7 +14,7 @@ import {
   Typography,
 } from "@mui/material";
 
-import { Employee } from "../../../utils/types";
+import { Employee } from "../../utils/types";
 import axios from "axios";
 import { AlertMsg } from "../../Shared/AlertMessage";
 import { StoreContext } from "@renderer/StoreDataProvider";

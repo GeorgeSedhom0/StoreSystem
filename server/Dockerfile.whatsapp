@@ -1,0 +1,61 @@
+FROM node:18-slim
+
+WORKDIR /app
+
+# Install dependencies for Chrome/Puppeteer
+RUN apt-get update && apt-get install -y \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxss1 \
+    libgtk-3-0 \
+    libxrandr2 \
+    libasound2 \
+    libpangocairo-1.0-0 \
+    libatk1.0-0 \
+    libcairo-gobject2 \
+    libgtk-3-0 \
+    libgdk-pixbuf2.0-0 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrender1 \
+    libxtst6 \
+    libgconf-2-4 \
+    libnss3-dev \
+    libxss1 \
+    libasound2-dev \
+    libgbm1 \
+    libxkbcommon0 \
+    libatspi2.0-0 \
+    libdrm2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm-dev \
+    libxkbcommon-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set timezone
+ENV TZ=Africa/Cairo
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Copy WhatsApp utils
+COPY whatsapp_utils/ /app/
+
+# Install Node.js dependencies
+RUN npm install
+
+# Create WhatsApp data directory
+RUN mkdir -p /app/whatsapp_data
+
+# Expose the port
+EXPOSE 3001
+
+# Start the service
+CMD ["node", "whatsapp_service.js"]

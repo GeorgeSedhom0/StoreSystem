@@ -7,7 +7,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import { TableComponents } from "react-virtuoso";
-import { Bill as BillType } from "../../../utils/types";
+import { Bill as BillType } from "../../utils/types";
 import Bill from "./Bill";
 
 export const fixedHeaderContent = () => {

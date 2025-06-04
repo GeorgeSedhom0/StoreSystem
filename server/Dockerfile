@@ -2,8 +2,8 @@ FROM python:3.9
 
 WORKDIR /app
 
-# Update and install basic dependencies
-RUN apt-get update && apt-get install -y wget gnupg2 lsb-release
+# Update and install basic dependencies 
+RUN apt-get update && apt-get install -y wget gnupg2 lsb-release curl
 
 # Add PostgreSQL repository properly
 RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -24,9 +24,12 @@ ENV TZ=Africa/Cairo
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN dpkg-reconfigure -f noninteractive tzdata
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy package files first for better caching
+COPY requirements.txt setup.py pyproject.toml MANIFEST.in ./
+COPY __init__.py ./
+
+# Install the package in editable mode (this will install dependencies)
+RUN pip install --no-cache-dir -e .
 
 # Create SSL directory
 RUN mkdir -p /app/ssl
@@ -45,3 +48,6 @@ RUN echo 'import os; import time; os.environ["TZ"] = "Africa/Cairo"; time.tzset(
 
 # Expose the port your FastAPI app runs on
 EXPOSE 8000
+
+# Start the main FastAPI application directly
+CMD ["uvicorn", "main_wrapper:app", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile=/app/ssl/key.pem", "--ssl-certfile=/app/ssl/cert.pem", "--reload"]

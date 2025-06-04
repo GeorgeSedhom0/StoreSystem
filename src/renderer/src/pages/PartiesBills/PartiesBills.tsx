@@ -19,7 +19,7 @@ import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ar-sa";
 import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { CollectionBill, DBProducts, Product } from "../../utils/types";
+import { CollectionBill, DBProducts, Product } from "../utils/types";
 import { TableVirtuoso } from "react-virtuoso";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {

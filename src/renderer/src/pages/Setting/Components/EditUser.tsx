@@ -17,7 +17,7 @@ import axios from "axios";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LoadingButton } from "@mui/lab";
-import { Scope } from "../../../utils/types";
+import { Scope } from "../../utils/types";
 import {
   Edit as EditIcon,
   Person as PersonIcon,

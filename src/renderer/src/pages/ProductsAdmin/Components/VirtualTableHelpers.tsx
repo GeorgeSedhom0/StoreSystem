@@ -7,7 +7,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import { TableComponents } from "react-virtuoso";
-import { AdminProduct } from "../../../utils/types";
+import { AdminProduct } from "../../utils/types";
 
 export const fixedHeaderContent = ({ stores }: { stores: string[] }) => {
   return (

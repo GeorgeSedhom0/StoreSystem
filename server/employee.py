@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from psycopg2.extras import RealDictCursor
-from fastapi import HTTPException, APIRouter, Form
+from fastapi import HTTPException, APIRouter, Form, Depends
+from auth_middleware import get_current_user
 
 load_dotenv()
 
@@ -81,7 +82,11 @@ router = APIRouter()
 
 
 @router.post("/employees")
-def add_employee(employee: EmployeeBase, store_id: int) -> JSONResponse:
+def add_employee(
+    employee: EmployeeBase,
+    store_id: int,
+    current_user: dict = Depends(get_current_user),
+) -> JSONResponse:
     """
     Add a new employee
     """
@@ -106,16 +111,29 @@ def add_employee(employee: EmployeeBase, store_id: int) -> JSONResponse:
             )
             new_employee = cur.fetchone()
             if new_employee:
-                return JSONResponse(content={"status": "success"})
+                # Convert datetime to ISO string for JSON serialization
+                employee_dict = dict(new_employee)
+                if employee_dict.get("started_on"):
+                    employee_dict["started_on"] = employee_dict[
+                        "started_on"
+                    ].isoformat()
+                if employee_dict.get("stopped_on"):
+                    employee_dict["stopped_on"] = employee_dict[
+                        "stopped_on"
+                    ].isoformat()
+                return JSONResponse(content=employee_dict)
             else:
                 raise HTTPException(status_code=400, detail="Employee not added")
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/employees")
-def get_employees(store_id: int) -> JSONResponse:
+def get_employees(
+    store_id: int, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     """
     Get all employees with started_on as ISO formatted string
     """
@@ -144,6 +162,7 @@ def get_employees(store_id: int) -> JSONResponse:
 def update_employee(
     employee_id: int,
     employee: EmployeeUpdate,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
@@ -181,7 +200,9 @@ def update_employee(
 
 
 @router.delete("/employees/{employee_id}")
-def delete_employee(employee_id: int) -> JSONResponse:
+def delete_employee(
+    employee_id: int, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
@@ -208,6 +229,7 @@ def pay_salary(
     deductions: float = Form(...),
     month: int = Form(...),
     time: datetime = Form(...),
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:

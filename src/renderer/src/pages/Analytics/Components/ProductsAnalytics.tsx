@@ -16,7 +16,7 @@ import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import EChartsReact from "echarts-for-react";
 import { ProductsAnalyticsType } from "./TopProductsAnalytics";
-import { DBProducts } from "../../../utils/types";
+import { DBProducts } from "../../utils/types";
 import { exportToExcel } from "../utils";
 import tableIcon from "./table.png";
 import { StoreContext } from "@renderer/StoreDataProvider";

@@ -7,7 +7,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import { TableComponents } from "react-virtuoso";
-import { CollectionBill } from "../../../utils/types";
+import { CollectionBill } from "../../utils/types";
 import CollectionBillComponent from "./CollectionBill";
 
 export const fixedHeaderContent = () => {

@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -8,6 +8,7 @@ from os import getenv
 from fastapi import APIRouter
 from typing import Any
 import json
+from auth_middleware import get_current_user
 
 load_dotenv()
 
@@ -54,7 +55,7 @@ class Database:
 
 
 @router.get("/scopes")
-def get_scopes() -> JSONResponse:
+def get_scopes(current_user: dict = Depends(get_current_user)) -> JSONResponse:
     query = """
     SELECT * FROM scopes
     """
@@ -72,6 +73,7 @@ def get_scopes() -> JSONResponse:
 def add_scope(
     name: str,
     pages: list[int],
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
@@ -95,6 +97,7 @@ def update_scope(
     id: int,
     name: str,
     pages: list[int],
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
@@ -115,7 +118,9 @@ def update_scope(
 
 
 @router.delete("/scope")
-def delete_scope(id: int) -> JSONResponse:
+def delete_scope(
+    id: int, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
@@ -134,7 +139,7 @@ def delete_scope(id: int) -> JSONResponse:
 
 
 @router.get("/pages")
-def get_pages() -> JSONResponse:
+def get_pages(current_user: dict = Depends(get_current_user)) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute("SELECT * FROM pages")
@@ -146,7 +151,9 @@ def get_pages() -> JSONResponse:
 
 
 @router.get("/store-data")
-def get_store_data(store_id: int) -> JSONResponse:
+def get_store_data(
+    store_id: int, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute("SELECT * FROM store_data WHERE id = %s", (store_id,))
@@ -158,7 +165,7 @@ def get_store_data(store_id: int) -> JSONResponse:
 
 
 @router.get("/admin/stores-data")
-def get_stores_data() -> JSONResponse:
+def get_stores_data(current_user: dict = Depends(get_current_user)) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute("SELECT * FROM store_data")
@@ -171,7 +178,12 @@ def get_stores_data() -> JSONResponse:
 
 @router.put("/store-data")
 def update_store_data(
-    name: str, address: str, phone: str, extra_info: dict[str, Any], store_id: int
+    name: str,
+    address: str,
+    phone: str,
+    extra_info: dict[str, Any],
+    store_id: int,
+    current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:

@@ -1,12 +1,12 @@
 import { Button, ButtonGroup, Chip, TableCell, TableRow } from "@mui/material";
 import { useRef, useState, useContext } from "react";
-import BillCollectionView from "../../../utils/BillCollectionView";
-import { printBill } from "../../../utils/functions";
+import BillCollectionView from "../../utils/BillCollectionView";
+import { printBill } from "../../utils/functions";
+import { Bill, CollectionBill } from "../../utils/types";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import FormatedNumber from "../../Shared/FormatedNumber";
 import { StoreContext } from "@renderer/StoreDataProvider";
-import { Bill, CollectionBill } from "@renderer/utils/types";
 
 const closeBills = async (partyId: number, storeId: number) => {
   const { data } = await axios.post("/parties/close-bills", null, {
@@ -77,7 +77,7 @@ const CollectionBillComponent = ({
           {new Date(collection.time).toLocaleString("ar-EG")}
         </TableCell>
         <TableCell>
-          <FormatedNumber>{Math.abs(collection.total)}</FormatedNumber>
+          <FormatedNumber>{collection.total}</FormatedNumber>
         </TableCell>
         <TableCell>
           <ButtonGroup

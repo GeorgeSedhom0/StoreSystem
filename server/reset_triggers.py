@@ -53,6 +53,7 @@ def drop_all_triggers(cur):
     cur.execute("DROP FUNCTION IF EXISTS update_total_after_insert() CASCADE;")
     cur.execute("DROP FUNCTION IF EXISTS bubble_fix_total_after_update() CASCADE;")
     cur.execute("DROP FUNCTION IF EXISTS update_cash_flow_after_update() CASCADE;")
+    cur.execute("DROP FUNCTION IF EXISTS add_negative_one_bill CASCADE;")
 
 
 def reset_all_triggers(cur):

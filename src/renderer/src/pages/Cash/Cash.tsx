@@ -35,7 +35,7 @@ import {
   TrendingDown as TrendingDownIcon,
   AccountBalance as AccountBalanceIcon,
 } from "@mui/icons-material";
-import { CashFlow, Party } from "../../utils/types";
+import { CashFlow, Party } from "../utils/types";
 import LoadingScreen from "../Shared/LoadingScreen";
 import dayjs, { Dayjs } from "dayjs";
 import { useQuery } from "@tanstack/react-query";

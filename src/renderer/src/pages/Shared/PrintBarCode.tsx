@@ -7,7 +7,7 @@ import {
   TextField,
 } from "@mui/material";
 import { Dispatch, SetStateAction, useState } from "react";
-import { printCode } from "./../../utils/functions";
+import { printCode } from "../utils/functions";
 
 interface PrintBarCodeProps {
   code: string;

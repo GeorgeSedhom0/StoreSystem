@@ -20,25 +20,25 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Bill, Party, Product, SCProduct } from "../../utils/types";
+import { Bill, Party, Product, SCProduct } from "../utils/types";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
-import ShiftDialog from "./Components/ShiftDialog";
-import BillView from "../../utils/BillView";
+import ShiftDialog from "../Sell/Components/ShiftDialog";
+import BillView from "../utils/BillView";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { printBill } from "../../utils/functions";
+import { printBill } from "../utils/functions";
 import { useNavigate } from "react-router-dom";
 import PartyDetails from "../Shared/PartyDetails";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
 import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
-import Installments from "./Components/Installments";
+import Installments from "../Sell/Components/Installments";
 import useParties from "../Shared/hooks/useParties";
 import useProducts from "../Shared/hooks/useProducts";
-import { useShift } from "./hooks/useShifts";
-import useBills from "./hooks/useBills";
+import { useShift } from "../Sell/hooks/useShifts";
+import useBills from "../Sell/hooks/useBills";
 import { StoreContext } from "@renderer/StoreDataProvider";
-import { usePersistentCart } from "../../Shared/hooks/usePersistentCart";
+import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
 
 const AdminSell = () => {
   const {

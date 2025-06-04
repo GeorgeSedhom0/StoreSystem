@@ -26,7 +26,7 @@ import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ar-sa";
 import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { Bill as BillType, DBProducts, Product } from "../../utils/types";
+import { Bill as BillType, DBProducts, Product } from "../utils/types";
 import { TableVirtuoso } from "react-virtuoso";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {

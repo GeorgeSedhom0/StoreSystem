@@ -1,6 +1,6 @@
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
-import { DBAdminProducts } from "@renderer/utils/types";
+import { DBAdminProducts } from "../../utils/types";
 
 const getAdminProducts = async ({}) => {
   const { data } = await axios.get<DBAdminProducts>("/admin/products");

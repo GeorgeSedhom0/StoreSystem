@@ -1,7 +1,7 @@
 import { Button, DialogActions } from "@mui/material";
 import { forwardRef, useContext } from "react";
 import { CollectionBill } from "./types";
-import { StoreContext } from "../StoreDataProvider";
+import { StoreContext } from "../../StoreDataProvider";
 
 const billTypeLabels: Record<string, string> = {
   sell: "بيع",
@@ -22,20 +22,27 @@ const BillCollectionView = forwardRef<HTMLDivElement, BillCollectionViewProps>(
   ({ collection, open, setOpen }, ref) => {
     // Function to determine if total should be shown as negative
     const shouldShowNegativeTotal = (billType: string) => {
-      return billType === "buy";
+      return ["buy", "return"].includes(billType);
+    };
+
+    const formatProductTotal = (
+      price: number,
+      wholesalePrice: number,
+      amount: number,
+      billType: string,
+    ) => {
+      if (["buy", "buy-return"].includes(billType)) {
+        return wholesalePrice * amount * -1;
+      }
+      return price * amount * -1;
     };
 
     // Function to determine if product amount should be shown as negative
     const formatProductAmount = (amount: number, billType: string) => {
-      if (
-        billType === "sell" ||
-        billType === "BNPL" ||
-        billType === "reserve" ||
-        billType === "installment"
-      ) {
-        return -Math.abs(amount);
+      if (billType === "buy" || billType === "return") {
+        return Math.abs(amount);
       }
-      return Math.abs(amount);
+      return -Math.abs(amount);
     };
 
     const { store } = useContext(StoreContext);
@@ -173,7 +180,7 @@ const BillCollectionView = forwardRef<HTMLDivElement, BillCollectionViewProps>(
             }}
           />
 
-          {collection.bills.map((bill, index) => (
+          {collection.bills.map((bill) => (
             <div key={bill.id} style={{ width: "100%", marginBottom: "1rem" }}>
               <div style={{ width: "100%" }}>
                 <h6
@@ -184,7 +191,7 @@ const BillCollectionView = forwardRef<HTMLDivElement, BillCollectionViewProps>(
                     fontWeight: "bold",
                   }}
                 >
-                  فاتورة {index + 1}: {billTypeLabels[bill.type] || bill.type}
+                  فاتورة {bill.id}: {billTypeLabels[bill.type] || bill.type}
                 </h6>
               </div>
 
@@ -230,6 +237,16 @@ const BillCollectionView = forwardRef<HTMLDivElement, BillCollectionViewProps>(
                       }}
                     >
                       المنتج
+                    </th>
+                    <th
+                      style={{
+                        fontSize: "1.2em",
+                        textAlign: "center",
+                        padding: "4px",
+                        width: "20%",
+                      }}
+                    >
+                      سعر الشراء
                     </th>
                     <th
                       style={{
@@ -290,6 +307,15 @@ const BillCollectionView = forwardRef<HTMLDivElement, BillCollectionViewProps>(
                           padding: "4px",
                         }}
                       >
+                        {product.wholesale_price}
+                      </td>
+                      <td
+                        style={{
+                          fontSize: "1.2em",
+                          textAlign: "center",
+                          padding: "4px",
+                        }}
+                      >
                         {product.price}
                       </td>
                       <td
@@ -308,9 +334,12 @@ const BillCollectionView = forwardRef<HTMLDivElement, BillCollectionViewProps>(
                           padding: "4px",
                         }}
                       >
-                        {shouldShowNegativeTotal(bill.type)
-                          ? -Math.abs(product.price * product.amount)
-                          : Math.abs(product.price * product.amount)}
+                        {formatProductTotal(
+                          product.price,
+                          product.wholesale_price,
+                          product.amount,
+                          bill.type,
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -406,7 +435,7 @@ const BillCollectionView = forwardRef<HTMLDivElement, BillCollectionViewProps>(
                 margin: "0.5rem 0",
               }}
             >
-              إجمالي المجموعة: {Math.abs(collection.total)}
+              إجمالي المجموعة: {collection.total}
             </h5>
           </div>
 

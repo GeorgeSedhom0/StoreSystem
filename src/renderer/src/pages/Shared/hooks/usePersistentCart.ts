@@ -1,4 +1,4 @@
-import { DBProducts, SCProduct } from "@renderer/utils/types";
+import { DBProducts, SCProduct } from "../../utils/types";
 import { useState, useEffect, useRef } from "react";
 
 export function usePersistentCart(

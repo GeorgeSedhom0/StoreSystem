@@ -121,8 +121,6 @@ const ShiftDialog = ({
     });
   };
 
-  const netRevenue =
-    shiftTotal.sell_total + shiftTotal.buy_total + shiftTotal.return_total;
   const grossRevenue = shiftTotal.sell_total + shiftTotal.return_total;
 
   return (
@@ -183,20 +181,6 @@ const ShiftDialog = ({
                   </Typography>
                 </Box>
 
-                {/* Empty space to maintain alignment */}
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {"\u00A0"}
-                  </Typography>
-                  <Typography
-                    variant="h5"
-                    fontWeight="bold"
-                    color="primary.main"
-                  >
-                    {"\u00A0"}
-                  </Typography>
-                </Box>
-
                 <Divider sx={{ my: 2 }} />
                 <Box>
                   <Typography variant="body2" color="text.secondary">
@@ -221,22 +205,13 @@ const ShiftDialog = ({
                 <Box display="flex" alignItems="center" mb={2}>
                   <TrendingDownIcon color="error" sx={{ mr: 1 }} />
                   <Typography variant="h6" fontWeight="bold">
-                    المشتريات والصندوق
+                    ملخص الحركة النقدية
                   </Typography>
                 </Box>
 
                 <Box mb={2}>
                   <Typography variant="body2" color="text.secondary">
-                    إجمالي الشراء
-                  </Typography>
-                  <Typography variant="h6" color="error.main">
-                    {formatCurrency(Math.abs(shiftTotal.buy_total))}
-                  </Typography>
-                </Box>
-
-                <Box mb={2}>
-                  <Typography variant="body2" color="text.secondary">
-                    دخل نقدي إضافي
+                    اجمالى الدخول
                   </Typography>
                   <Typography variant="h6" color="success.main">
                     {formatCurrency(shiftTotal.cash_in)}
@@ -245,7 +220,7 @@ const ShiftDialog = ({
 
                 <Box mb={2}>
                   <Typography variant="body2" color="text.secondary">
-                    خرج نقدي إضافي
+                    اجمالى الخروج
                   </Typography>
                   <Typography variant="h6" color="error.main">
                     {formatCurrency(shiftTotal.cash_out)}
@@ -305,7 +280,9 @@ const ShiftDialog = ({
                         sx={{
                           fontSize: 40,
                           color:
-                            netRevenue >= 0 ? "success.main" : "error.main",
+                            shiftTotal.net_cash_flow >= 0
+                              ? "success.main"
+                              : "error.main",
                           mb: 1,
                         }}
                       />
@@ -315,9 +292,13 @@ const ShiftDialog = ({
                       <Typography
                         variant="h4"
                         fontWeight="bold"
-                        color={netRevenue >= 0 ? "success.main" : "error.main"}
+                        color={
+                          shiftTotal.net_cash_flow >= 0
+                            ? "success.main"
+                            : "error.main"
+                        }
                       >
-                        {formatCurrency(netRevenue)}
+                        {formatCurrency(shiftTotal.net_cash_flow)}
                       </Typography>
                     </Box>
                   </Grid2>
