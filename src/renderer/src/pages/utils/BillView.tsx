@@ -1,7 +1,7 @@
 import { Button, DialogActions } from "@mui/material";
 import { Bill } from "./types";
 import { forwardRef, useContext } from "react";
-import { StoreContext } from "../StoreDataProvider";
+import { StoreContext } from "../../StoreDataProvider";
 
 const BillView = forwardRef(
   (
@@ -36,7 +36,7 @@ const BillView = forwardRef(
           backgroundColor: "rgba(0, 0, 0, 0.5)",
           zIndex: 9999999999999,
         }}
-        >
+      >
         <div
           ref={ref}
           style={{

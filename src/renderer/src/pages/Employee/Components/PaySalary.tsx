@@ -7,7 +7,7 @@ import {
   Grid2,
   TextField,
 } from "@mui/material";
-import { Employee } from "../../../utils/types";
+import { Employee } from "../../utils/types";
 import { Dispatch, SetStateAction, useState } from "react";
 import dayjs from "dayjs";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";

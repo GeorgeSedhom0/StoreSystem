@@ -1,11 +1,11 @@
 import { Button, ButtonGroup, TableCell, TableRow } from "@mui/material";
 import { useContext, useRef, useState } from "react";
-import BillView from "../../../utils/BillView";
-import { printBill } from "../../../utils/functions";
+import BillView from "../../utils/BillView";
+import { printBill } from "../../utils/functions";
 import EditableBill from "./EditableBill";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
-import ProductsView from "../../../utils/ProductsView";
+import ProductsView from "../../utils/ProductsView";
 import FormatedNumber from "../../Shared/FormatedNumber";
 import { StoreContext } from "@renderer/StoreDataProvider";
 

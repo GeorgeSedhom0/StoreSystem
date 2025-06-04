@@ -17,7 +17,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
-import { Scope } from "../../../utils/types";
+import { Scope } from "../../utils/types";
 import { LoadingButton } from "@mui/lab";
 import {
   Security as SecurityIcon,

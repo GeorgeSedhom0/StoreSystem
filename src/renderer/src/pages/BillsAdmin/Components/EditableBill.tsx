@@ -12,7 +12,7 @@ import {
   TableRow,
   TextField,
 } from "@mui/material";
-import { Bill, Product } from "../../../utils/types";
+import { Bill, Product } from "../../utils/types";
 import {
   Dispatch,
   SetStateAction,

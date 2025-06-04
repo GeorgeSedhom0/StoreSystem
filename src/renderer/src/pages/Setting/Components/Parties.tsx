@@ -13,7 +13,7 @@ import {
   Box,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
-import { Party } from "../../../utils/types";
+import { Party } from "../../utils/types";
 import useParties from "../../Shared/hooks/useParties";
 import {
   Groups as GroupsIcon,

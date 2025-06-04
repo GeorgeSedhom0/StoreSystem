@@ -1,7 +1,7 @@
 import axios from "axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dispatch, SetStateAction } from "react";
-import { Party } from "../../../utils/types";
+import { Party } from "../../utils/types";
 import { AlertMsg } from "../AlertMessage";
 
 const getParties = async () => {

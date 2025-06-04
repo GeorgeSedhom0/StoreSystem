@@ -7,7 +7,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import { TableComponents } from "react-virtuoso";
-import { Employee } from "../../../utils/types";
+import { Employee } from "../../utils/types";
 
 export const fixedHeaderContent = () => {
   return (

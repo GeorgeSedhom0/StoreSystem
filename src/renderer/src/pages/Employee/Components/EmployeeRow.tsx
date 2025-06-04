@@ -3,7 +3,7 @@ import { Button, ButtonGroup, TableCell } from "@mui/material";
 import {
   Employee as EmployeeType,
   SelectedEmployeeType,
-} from "../../../utils/types";
+} from "../../utils/types";
 
 const EmployeeRow = ({
   employee,

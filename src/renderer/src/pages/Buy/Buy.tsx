@@ -17,7 +17,7 @@ import {
   MenuItem,
 } from "@mui/material";
 import { useCallback, useState, useContext, useRef, useEffect } from "react";
-import { Party, Product, SCProduct } from "../../utils/types";
+import { Party, Product, SCProduct } from "../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
@@ -28,7 +28,7 @@ import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import useParties from "../Shared/hooks/useParties";
 import useProducts from "../Shared/hooks/useProducts";
 import { StoreContext } from "@renderer/StoreDataProvider";
-import { usePersistentCart } from "../../Shared/hooks/usePersistentCart";
+import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
 
 const Buy = () => {
   const {

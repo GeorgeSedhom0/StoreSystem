@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Autocomplete, TextField } from "@mui/material";
-import { Product } from "../../utils/types";
+import { Product } from "../utils/types";
 
 const ProductAutocomplete = ({
   onProductSelect,
@@ -21,7 +21,7 @@ const ProductAutocomplete = ({
       products.filter(
         (prod) =>
           prod.name.toLowerCase().includes(query.toLowerCase()) ||
-          prod.bar_code.toLowerCase().includes(query.toLowerCase())
+          prod.bar_code.toLowerCase().includes(query.toLowerCase()),
       ),
     );
   }, [query, products]);

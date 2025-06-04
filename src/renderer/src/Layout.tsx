@@ -17,7 +17,7 @@ import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import SetBaseUrl from "./SetBaseUrl";
-import { StoreData } from "./utils/types";
+import { StoreData } from "./pages/utils/types";
 import LoadingScreen from "./pages/Shared/LoadingScreen";
 import AddIcon from "@mui/icons-material/Add";
 

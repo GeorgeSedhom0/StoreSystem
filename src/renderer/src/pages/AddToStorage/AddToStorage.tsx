@@ -7,7 +7,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useContext, useState } from "react";
-import { Product } from "../../utils/types";
+import { Product } from "../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import PrintBarCode from "../Shared/PrintBarCode";

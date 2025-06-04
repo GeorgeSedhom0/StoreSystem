@@ -20,7 +20,7 @@ import {
   TextField,
 } from "@mui/material";
 import { useCallback, useState, useContext, useRef, useEffect } from "react";
-import { Product, SCProduct, StoreData } from "../../utils/types";
+import { Product, SCProduct, StoreData } from "../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
@@ -31,7 +31,7 @@ import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import useProducts from "../Shared/hooks/useProducts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { useQuery } from "@tanstack/react-query";
-import { usePersistentCart } from "../../Shared/hooks/usePersistentCart";
+import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
 
 const getStoresData = async () => {
   const { data } = await axios.get<StoreData[]>("/admin/stores-data");

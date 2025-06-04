@@ -1,6 +1,6 @@
 import axios from "axios";
 import { useCallback, useContext, useMemo, useState } from "react";
-import { AdminProduct } from "../../utils/types";
+import { AdminProduct } from "../utils/types";
 import {
   Button,
   Card,

@@ -16,10 +16,7 @@ import EmployeeRow from "./Components/EmployeeRow";
 import LoadingScreen from "../Shared/LoadingScreen";
 import EmployeeForm from "./Components/EmployeeForm";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import {
-  Employee as EmployeeType,
-  SelectedEmployeeType,
-} from "../../utils/types";
+import { Employee as EmployeeType, SelectedEmployeeType } from "../utils/types";
 import {
   fixedHeaderContent,
   VirtuosoTableComponents,
