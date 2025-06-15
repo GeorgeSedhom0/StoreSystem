@@ -11,6 +11,11 @@ from os import getenv
 import jwt
 from fastapi import APIRouter
 from auth_middleware import get_current_user, get_store_info
+from whatsapp_utils import (
+    send_due_installments_notification_background,
+    send_shift_closure_notification_background,
+)
+from fastapi import BackgroundTasks
 
 load_dotenv()
 
@@ -108,6 +113,7 @@ def auth_user(
     store_id: int,
     username: str = Form(...),
     password: str = Form(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> JSONResponse:
     """
     Authenticate the user and start a new shift if not already started
@@ -155,6 +161,11 @@ def auth_user(
                 if cur_shift:
                     return response
 
+                # Get store name for notification
+                cur.execute("SELECT name FROM store_data WHERE id = %s", (store_id,))
+                store_result = cur.fetchone()
+                store_name = store_result["name"] if store_result else None
+
                 cur.execute(
                     """
                     INSERT INTO shifts (start_date_time, current, user_id, store_id)
@@ -163,6 +174,15 @@ def auth_user(
                     """,
                     (datetime.now(), True, user["id"], store_id),
                 )
+
+                # Send due installments notification as background task
+                background_tasks.add_task(
+                    send_due_installments_notification_background,
+                    store_id,
+                    store_name,
+                    username,
+                )
+
                 return response
 
             else:
@@ -175,7 +195,11 @@ def auth_user(
 
 
 @router.post("/logout")
-def logout_user(store_id: int, access_token=Cookie()) -> JSONResponse:
+def logout_user(
+    store_id: int,
+    access_token=Cookie(),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> JSONResponse:
     """
     Logout the user and end the current shift
     """
@@ -193,6 +217,101 @@ def logout_user(store_id: int, access_token=Cookie()) -> JSONResponse:
                     content={"error": "User not found"}, status_code=401
                 )
 
+            # Get shift details and financial summary before closing
+            cur.execute(
+                """
+                SELECT start_date_time FROM shifts
+                WHERE current = True AND store_id = %s
+                """,
+                (store_id,),
+            )
+            current_shift = cur.fetchone()
+
+            shift_start_time = None
+            if current_shift:
+                shift_start_time = current_shift["start_date_time"].isoformat()
+
+                # Get shift financial summary
+                cur.execute(
+                    """
+                    SELECT type, COALESCE(SUM(total), 0) AS total, COUNT(*) as count
+                    FROM bills
+                    WHERE time >= %s
+                    AND bills.store_id = %s
+                    GROUP BY type
+                    """,
+                    (current_shift["start_date_time"], store_id),
+                )
+                bill_data = cur.fetchall()
+
+                # Get cash flow data
+                cur.execute(
+                    """
+                    SELECT 
+                        type,
+                        COALESCE(SUM(amount), 0) AS total
+                    FROM cash_flow
+                    WHERE time >= %s
+                    AND store_id = %s
+                    GROUP BY type
+                    """,
+                    (current_shift["start_date_time"], store_id),
+                )
+                cash_flow_data = cur.fetchall()
+
+                # Get store name for notification
+                cur.execute("SELECT name FROM store_data WHERE id = %s", (store_id,))
+                store_result = cur.fetchone()
+                store_name = store_result["name"] if store_result else None
+
+                # Process bill totals
+                totals = {
+                    "sell_total": 0,
+                    "buy_total": 0,
+                    "return_total": 0,
+                    "installment_total": 0,
+                    "transaction_count": 0,
+                }
+
+                for row in bill_data:
+                    if row["type"] == "sell":
+                        totals["sell_total"] += row["total"]
+                    elif row["type"] == "buy":
+                        totals["buy_total"] += row["total"]
+                    elif row["type"] == "return":
+                        totals["return_total"] += row["total"]
+                    elif row["type"] == "installment":
+                        totals["installment_total"] += row["total"]
+                    totals["transaction_count"] += row["count"]
+
+                # Process cash flow
+                cash_in = 0
+                cash_out = 0
+                for row in cash_flow_data:
+                    if row["type"] == "in":
+                        cash_in += row["total"]
+                    elif row["type"] == "out":
+                        cash_out += abs(row["total"])
+
+                net_cash_flow = cash_in - cash_out
+
+                shift_data = {
+                    **totals,
+                    "cash_in": cash_in,
+                    "cash_out": cash_out,
+                    "net_cash_flow": net_cash_flow,
+                }
+
+                # Send shift closure notification as background task
+                background_tasks.add_task(
+                    send_shift_closure_notification_background,
+                    store_id,
+                    shift_data,
+                    store_name,
+                    username,
+                    shift_start_time,
+                )
+
             # End the current shift
             cur.execute(
                 """
@@ -202,6 +321,7 @@ def logout_user(store_id: int, access_token=Cookie()) -> JSONResponse:
                 """,
                 (datetime.now(), store_id),
             )
+
             response = JSONResponse(content={"message": "Logged out successfully"})
             response.delete_cookie(key="access_token")
             return response

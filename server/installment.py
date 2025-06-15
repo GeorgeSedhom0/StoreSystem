@@ -244,3 +244,59 @@ def add_flow(
         raise HTTPException(
             status_code=500, detail="Database error during payment processing"
         ) from e
+
+
+@router.delete("/installments/flow/{flow_id}")
+def delete_installment_payment(
+    flow_id: int, current_user: dict = Depends(get_current_user)
+) -> JSONResponse:
+    # Check if the flow record exists
+    check_query = """
+    SELECT 
+        id, 
+        installment_id, 
+        amount,
+        time
+    FROM installments_flow 
+    WHERE id = %s
+    """
+
+    delete_query = """
+    DELETE FROM installments_flow 
+    WHERE id = %s
+    """
+
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Check if payment exists
+            cur.execute(check_query, (flow_id,))
+            payment_data = cur.fetchone()
+
+            if not payment_data:
+                raise HTTPException(status_code=404, detail="Payment record not found")
+
+            # Delete the payment
+            cur.execute(delete_query, (flow_id,))
+
+            # Check if any rows were affected
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Payment record not found")
+
+            return JSONResponse(
+                content={
+                    "status": "success",
+                    "message": "Payment deleted successfully",
+                    "deleted_payment": {
+                        "id": payment_data["id"],
+                        "amount": payment_data["amount"],
+                        "installment_id": payment_data["installment_id"],
+                        "time": str(payment_data["time"]),
+                    },
+                }
+            )
+
+    except psycopg2.Error as e:
+        logging.error(f"Database error in payment deletion: {e}")
+        raise HTTPException(
+            status_code=500, detail="Database error during payment deletion"
+        ) from e

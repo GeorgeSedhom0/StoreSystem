@@ -695,6 +695,143 @@ def update_bill(
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Check if this is an installment bill and get current total from products_flow
+            cur.execute(
+                """
+                SELECT b.type, 
+                       ABS(COALESCE(SUM(pf.price * pf.amount), 0)) as calculated_total
+                FROM bills b
+                LEFT JOIN products_flow pf ON b.id = pf.bill_id AND b.store_id = pf.store_id
+                WHERE b.id = %s AND b.store_id = %s
+                GROUP BY b.type
+                """,
+                (bill.id, store_id),
+            )
+            current_bill = cur.fetchone()
+
+            is_installment_bill = current_bill and current_bill["type"] == "installment"
+
+            # For installment bills, calculate totals from products_flow
+            if is_installment_bill:
+                old_total = current_bill["calculated_total"] if current_bill else 0
+                # Calculate new total from the bill's products
+                new_total = sum(
+                    abs(product.price * product.amount) for product in bill.products
+                )
+
+                # Handle installment flow adjustments if totals changed
+                if old_total != new_total:
+                    # Get installment ID and current payments
+                    cur.execute(
+                        """
+                        SELECT i.id as installment_id, i.paid,
+                               COALESCE(SUM(if.amount), 0) as total_flow_paid
+                        FROM installments i
+                        LEFT JOIN installments_flow if ON i.id = if.installment_id
+                        WHERE i.bill_id = %s AND i.store_id = %s
+                        GROUP BY i.id, i.paid
+                        """,
+                        (bill.id, store_id),
+                    )
+                    installment_data = cur.fetchone()
+
+                    if installment_data:
+                        installment_id = installment_data["installment_id"]
+                        paid_deposit = installment_data["paid"] or 0
+                        total_flow_paid = installment_data["total_flow_paid"] or 0
+                        total_paid = paid_deposit + total_flow_paid
+
+                        # Case 1: New total is 0 - delete all flows and installment
+                        if new_total == 0:
+                            # Delete all installment flows (triggers will handle cash_flow cleanup)
+                            cur.execute(
+                                """
+                                DELETE FROM installments_flow
+                                WHERE installment_id = %s
+                                """,
+                                (installment_id,),
+                            )
+
+                            # Delete the installment record
+                            cur.execute(
+                                """
+                                DELETE FROM installments
+                                WHERE id = %s
+                                """,
+                                (installment_id,),
+                            )
+
+                        # Case 2: New total is less but > 0 - adjust flows
+                        elif new_total < old_total and total_paid > new_total:
+                            # Get installment flows ordered by time (latest first)
+                            cur.execute(
+                                """
+                                SELECT id, amount, time
+                                FROM installments_flow
+                                WHERE installment_id = %s
+                                ORDER BY time DESC, id DESC
+                                """,
+                                (installment_id,),
+                            )
+                            flows = cur.fetchall()
+
+                            # Calculate how much we need to reduce
+                            excess_amount = total_paid - new_total
+                            remaining_excess = excess_amount
+                            flows_to_delete = []
+
+                            # Delete flows from latest backward until total_paid <= new_total
+                            for flow in flows:
+                                if remaining_excess <= 0:
+                                    break
+
+                                flow_amount = flow["amount"]
+                                if flow_amount <= remaining_excess:
+                                    # Delete entire flow
+                                    flows_to_delete.append(flow["id"])
+                                    remaining_excess -= flow_amount
+                                else:
+                                    # Partial deletion - reduce the flow amount
+                                    new_flow_amount = flow_amount - remaining_excess
+                                    cur.execute(
+                                        """
+                                        UPDATE installments_flow
+                                        SET amount = %s
+                                        WHERE id = %s
+                                        """,
+                                        (new_flow_amount, flow["id"]),
+                                    )
+
+                                    # Update corresponding cash_flow entry
+                                    cur.execute(
+                                        """
+                                        UPDATE cash_flow
+                                        SET amount = %s
+                                        WHERE bill_id = %s AND store_id = %s 
+                                        AND time = %s AND description = 'قسط'
+                                        AND amount = %s
+                                        """,
+                                        (
+                                            new_flow_amount,
+                                            bill.id,
+                                            store_id,
+                                            flow["time"],
+                                            flow_amount,
+                                        ),
+                                    )
+                                    remaining_excess = 0
+
+                            # Delete the flows marked for deletion
+                            if flows_to_delete:
+                                cur.execute(
+                                    """
+                                    DELETE FROM installments_flow
+                                    WHERE id = ANY(%s)
+                                    """,
+                                    (flows_to_delete,),
+                                )
+
+            # Continue with normal bill update logic
             # Update the bill details
             cur.execute(
                 """
@@ -702,10 +839,10 @@ def update_bill(
                 SET
                     discount = %s,
                     total = %s
-                WHERE id = %s
+                WHERE id = %s AND store_id = %s
                 RETURNING *
                 """,
-                (bill.discount, bill.total, bill.id),
+                (bill.discount, bill.total, bill.id, store_id),
             )
             negative_bill_id = f"-{bill.id}"
 
@@ -722,24 +859,21 @@ def update_bill(
             cur.execute(
                 """
                 SELECT * FROM products_flow
-                WHERE bill_id = %s
+                WHERE bill_id = %s AND store_id = %s
                 """,
-                (bill.id,),
+                (bill.id, store_id),
             )
             old_products_flow = cur.fetchall()
 
-            # Create a negative bill ID for reversal entries
-
-            # Update the old products_flow entries to use
-            #  the negative bill ID
+            # Update the old products_flow entries to use the negative bill ID
             cur.execute(
                 """
                 UPDATE products_flow
                 SET bill_id = %s
-                WHERE bill_id = %s
+                WHERE bill_id = %s AND store_id = %s
                 RETURNING *
                 """,
-                (negative_bill_id, bill.id),
+                (negative_bill_id, bill.id, store_id),
             )
 
             # Create reversal entries for the old products

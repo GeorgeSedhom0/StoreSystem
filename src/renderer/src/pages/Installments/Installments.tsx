@@ -18,6 +18,12 @@ import {
   LinearProgress,
   Avatar,
   Stack,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
 } from "@mui/material";
 import {
   Person,
@@ -26,6 +32,7 @@ import {
   CheckCircle,
   Warning,
   AttachMoney,
+  Delete,
 } from "@mui/icons-material";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
@@ -75,6 +82,17 @@ const Installments = () => {
   const [selectedInstallment, setSelectedInstallment] = useState<number | null>(
     null,
   );
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    flowId: number | null;
+    amount: number;
+    installmentId: number | null;
+  }>({
+    open: false,
+    flowId: null,
+    amount: 0,
+    installmentId: null,
+  });
 
   const { storeId } = useContext(StoreContext);
 
@@ -158,8 +176,81 @@ const Installments = () => {
     }
   };
 
+  const handleDeletePayment = async () => {
+    if (!deleteDialog.flowId) return;
+
+    try {
+      await axios.delete(`/installments/flow/${deleteDialog.flowId}`);
+      setMsg({
+        type: "success",
+        text: "تم حذف الدفعة بنجاح",
+      });
+      refetch();
+    } catch (error) {
+      console.error("Error deleting payment:", error);
+      setMsg({
+        type: "error",
+        text: "فشل في حذف الدفعة",
+      });
+    } finally {
+      setDeleteDialog({
+        open: false,
+        flowId: null,
+        amount: 0,
+        installmentId: null,
+      });
+    }
+  };
+
   return (
     <>
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() =>
+          setDeleteDialog({
+            open: false,
+            flowId: null,
+            amount: 0,
+            installmentId: null,
+          })
+        }
+        aria-labelledby="delete-dialog-title"
+      >
+        <DialogTitle id="delete-dialog-title">تأكيد حذف الدفعة</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            هل أنت متأكد من حذف هذه الدفعة؟
+            <br />
+            المبلغ: <FormatedNumber money>{deleteDialog.amount}</FormatedNumber>
+            <br />
+            <strong>لا يمكن التراجع عن هذا الإجراء.</strong>
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setDeleteDialog({
+                open: false,
+                flowId: null,
+                amount: 0,
+                installmentId: null,
+              })
+            }
+            color="primary"
+          >
+            إلغاء
+          </Button>
+          <Button
+            onClick={handleDeletePayment}
+            color="error"
+            variant="contained"
+            startIcon={<Delete />}
+          >
+            حذف
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Grid2 container spacing={3}>
         <Grid2 size={12}>
           <Card elevation={3} sx={{ px: 4, py: 3, position: "relative" }}>
@@ -484,6 +575,11 @@ const Installments = () => {
                                       <TableCell sx={{ fontWeight: 600 }}>
                                         التاريخ
                                       </TableCell>
+                                      <TableCell
+                                        sx={{ fontWeight: 600, width: 80 }}
+                                      >
+                                        إجراءات
+                                      </TableCell>
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
@@ -498,6 +594,26 @@ const Installments = () => {
                                           {new Date(flow.time).toLocaleString(
                                             "ar-EG",
                                           )}
+                                        </TableCell>
+                                        <TableCell>
+                                          <IconButton
+                                            size="small"
+                                            color="error"
+                                            onClick={() =>
+                                              setDeleteDialog({
+                                                open: true,
+                                                flowId: flow.id,
+                                                amount: flow.amount,
+                                                installmentId: installment.id,
+                                              })
+                                            }
+                                            sx={{
+                                              opacity: 0.7,
+                                              "&:hover": { opacity: 1 },
+                                            }}
+                                          >
+                                            <Delete fontSize="small" />
+                                          </IconButton>
                                         </TableCell>
                                       </TableRow>
                                     ))}

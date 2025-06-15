@@ -788,6 +788,103 @@ def create_all_triggers(cur):
     EXECUTE FUNCTION add_negative_one_bill();
     """)
 
+    # Trigger to bubble fix the total after delete
+    cur.execute("""
+    -- Trigger to bubble fix the total after delete
+    CREATE OR REPLACE FUNCTION bubble_fix_total_after_delete()
+    RETURNS TRIGGER AS $$
+    DECLARE
+        previous_total NUMERIC;
+        current_total NUMERIC;
+        rec RECORD;
+    BEGIN
+        -- Get the total from the record before the deleted one
+        SELECT total INTO previous_total
+        FROM cash_flow
+        WHERE store_id = OLD.store_id
+        AND (time < OLD.time OR (time = OLD.time AND id < OLD.id))
+        ORDER BY time DESC, id DESC
+        LIMIT 1;
+
+        IF previous_total IS NULL THEN
+            previous_total := 0;
+        END IF;
+
+        current_total := previous_total;
+
+        -- Update all subsequent records to fix their totals
+        FOR rec IN
+            SELECT id, amount
+            FROM cash_flow
+            WHERE store_id = OLD.store_id
+            AND (time > OLD.time OR (time = OLD.time AND id > OLD.id))
+            ORDER BY time ASC, id ASC
+            FOR UPDATE
+        LOOP
+            current_total := current_total + rec.amount;
+
+            UPDATE cash_flow
+            SET total = current_total
+            WHERE id = rec.id
+            AND store_id = OLD.store_id;
+        END LOOP;
+
+        RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trigger_bubble_fix_total_after_delete
+    AFTER DELETE ON cash_flow
+    FOR EACH ROW
+    EXECUTE FUNCTION bubble_fix_total_after_delete();
+    """)
+
+    # Create the trigger to delete cash_flow after deleting installment flow
+    cur.execute("""
+    -- Trigger to delete cash_flow after deleting installment flow
+    CREATE OR REPLACE FUNCTION delete_cash_flow_after_delete_installment_flow()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        -- Delete the corresponding cash flow entry
+        DELETE FROM cash_flow
+        WHERE store_id = (SELECT store_id FROM installments WHERE id = OLD.installment_id)
+        AND bill_id = (SELECT bill_id FROM installments WHERE id = OLD.installment_id)
+        AND amount = OLD.amount
+        AND time = OLD.time;
+        
+        RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trigger_delete_cash_flow_after_delete_installment_flow
+    AFTER DELETE ON installments_flow
+    FOR EACH ROW
+    EXECUTE FUNCTION delete_cash_flow_after_delete_installment_flow();
+    """)
+
+    # Create the trigger to delete cash_flow after deleting installment (for مقدم entries)
+    cur.execute("""
+    -- Trigger to delete cash_flow after deleting installment
+    CREATE OR REPLACE FUNCTION delete_cash_flow_after_delete_installment()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        -- Delete the corresponding cash flow entry for the deposit (مقدم)
+        DELETE FROM cash_flow
+        WHERE store_id = OLD.store_id
+        AND bill_id = OLD.bill_id
+        AND amount = OLD.paid
+        AND description = 'مقدم';
+        
+        RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trigger_delete_cash_flow_after_delete_installment
+    AFTER DELETE ON installments
+    FOR EACH ROW
+    EXECUTE FUNCTION delete_cash_flow_after_delete_installment();
+    """)
+
 
 def main():
     """Main function to initialize the database"""
