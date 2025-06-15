@@ -11,6 +11,9 @@ from ml_utils import (
     train_sales_prediction_model,
     create_features_for_sales,
     predict_product_sales,
+    train_shifts_prediction_model,
+    create_features_for_shifts,
+    BEST_CONFIG,
 )
 
 
@@ -86,6 +89,15 @@ def get_product_info(product_id: int, store_id: int) -> Optional[Dict]:
         return None
 
 
+def _get_date_series_query(
+    start_date: datetime, end_date: datetime
+) -> Tuple[str, List]:
+    return (
+        "WITH date_series AS (SELECT generate_series(%s::date, %s::date, '1 day'::interval)::date AS day)",
+        [start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")],
+    )
+
+
 def get_historical_sales_data(
     product_id: int, store_id: int, days_back: int = 365
 ) -> List[Tuple[datetime, float]]:
@@ -105,16 +117,11 @@ def get_historical_sales_data(
                     COALESCE(SUM(pf.amount) * -1, 0) AS total
                 FROM products_flow pf
                 JOIN bills ON pf.bill_id = bills.id
-                WHERE pf.product_id = %s
-                AND bills.store_id = %s
-                AND bills.type = 'sell'
-                AND pf.amount < 0
-                AND bills.time >= %s AND bills.time <= %s
+                WHERE pf.product_id = %s AND bills.store_id = %s AND bills.type = 'sell'
+                AND pf.amount < 0 AND bills.time >= %s AND bills.time <= %s
                 GROUP BY DATE_TRUNC('day', bills.time)::date
             )
-            SELECT 
-                ds.day,
-                COALESCE(sd.total, 0) AS total
+            SELECT ds.day, COALESCE(sd.total, 0) AS total
             FROM date_series ds
             LEFT JOIN sales_data sd ON ds.day = sd.day
             ORDER BY ds.day
@@ -128,19 +135,42 @@ def get_historical_sales_data(
                 end_date.strftime("%Y-%m-%d"),
             ),
         )
+        return [(row["day"], float(row["total"])) for row in cursor.fetchall()]
 
-        data = cursor.fetchall()
-        return [(row["day"], float(row["total"])) for row in data]
+
+def _get_fallback_prediction(
+    historical_data: List, days_to_predict: int, use_exponential: bool = True
+) -> List[Tuple[str, float]]:
+    if not historical_data:
+        return []
+
+    if use_exponential:
+        weights = np.exp(
+            np.linspace(
+                -1, 0, min(BEST_CONFIG["training_days"] // 5, len(historical_data))
+            )
+        )
+        weights /= weights.sum()
+        recent_sales = [sales for _, sales in historical_data[-len(weights) :]]
+        avg_value = np.dot(weights, recent_sales)
+    else:
+        avg_value = float(np.mean([sales for _, sales in historical_data[-7:]]))
+
+    predictions = []
+    for i in range(days_to_predict):
+        date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
+        predictions.append((date, avg_value))
+    return predictions
 
 
 def predict_total_sales(
-    store_id: int, days_to_predict: int = 15
+    store_id: int, bills_type: list[str], days_to_predict: int = 15
 ) -> List[Tuple[str, float]]:
-    """Predict total sales for future days"""
+    """Predict total sales for future days using optimal configuration"""
     try:
-        # Get historical sales data for the store
+        # Get historical sales data for the store with optimal lookback
         end_date = datetime.now() - timedelta(days=1)
-        start_date = end_date - timedelta(days=365)
+        start_date = end_date - timedelta(days=BEST_CONFIG["training_days"] + 30)
 
         with Database(HOST, DATABASE, USER, PASS) as cursor:
             cursor.execute(
@@ -153,14 +183,11 @@ def predict_total_sales(
                         DATE_TRUNC('day', bills.time)::date AS day,
                         COALESCE(SUM(bills.total), 0) AS total
                     FROM bills
-                    WHERE bills.store_id = %s
-                    AND bills.type IN ('sell', 'return')
+                    WHERE bills.store_id = %s AND bills.type IN %s
                     AND bills.time >= %s AND bills.time <= %s
                     GROUP BY DATE_TRUNC('day', bills.time)::date
                 )
-                SELECT 
-                    ds.day,
-                    COALESCE(sd.total, 0) AS total
+                SELECT ds.day, COALESCE(sd.total, 0) AS total
                 FROM date_series ds
                 LEFT JOIN sales_data sd ON ds.day = sd.day
                 ORDER BY ds.day
@@ -169,71 +196,63 @@ def predict_total_sales(
                     start_date.strftime("%Y-%m-%d"),
                     end_date.strftime("%Y-%m-%d"),
                     store_id,
+                    tuple(bills_type),
                     start_date.strftime("%Y-%m-%d"),
                     end_date.strftime("%Y-%m-%d"),
                 ),
             )
-
             historical_data = [
                 (row["day"], float(row["total"])) for row in cursor.fetchall()
             ]
 
-        if len(historical_data) < 14:
+        min_required = max(14, BEST_CONFIG["training_days"] // 3)
+        if len(historical_data) < min_required:
             # Not enough data, use simple average
-            if len(historical_data) > 0:
-                recent_avg = float(
-                    np.mean([sales for _, sales in historical_data[-7:]])
-                )
-                predictions = []
-                for i in range(days_to_predict):
-                    date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
-                    predictions.append((date, recent_avg))
-                return predictions
-            return []
+            return _get_fallback_prediction(
+                historical_data, days_to_predict, use_exponential=False
+            )
 
-        # Use similar prediction logic as product sales
-        model = train_sales_prediction_model(historical_data)
-
+        # Use optimal model configuration
+        model = train_sales_prediction_model(
+            historical_data, days_to_predict, bills_type
+        )
         if model is None:
-            # Fallback to weighted average
-            weights = np.exp(np.linspace(-1, 0, min(14, len(historical_data))))
-            weights /= weights.sum()
-            recent_sales = [sales for _, sales in historical_data[-14:]]
-            weighted_avg = np.dot(weights, recent_sales[-len(weights) :])
+            # Enhanced fallback with exponential smoothing
+            return _get_fallback_prediction(historical_data, days_to_predict)
 
-            predictions = []
-            for i in range(days_to_predict):
-                date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
-                predictions.append((date, weighted_avg))
-            return predictions
-
-        # Generate predictions
+        # Generate predictions with optimal features
         future_dates = pd.date_range(
             start=datetime.now().date(), periods=days_to_predict, freq="D"
         )
-        future_features = create_features_for_sales(future_dates)
+        future_features = create_features_for_sales(
+            future_dates, BEST_CONFIG["feature_type"]
+        )
 
-        # Add lag features
-        recent_sales = [sales for _, sales in historical_data[-7:]]
+        # Add lag features using optimal configuration
+        if BEST_CONFIG["lag_features"]:
+            recent_sales = [
+                sales
+                for _, sales in historical_data[
+                    -max(BEST_CONFIG["lag_features"] + [7]) :
+                ]
+            ]
+        else:
+            recent_sales = [sales for _, sales in historical_data[-7:]]
         avg_recent = np.mean(recent_sales) if recent_sales else 0
 
-        for lag in [1, 3, 7]:
-            if f"lag_{lag}" in model.feature_names_in_:
-                if lag <= len(recent_sales):
-                    future_features[f"lag_{lag}"] = recent_sales[-lag]
-                else:
-                    future_features[f"lag_{lag}"] = avg_recent
+        for lag in BEST_CONFIG["lag_features"]:
+            if lag <= len(recent_sales):
+                future_features[f"lag_{lag}"] = recent_sales[-lag]
+            else:
+                future_features[f"lag_{lag}"] = avg_recent
 
         predictions_raw = model.predict(future_features)
-        predictions_raw = np.maximum(predictions_raw, 0)
         predictions_raw = np.round(predictions_raw, 0)
 
-        predictions = []
-        for i, pred in enumerate(predictions_raw):
-            date = future_dates[i].strftime("%Y-%m-%d")
-            predictions.append((date, float(pred)))
-
-        return predictions
+        return [
+            (future_dates[i].strftime("%Y-%m-%d"), float(pred))
+            for i, pred in enumerate(predictions_raw)
+        ]
 
     except Exception as e:
         logging.error(f"Sales prediction failed: {e}")
@@ -279,7 +298,7 @@ def process_products_data_with_predictions(
 
 
 def get_historical_shifts_data(
-    store_id: int, bills_type: List[str], days_back: int = 120
+    store_id: int, bills_type: List[str], days_back: int = 365
 ) -> List[Dict]:
     """Fetch historical shifts data for training"""
     end_date = datetime.now() - timedelta(days=1)
@@ -288,22 +307,13 @@ def get_historical_shifts_data(
     with Database(HOST, DATABASE, USER, PASS) as cursor:
         cursor.execute(
             """
-            SELECT
-                start_date_time,
-                end_date_time,
-                (
-                    SELECT COALESCE(SUM(total), 0)
-                    FROM bills
-                    WHERE time >= start_date_time
-                    AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
-                    AND type IN %s
-                    AND store_id = %s
-                ) AS total
+            SELECT start_date_time, end_date_time,
+                (SELECT COALESCE(SUM(total), 0) FROM bills
+                 WHERE time >= start_date_time AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
+                 AND type IN %s AND store_id = %s) AS total
             FROM shifts
-            WHERE start_date_time >= %s
-            AND start_date_time <= %s
-            AND store_id = %s
-            AND current = FALSE
+            WHERE start_date_time >= %s AND start_date_time <= %s
+            AND store_id = %s AND current = FALSE
             ORDER BY start_date_time
             """,
             (
@@ -314,7 +324,6 @@ def get_historical_shifts_data(
                 store_id,
             ),
         )
-
         shifts_data = cursor.fetchall()
 
     # Process the data
@@ -337,21 +346,54 @@ def get_historical_shifts_data(
                 "is_weekend": 1 if start_dt.dayofweek >= 5 else 0,
             }
         )
-
     return processed_data
+
+
+def _get_shifts_fallback_prediction(
+    historical_data: List[Dict], days_to_predict: int
+) -> List[Dict]:
+    if not historical_data:
+        return []
+
+    weights = np.exp(
+        np.linspace(-1, 0, min(BEST_CONFIG["training_days"] // 5, len(historical_data)))
+    )
+    weights /= weights.sum()
+    recent_shifts = historical_data[-len(weights) :]
+    weighted_avg = np.dot(weights, [shift["total"] for shift in recent_shifts])
+
+    avg_duration = int(np.mean([shift["duration_hours"] for shift in recent_shifts]))
+    avg_start_hour = int(np.mean([shift["start_hour"] for shift in recent_shifts]))
+    avg_end_hour = int(np.mean([shift["end_hour"] for shift in recent_shifts]))
+
+    predictions = []
+    current_date = datetime.now().date() + timedelta(days=1)
+    for i in range(days_to_predict):
+        date = current_date + timedelta(days=i)
+        predictions.append(
+            {
+                "start_date_time": f"{date.strftime('%Y-%m-%d')} {avg_start_hour:02d}:00:00",
+                "end_date_time": f"{date.strftime('%Y-%m-%d')} {avg_end_hour:02d}:00:00",
+                "duration_hours": avg_duration,
+                "total": round(weighted_avg, 0),
+                "is_prediction": True,
+            }
+        )
+    return predictions
 
 
 def predict_shifts_sales(
     store_id: int, bills_type: List[str], days_to_predict: int = 15
 ) -> List[Dict]:
-    """Predict shifts sales for future days"""
+    """Predict shifts sales for future days using optimal configuration"""
     try:
-        # Get historical data
+        # Get historical data with optimal lookback period
         historical_data = get_historical_shifts_data(
-            store_id, bills_type, days_back=120
+            store_id, bills_type, days_back=BEST_CONFIG["training_days"] + 30
         )
 
-        if len(historical_data) < 14:
+        min_required = max(14, BEST_CONFIG["training_days"] // 3)
+        if len(historical_data) < min_required:
             # Not enough data, use simple average
             if len(historical_data) > 0:
                 avg_total = float(
@@ -383,46 +425,21 @@ def predict_shifts_sales(
                 return predictions
             return []
 
-        # Use ML prediction
-        from ml_utils import train_shifts_prediction_model, create_features_for_shifts
-
-        model = train_shifts_prediction_model(historical_data)
+        # Use optimal model configuration
+        model = train_shifts_prediction_model(
+            historical_data, days_to_predict, bills_type
+        )
 
         if model is None:
-            # Fallback to weighted average
-            weights = np.exp(np.linspace(-1, 0, min(14, len(historical_data))))
-            weights /= weights.sum()
-            recent_shifts = historical_data[-len(weights) :]
-            weighted_avg = np.dot(weights, [shift["total"] for shift in recent_shifts])
+            # Enhanced fallback with exponential smoothing
+            return _get_shifts_fallback_prediction(historical_data, days_to_predict)
 
-            # Get average characteristics
-            avg_duration = int(
-                np.mean([shift["duration_hours"] for shift in recent_shifts])
-            )
-            avg_start_hour = int(
-                np.mean([shift["start_hour"] for shift in recent_shifts])
-            )
-            avg_end_hour = int(np.mean([shift["end_hour"] for shift in recent_shifts]))
-
-            predictions = []
-            current_date = datetime.now().date() + timedelta(days=1)
-            for i in range(days_to_predict):
-                date = current_date + timedelta(days=i)
-                predictions.append(
-                    {
-                        "start_date_time": f"{date.strftime('%Y-%m-%d')} {avg_start_hour:02d}:00:00",
-                        "end_date_time": f"{date.strftime('%Y-%m-%d')} {avg_end_hour:02d}:00:00",
-                        "duration_hours": avg_duration,
-                        "total": round(weighted_avg, 0),
-                        "is_prediction": True,
-                    }
-                )
-            return predictions
-
-        # Generate predictions using ML model
+        # Generate predictions using optimal ML model
         predictions = []
         current_date = datetime.now().date() + timedelta(days=1)
-        recent_data = pd.DataFrame(historical_data[-7:])  # Last week for lag features
+        recent_data = pd.DataFrame(
+            historical_data[-max(BEST_CONFIG["lag_features"] + [7]) :]
+        )
 
         for i in range(days_to_predict):
             date = current_date + timedelta(days=i)
@@ -432,14 +449,18 @@ def predict_shifts_sales(
             avg_start_hour = int(recent_data["start_hour"].mean())
             avg_end_hour = int(recent_data["end_hour"].mean())
 
-            # Create features for prediction
+            # Create features for prediction with optimal configuration
             future_features = create_features_for_shifts(
-                date, avg_duration, avg_start_hour, avg_end_hour, recent_data
+                date,
+                avg_duration,
+                avg_start_hour,
+                avg_end_hour,
+                recent_data,
+                BEST_CONFIG["feature_type"],
             )
 
             # Predict
             pred_total = float(model.predict([future_features])[0])
-            pred_total = max(0, pred_total)
 
             predictions.append(
                 {

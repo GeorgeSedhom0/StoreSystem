@@ -308,10 +308,7 @@ def format_excessive_discount_message(
 ⚠️ إجمالي الفاتورة أقل من سعر الشراء
 💸 هذا يعني خسارة مالية في هذه الصفقة
 📞 يرجى المراجعة الفورية والتأكد من صحة الخصم
-
-━━━━━━━━━━━━━━━━━━━━
-
-🤖 _تم إرسال هذا التنبيه تلقائياً من نظام إدارة المتجر_"""
+"""
 
     return message
 
@@ -364,19 +361,7 @@ def format_low_stock_message(
 
 📦 *منتجات بمخزون سالب:*
 
-{products_text}
-
-━━━━━━━━━━━━━━━━━━━━
-
-🔴 *تحذير مهم:*
-⚠️ هذه المنتجات وصلت لمخزون سالب
-💸 النقص في المخزون يحتاج لإعادة تعبئة فورية
-📞 يرجى مراجعة المخزون وإعادة تعبئة هذه المنتجات
-🛒 قد تحتاج لتجديد طلبيات الشراء عاجلاً
-
-━━━━━━━━━━━━━━━━━━━━
-
-🤖 _تم إرسال هذا التنبيه تلقائياً من نظام إدارة المتجر_"""
+{products_text}"""
 
     return message
 
@@ -513,3 +498,57 @@ def check_and_send_low_stock_notification(
 
     except Exception as e:
         logging.error(f"Error in background stock check task: {e}")
+
+
+def format_store_transfer_message(
+    source_store_name: str,
+    destination_store_name: str,
+    products: List[Dict[str, Any]],
+    transfer_time: str,
+    user_name: str = None,
+) -> str:
+    """
+    Format WhatsApp message for store transfer notification in Arabic
+
+    Args:
+        source_store_name: Name of the source store
+        destination_store_name: Name of the destination store
+        products: List of transferred products with details
+        total_value: Total value of transferred products
+        transfer_time: Transfer timestamp
+        user_name: Username who performed the transfer
+
+    Returns:
+        Formatted Arabic message string
+    """
+    # Format user information
+    user_display = user_name if user_name else "غير محدد"
+
+    # Create products list
+    products_text = ""
+    for i, product in enumerate(products, 1):
+        name = product.get("name", "منتج غير محدد")
+        quantity = product.get("quantity", 0)
+
+        products_text += f"{i}. {name}\n"
+        products_text += f"   📦 الكمية: {quantity} قطعة\n"
+
+    message = f"""🔄 *تنبيه نقل منتجات بين المتاجر*
+
+━━━━━━━━━━━━━━━━━━━━
+
+📅 *تاريخ النقل:* {transfer_time}
+👤 *المستخدم:* {user_display}
+
+🏪 *من المتجر:* {source_store_name}
+🏬 *إلى المتجر:* {destination_store_name}
+
+
+━━━━━━━━━━━━━━━━━━━━
+
+🛍️ *تفاصيل المنتجات المنقولة:*
+
+{products_text}━━━━━━━━━━━━━━━━━━━━
+"""
+
+    return message

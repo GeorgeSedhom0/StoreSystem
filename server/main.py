@@ -28,6 +28,7 @@ from whatsapp_utils import (
     send_whatsapp_notification_background,
     format_excessive_discount_message,
     check_and_send_low_stock_notification,
+    format_store_transfer_message,
 )
 
 load_dotenv()
@@ -1032,17 +1033,20 @@ def move_products(
     bill: Bill,
     source_store_id: int,
     destination_store_id: int,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     """
     Move products from one store to another by
     1. Adding a new "sell" bill to the source store with destination store as party
     2. Adding a new "buy" bill to the destination store with source store as party
+    3. Sending WhatsApp notifications to both stores
 
     Args:
         bill (Bill): The bill to move products
         source_store_id (int): The source store ID
         destination_store_id (int): The destination store ID
+        background_tasks (BackgroundTasks): Background tasks handler
         current_user (dict): Current authenticated user (required)
 
     Returns:
@@ -1050,6 +1054,36 @@ def move_products(
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get store information for notifications
+            cur.execute(
+                """
+                SELECT id, name FROM store_data WHERE id IN (%s, %s)
+                """,
+                (source_store_id, destination_store_id),
+            )
+            stores = cur.fetchall()
+            store_names = {store["id"]: store["name"] for store in stores}
+
+            source_store_name = store_names.get(
+                source_store_id, f"متجر {source_store_id}"
+            )
+            destination_store_name = store_names.get(
+                destination_store_id, f"متجر {destination_store_id}"
+            )
+
+            # Get product details for notification
+            product_ids = [pf.id for pf in bill.products_flow]
+            if product_ids:
+                cur.execute(
+                    """
+                    SELECT id, name FROM products WHERE id IN %s
+                    """,
+                    (tuple(product_ids),),
+                )
+                products_info = {prod["id"]: prod["name"] for prod in cur.fetchall()}
+            else:
+                products_info = {}
+
             # Get the associated party ID for destination store
             cur.execute(
                 """
@@ -1104,6 +1138,62 @@ def move_products(
             source_party_id,  # Use source store's associated party ID
             current_user=current_user,
         )
+
+        # Prepare products data for notification
+        transfer_products = []
+        for product_flow in bill.products_flow:
+            product_name = products_info.get(product_flow.id, f"منتج {product_flow.id}")
+            transfer_products.append(
+                {
+                    "name": product_name,
+                    "quantity": product_flow.quantity,
+                    "wholesale_price": product_flow.wholesale_price,
+                }
+            )  # Send WhatsApp notifications to both stores
+        user_name = current_user.get("username", "غير معروف")
+
+        # Format transfer notification message
+        transfer_message = format_store_transfer_message(
+            source_store_name=source_store_name,
+            destination_store_name=destination_store_name,
+            products=transfer_products,
+            transfer_time=bill.time,
+            user_name=user_name,
+        )
+
+        # Check if both stores have the same WhatsApp number to avoid duplicate notifications
+        from whatsapp_utils import get_store_whatsapp_number
+
+        source_whatsapp = get_store_whatsapp_number(source_store_id)
+        destination_whatsapp = get_store_whatsapp_number(destination_store_id)
+
+        if (
+            source_whatsapp
+            and destination_whatsapp
+            and source_whatsapp == destination_whatsapp
+        ):
+            # Both stores have the same WhatsApp number - send one combined notification
+            combined_message = f"🔄 *نقل منتجات بين المتاجر*\n\n{transfer_message}"
+            background_tasks.add_task(
+                send_whatsapp_notification_background,
+                source_store_id,  # Use either store_id since they have the same number
+                combined_message,
+            )
+        else:
+            # Different WhatsApp numbers or one/both don't have numbers - send separate notifications
+            if source_whatsapp:
+                background_tasks.add_task(
+                    send_whatsapp_notification_background,
+                    source_store_id,
+                    f"📤 *منتجات مرسلة*\n\n{transfer_message}",
+                )
+
+            if destination_whatsapp:
+                background_tasks.add_task(
+                    send_whatsapp_notification_background,
+                    destination_store_id,
+                    f"📥 *منتجات مستلمة*\n\n{transfer_message}",
+                )
 
         return {"message": "Products moved successfully"}
     except Exception as e:
