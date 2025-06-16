@@ -231,18 +231,47 @@ def logout_user(
             if current_shift:
                 shift_start_time = current_shift["start_date_time"].isoformat()
 
-                # Get shift financial summary
+                # Get shift financial summary (excluding installment bills which are always 0)
                 cur.execute(
                     """
                     SELECT type, COALESCE(SUM(total), 0) AS total, COUNT(*) as count
                     FROM bills
                     WHERE time >= %s
                     AND bills.store_id = %s
+                    AND type != 'installment'
                     GROUP BY type
                     """,
                     (current_shift["start_date_time"], store_id),
                 )
                 bill_data = cur.fetchall()
+
+                # Get installment payments from installments_flow during this shift
+                cur.execute(
+                    """
+                    SELECT 
+                        COALESCE(SUM(if.amount), 0) as installment_total,
+                        COUNT(*) as installment_count
+                    FROM installments_flow if
+                    JOIN installments i ON if.installment_id = i.id
+                    WHERE if.time >= %s
+                    AND i.store_id = %s
+                    """,
+                    (current_shift["start_date_time"], store_id),
+                )
+                installment_data = cur.fetchone()
+
+                # Get installment bill count (for transaction count)
+                cur.execute(
+                    """
+                    SELECT COUNT(*) as installment_bill_count
+                    FROM bills
+                    WHERE time >= %s
+                    AND bills.store_id = %s
+                    AND type = 'installment'
+                    """,
+                    (current_shift["start_date_time"], store_id),
+                )
+                installment_bill_count = cur.fetchone()["installment_bill_count"]
 
                 # Get cash flow data
                 cur.execute(
@@ -269,8 +298,10 @@ def logout_user(
                     "sell_total": 0,
                     "buy_total": 0,
                     "return_total": 0,
-                    "installment_total": 0,
-                    "transaction_count": 0,
+                    "installment_total": installment_data["installment_total"]
+                    if installment_data
+                    else 0,
+                    "transaction_count": installment_bill_count,  # Start with installment bills
                 }
 
                 for row in bill_data:
@@ -280,8 +311,6 @@ def logout_user(
                         totals["buy_total"] += row["total"]
                     elif row["type"] == "return":
                         totals["return_total"] += row["total"]
-                    elif row["type"] == "installment":
-                        totals["installment_total"] += row["total"]
                     totals["transaction_count"] += row["count"]
 
                 # Process cash flow

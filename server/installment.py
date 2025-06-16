@@ -61,6 +61,7 @@ def get_installments(
     query = """
     SELECT
         i.id,
+        i.bill_id,  -- Add this line
         i.paid,
         i.installments_count,
         i.installment_interval,
@@ -141,6 +142,7 @@ def get_installments(
                 result.append(
                     {
                         "id": row["id"],
+                        "bill_id": row["bill_id"],  # This will now work
                         "paid": row["paid"] or 0,
                         "installment_interval": row["installment_interval"],
                         "installments_count": row["installments_count"],

@@ -24,6 +24,14 @@ import {
   DialogContent,
   DialogActions,
   DialogContentText,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  InputAdornment,
+  Collapse,
+  Alert,
 } from "@mui/material";
 import {
   Person,
@@ -33,6 +41,14 @@ import {
   Warning,
   AttachMoney,
   Delete,
+  Search,
+  FilterList,
+  Sort,
+  ExpandMore,
+  ExpandLess,
+  TrendingUp,
+  TrendingDown,
+  AccountBalance,
 } from "@mui/icons-material";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
@@ -45,6 +61,7 @@ import FormatedNumber from "../Shared/FormatedNumber";
 
 export interface Installment {
   id: number;
+  bill_id: number; // Add this line
   paid: number;
   time: string;
   installments_count: number;
@@ -94,26 +111,16 @@ const Installments = () => {
     installmentId: null,
   });
 
+  // New search and filter state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("time");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(false);
+
   const { storeId } = useContext(StoreContext);
 
-  const { data, isFetching, isPlaceholderData, refetch } = useQuery({
-    queryKey: ["installments"],
-    queryFn: () => getInstallments(storeId),
-    initialData: [],
-    // filter nulls in the flow array
-    select: (data: Installment[]) => {
-      return data
-        .map((installment) => ({
-          ...installment,
-          flow: installment.flow.filter((flow) => flow.id),
-        }))
-        .filter((installment) => {
-          return showEnded ? true : !installment.ended;
-        });
-    },
-  });
-
-  // Helper functions for calculations
+  // Helper functions for calculations - moved before usage
   const getTotalPaid = (installment: Installment) => {
     return (
       installment.paid +
@@ -150,6 +157,100 @@ const Installments = () => {
 
     if (new Date() > nextDueDate) return "overdue";
     return "active";
+  };
+
+  const { data, isFetching, isPlaceholderData, refetch } = useQuery({
+    queryKey: ["installments"],
+    queryFn: () => getInstallments(storeId),
+    initialData: [],
+    select: (data: Installment[]) => {
+      let filteredData = data
+        .map((installment) => ({
+          ...installment,
+          flow: installment.flow.filter((flow) => flow.id),
+        }))
+        .filter((installment) => {
+          // Show ended filter
+          if (!showEnded && installment.ended) return false;
+
+          // Search filter
+          if (searchTerm) {
+            const searchLower = searchTerm.toLowerCase();
+            const partyName = (installment.party_name || "").toLowerCase();
+            const installmentId = installment.id.toString();
+
+            if (
+              !partyName.includes(searchLower) &&
+              !installmentId.includes(searchLower)
+            ) {
+              return false;
+            }
+          }
+
+          // Status filter
+          if (statusFilter !== "all") {
+            const status = getInstallmentStatus(installment);
+            if (statusFilter === "unknown" && installment.party_name)
+              return false;
+            if (statusFilter !== "unknown" && statusFilter !== status)
+              return false;
+          }
+
+          return true;
+        });
+
+      // Sorting
+      filteredData.sort((a, b) => {
+        let aVal, bVal;
+
+        switch (sortBy) {
+          case "time":
+            aVal = new Date(a.time).getTime();
+            bVal = new Date(b.time).getTime();
+            break;
+          case "total":
+            aVal = Math.abs(a.total);
+            bVal = Math.abs(b.total);
+            break;
+          case "remaining":
+            aVal = getTotalRemaining(a);
+            bVal = getTotalRemaining(b);
+            break;
+          case "party":
+            aVal = (a.party_name || "").toLowerCase();
+            bVal = (b.party_name || "").toLowerCase();
+            break;
+          case "progress":
+            aVal = getPaymentProgress(a);
+            bVal = getPaymentProgress(b);
+            break;
+          default:
+            return 0;
+        }
+
+        const result = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return sortOrder === "asc" ? result : -result;
+      });
+
+      return filteredData;
+    },
+  });
+
+  // Calculate summary statistics - now after helper functions are defined
+  const summaryStats = {
+    totalBills: data.reduce((sum, inst) => sum + Math.abs(inst.total), 0),
+    totalPaid: data.reduce((sum, inst) => sum + getTotalPaid(inst), 0),
+    totalRemaining: data.reduce(
+      (sum, inst) => sum + getTotalRemaining(inst),
+      0,
+    ),
+    overdueCount: data.filter(
+      (inst) => getInstallmentStatus(inst) === "overdue",
+    ).length,
+    completedCount: data.filter(
+      (inst) => getInstallmentStatus(inst) === "completed",
+    ).length,
+    unknownParties: data.filter((inst) => !inst.party_name).length,
   };
 
   const getStatusChip = (status: string) => {
@@ -278,25 +379,206 @@ const Installments = () => {
                 </Box>
               </Stack>
 
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Button
-                  variant={showEnded ? "contained" : "outlined"}
-                  color="primary"
-                  startIcon={showEnded ? <CheckCircle /> : <Schedule />}
-                  onClick={() => setShowEnded((prev) => !prev)}
-                >
-                  {showEnded ? "إخفاء المكتملة" : "عرض المكتملة"}
-                </Button>
+              {/* Summary Cards */}
+              <Grid2 container spacing={2} sx={{ mb: 3 }}>
+                <Grid2 size={{ xs: 6, md: 2 }}>
+                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
+                    <AccountBalance sx={{ color: "primary.main", mb: 1 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      إجمالي الفواتير
+                    </Typography>
+                    <Typography variant="h6" color="primary.main">
+                      <FormatedNumber money>
+                        {summaryStats.totalBills}
+                      </FormatedNumber>
+                    </Typography>
+                  </Card>
+                </Grid2>
 
-                <Box sx={{ ml: "auto" }}>
-                  <Typography variant="body2" color="text.secondary">
-                    عدد الأقساط: {data.length}
-                  </Typography>
-                </Box>
-              </Stack>
+                <Grid2 size={{ xs: 6, md: 2 }}>
+                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
+                    <TrendingUp sx={{ color: "success.main", mb: 1 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      إجمالي المدفوع
+                    </Typography>
+                    <Typography variant="h6" color="success.main">
+                      <FormatedNumber money>
+                        {summaryStats.totalPaid}
+                      </FormatedNumber>
+                    </Typography>
+                  </Card>
+                </Grid2>
+
+                <Grid2 size={{ xs: 6, md: 2 }}>
+                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
+                    <TrendingDown sx={{ color: "warning.main", mb: 1 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      إجمالي المتبقي
+                    </Typography>
+                    <Typography variant="h6" color="warning.main">
+                      <FormatedNumber money>
+                        {summaryStats.totalRemaining}
+                      </FormatedNumber>
+                    </Typography>
+                  </Card>
+                </Grid2>
+
+                <Grid2 size={{ xs: 6, md: 2 }}>
+                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
+                    <Warning sx={{ color: "error.main", mb: 1 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      متأخرة
+                    </Typography>
+                    <Typography variant="h6" color="error.main">
+                      {summaryStats.overdueCount}
+                    </Typography>
+                  </Card>
+                </Grid2>
+
+                <Grid2 size={{ xs: 6, md: 2 }}>
+                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
+                    <CheckCircle sx={{ color: "info.main", mb: 1 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      مكتملة
+                    </Typography>
+                    <Typography variant="h6" color="info.main">
+                      {summaryStats.completedCount}
+                    </Typography>
+                  </Card>
+                </Grid2>
+
+                <Grid2 size={{ xs: 6, md: 2 }}>
+                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
+                    <Person sx={{ color: "text.secondary", mb: 1 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      عملاء غير معروفين
+                    </Typography>
+                    <Typography variant="h6" color="text.secondary">
+                      {summaryStats.unknownParties}
+                    </Typography>
+                  </Card>
+                </Grid2>
+              </Grid2>
+
+              {/* Search and Filter Controls */}
+              <Paper sx={{ p: 2, mb: 3 }} elevation={1}>
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <TextField
+                      placeholder="البحث بالاسم أو رقم القسط..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      size="small"
+                      sx={{ minWidth: 250 }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Search />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+
+                    <Button
+                      variant="outlined"
+                      startIcon={showFilters ? <ExpandLess /> : <ExpandMore />}
+                      onClick={() => setShowFilters(!showFilters)}
+                      size="small"
+                    >
+                      فلاتر متقدمة
+                    </Button>
+
+                    <Button
+                      variant={showEnded ? "contained" : "outlined"}
+                      color="primary"
+                      startIcon={showEnded ? <CheckCircle /> : <Schedule />}
+                      onClick={() => setShowEnded((prev) => !prev)}
+                      size="small"
+                    >
+                      {showEnded ? "إخفاء المكتملة" : "عرض المكتملة"}
+                    </Button>
+
+                    <Box sx={{ ml: "auto" }}>
+                      <Typography variant="body2" color="text.secondary">
+                        عدد النتائج: {data.length}
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  <Collapse in={showFilters}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <FormControl size="small" sx={{ minWidth: 150 }}>
+                        <InputLabel>الحالة</InputLabel>
+                        <Select
+                          value={statusFilter}
+                          label="الحالة"
+                          onChange={(e) => setStatusFilter(e.target.value)}
+                        >
+                          <MenuItem value="all">الكل</MenuItem>
+                          <MenuItem value="active">نشط</MenuItem>
+                          <MenuItem value="overdue">متأخر</MenuItem>
+                          <MenuItem value="completed">مكتمل</MenuItem>
+                          <MenuItem value="unknown">عملاء غير معروفين</MenuItem>
+                        </Select>
+                      </FormControl>
+
+                      <FormControl size="small" sx={{ minWidth: 150 }}>
+                        <InputLabel>ترتيب حسب</InputLabel>
+                        <Select
+                          value={sortBy}
+                          label="ترتيب حسب"
+                          onChange={(e) => setSortBy(e.target.value)}
+                        >
+                          <MenuItem value="time">التاريخ</MenuItem>
+                          <MenuItem value="total">إجمالي الفاتورة</MenuItem>
+                          <MenuItem value="remaining">المبلغ المتبقي</MenuItem>
+                          <MenuItem value="party">اسم العميل</MenuItem>
+                          <MenuItem value="progress">نسبة التقدم</MenuItem>
+                        </Select>
+                      </FormControl>
+
+                      <FormControl size="small" sx={{ minWidth: 120 }}>
+                        <InputLabel>الترتيب</InputLabel>
+                        <Select
+                          value={sortOrder}
+                          label="الترتيب"
+                          onChange={(e) =>
+                            setSortOrder(e.target.value as "asc" | "desc")
+                          }
+                        >
+                          <MenuItem value="desc">تنازلي</MenuItem>
+                          <MenuItem value="asc">تصاعدي</MenuItem>
+                        </Select>
+                      </FormControl>
+
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          setSearchTerm("");
+                          setStatusFilter("all");
+                          setSortBy("time");
+                          setSortOrder("desc");
+                        }}
+                      >
+                        إعادة تعيين
+                      </Button>
+                    </Stack>
+                  </Collapse>
+                </Stack>
+              </Paper>
             </Box>
 
             <Divider sx={{ mb: 3 }} />
+
+            {/* Results Info */}
+            {(searchTerm || statusFilter !== "all") && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                عرض {data.length} نتيجة من إجمالي الأقساط
+                {searchTerm && ` • البحث: "${searchTerm}"`}
+                {statusFilter !== "all" && ` • الحالة: ${statusFilter}`}
+              </Alert>
+            )}
 
             {/* Content Section */}
             <Grid2
@@ -382,12 +664,20 @@ const Installments = () => {
                                 >
                                   {installment.party_name || "عميل غير معروف"}
                                 </Typography>
-                                <Typography
-                                  variant="body2"
-                                  color="text.secondary"
-                                >
-                                  رقم القسط: #{installment.id}
-                                </Typography>
+                                <Stack direction="row" spacing={2}>
+                                  <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                  >
+                                    رقم القسط: #{installment.id}
+                                  </Typography>
+                                  <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                  >
+                                    رقم الفاتورة: #{installment.bill_id}
+                                  </Typography>
+                                </Stack>
                               </Box>
                             </Stack>
                             {getStatusChip(status)}

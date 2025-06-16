@@ -12,6 +12,13 @@ import {
   TextField,
   FormControlLabel,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from "@mui/material";
 import {
   TrendingUp as TrendingUpIcon,
@@ -197,12 +204,50 @@ const Bills = () => {
     const averageDiscount =
       actualBills.length > 0 ? totalDiscount / actualBills.length : 0;
 
+    // Calculate product flow when filtering by products
+    const productFlow =
+      selectedProduct.length > 0
+        ? selectedProduct.map((selectedProd) => {
+            const flow = {
+              productName: selectedProd.name,
+              sell: 0,
+              BNPL: 0,
+              return: 0,
+              reserve: 0,
+              installment: 0,
+              total: 0,
+            };
+
+            actualBills.forEach((bill) => {
+              bill.products.forEach((product) => {
+                if (product.name === selectedProd.name) {
+                  const quantity = product.amount || 0;
+
+                  // Update specific bill type count
+                  if (bill.type === "sell") flow.sell += quantity;
+                  else if (bill.type === "BNPL") flow.BNPL += quantity;
+                  else if (bill.type === "return") flow.return += quantity;
+                  else if (bill.type === "reserve") flow.reserve += quantity;
+                  else if (bill.type === "installment")
+                    flow.installment += quantity;
+
+                  // Total is just the sum of all quantities (already signed correctly in DB)
+                  flow.total += quantity;
+                }
+              });
+            });
+
+            return flow;
+          })
+        : [];
+
     return {
       totalTransactions: actualBills.length,
       totalAmount,
       averageDiscount,
+      productFlow,
     };
-  }, [filteredBills, showExpandedBill]);
+  }, [filteredBills, showExpandedBill, selectedProduct]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -455,6 +500,80 @@ const Bills = () => {
             </Grid2>
           </Card>
         </Grid2>
+
+        {/* Product Flow Analysis */}
+        {selectedProduct.length > 0 && (
+          <Grid2 size={12}>
+            <Card elevation={3} sx={{ p: 2 }}>
+              <Typography variant="h5" sx={{ mb: 2 }}>
+                تحليل حركة المنتجات المحددة
+              </Typography>
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>المنتج</TableCell>
+                      <TableCell align="center">مبيعات نقدي</TableCell>
+                      <TableCell align="center">آجل</TableCell>
+                      <TableCell align="center">مرتجع</TableCell>
+                      <TableCell align="center">حجز</TableCell>
+                      <TableCell align="center">تقسيط</TableCell>
+                      <TableCell align="center">الإجمالي</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {statistics.productFlow.map((flow, index) => (
+                      <TableRow key={index}>
+                        <TableCell component="th" scope="row">
+                          <Typography variant="body2" fontWeight="medium">
+                            {flow.productName}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Typography variant="body2" color="success.main">
+                            {flow.sell}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Typography variant="body2" color="info.main">
+                            {flow.BNPL}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Typography variant="body2" color="error.main">
+                            {flow.return}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Typography variant="body2" color="warning.main">
+                            {flow.reserve}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Typography variant="body2" color="secondary.main">
+                            {flow.installment}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Typography
+                            variant="body2"
+                            fontWeight="bold"
+                            color={
+                              flow.total >= 0 ? "success.main" : "error.main"
+                            }
+                          >
+                            {flow.total}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Card>
+          </Grid2>
+        )}
+
         <Grid2 size={12}>
           <Card
             elevation={3}
