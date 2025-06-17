@@ -42,8 +42,6 @@ import {
   AttachMoney,
   Delete,
   Search,
-  FilterList,
-  Sort,
   ExpandMore,
   ExpandLess,
   TrendingUp,
