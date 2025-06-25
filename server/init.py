@@ -51,6 +51,8 @@ def drop_all_tables(cur):
     cur.execute("DROP TABLE IF EXISTS employee CASCADE")
     cur.execute("DROP TABLE IF EXISTS salaries CASCADE")
     cur.execute("DROP TABLE IF EXISTS bills_collections CASCADE")
+    cur.execute("DROP TABLE IF EXISTS product_requests CASCADE")
+    cur.execute("DROP TABLE IF EXISTS product_request_items CASCADE")
     cur.execute("SET TIME ZONE 'Africa/Cairo'")
     cur.execute(f"ALTER DATABASE {DATABASE} SET timezone TO 'Africa/Cairo';")
 
@@ -70,7 +72,7 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
     """)
     cur.execute("""
     INSERT INTO scopes (name, pages)
@@ -104,6 +106,7 @@ def create_all_tables(cur):
     ('الاعدادات', '/settings'),
     ('ادارة الاقساط', '/installments'),
     ('الموظفين', '/employees'),
+    ('طلبات المنتجات', '/request-products'),
     ('admin', '/admin')
     """)
 
@@ -219,7 +222,7 @@ def create_all_tables(cur):
     )
     """)
 
-    cur.execute("""INSERT INTO bills (id, store_id) VALUES (-1, 0)""")
+    cur.execute("INSERT INTO bills (id, store_id) VALUES (-1, 0)")
 
     # Create the bills_collections table
     cur.execute("""
@@ -329,6 +332,30 @@ def create_all_tables(cur):
         bonus FLOAT,
         deductions FLOAT,
         time TIMESTAMP
+    )
+    """)
+
+    # Create product_requests table
+    cur.execute("""
+    CREATE TABLE product_requests (
+        id SERIAL PRIMARY KEY,
+        requesting_store_id INTEGER NOT NULL REFERENCES store_data(id),
+        requested_store_id INTEGER NOT NULL REFERENCES store_data(id),
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # Create product_request_items table
+    cur.execute("""
+    CREATE TABLE product_request_items (
+        id SERIAL PRIMARY KEY,
+        product_request_id INTEGER NOT NULL REFERENCES product_requests(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id),
+        requested_quantity INTEGER NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+        notes TEXT
     )
     """)
 

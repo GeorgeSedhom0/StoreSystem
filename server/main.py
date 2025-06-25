@@ -23,6 +23,7 @@ from installment import router as installment_router
 from analytics import router as analytics_router
 from employee import router as employee_router
 from whatsapp import router as whatsapp_router
+from product_requests import router as product_requests_router
 from auth_middleware import get_current_user, get_store_info
 from whatsapp_utils import (
     send_whatsapp_notification_background,
@@ -51,6 +52,7 @@ app.include_router(installment_router)
 app.include_router(analytics_router)
 app.include_router(employee_router)
 app.include_router(whatsapp_router)
+app.include_router(product_requests_router)
 
 origins = [
     "http://localhost",
@@ -207,7 +209,8 @@ def get_bar_code(current_user: dict = Depends(get_current_user)):
             WITH OrderedBarcodes AS (
                 SELECT bar_code, CAST(bar_code AS BIGINT) AS numeric_barcode
                 FROM products
-                WHERE bar_code ~ '^[0-9]+$'
+                WHERE bar_code ~ '^[0-9]+
+
                 ORDER BY numeric_barcode ASC
             ), Gaps AS (
                 SELECT numeric_barcode + 1 AS gap_start
@@ -229,7 +232,8 @@ def get_bar_code(current_user: dict = Depends(get_current_user)):
             cur.execute("""
                 SELECT COALESCE(MAX(CAST(bar_code AS BIGINT)), 100000000000) + 1 AS first_available_barcode
                 FROM products
-                WHERE bar_code ~ '^[0-9]+$'
+                WHERE bar_code ~ '^[0-9]+
+
                 """)
             first_available_barcode = cur.fetchone()["first_available_barcode"]
 

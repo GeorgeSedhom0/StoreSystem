@@ -8,10 +8,11 @@ import {
   MenuItem,
   InputLabel,
   IconButton,
+  Badge,
 } from "@mui/material";
 import { ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
@@ -65,6 +66,25 @@ const Layout = ({
     queryFn: () => getCurrentShift(storeId),
     enabled: !!storeId && location.pathname !== "/login",
   });
+
+  const { data: requests } = useQuery({
+    queryKey: ['product-requests', storeId],
+    queryFn: async () => {
+        if (!storeId) return [];
+        const { data } = await axios.get(`/product-requests?store_id=${storeId}`);
+        return data;
+    },
+    enabled: !!storeId,
+    refetchInterval: 5000, // Refetch every 5 seconds to keep it updated
+});
+
+const pendingRequestsCount = useMemo(() => {
+    if (!requests) return 0;
+    const incomingPending = requests.filter(
+        (req) => req.requested_store_id === storeId && req.status === 'pending'
+    );
+    return incomingPending.length;
+}, [requests, storeId]);
 
   // Effect to check if user has a valid shift and redirect if not
   useEffect(() => {
@@ -142,11 +162,25 @@ const Layout = ({
               {profile &&
                 profile.user.pages
                   .filter((page) => page !== "admin")
-                  .map((page, index) => (
-                    <NavLink key={index} to={profile.user.paths[index]}>
-                      <Button>{page}</Button>
-                    </NavLink>
-                  ))}
+                  .map((page, index) => {
+                    const pageName = page;
+                    const pagePath = profile.user.paths[index];
+                    const isRequestProductsPage = pageName === 'طلبات المنتجات';
+
+                    return (
+                        <NavLink key={index} to={pagePath}>
+                            <Button>
+                                {isRequestProductsPage ? (
+                                    <Badge badgeContent={pendingRequestsCount} color="error">
+                                        {pageName}
+                                    </Badge>
+                                ) : (
+                                    pageName
+                                )}
+                            </Button>
+                        </NavLink>
+                    );
+                })}
             </Grid2>
             <Grid2
               container

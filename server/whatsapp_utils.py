@@ -554,6 +554,59 @@ def format_store_transfer_message(
     return message
 
 
+def format_product_request_message(
+    requesting_store_name: str,
+    requested_store_name: str,
+    products: List[Dict[str, Any]],
+    request_time: str,
+    user_name: str = None,
+) -> str:
+    """
+    Format WhatsApp message for product request notification in Arabic
+
+    Args:
+        requesting_store_name: Name of the requesting store
+        requested_store_name: Name of the requested store
+        products: List of requested products with details
+        request_time: Request timestamp
+        user_name: Username who performed the request
+
+    Returns:
+        Formatted Arabic message string
+    """
+    # Format user information
+    user_display = user_name if user_name else "غير محدد"
+
+    # Create products list
+    products_text = ""
+    for i, product in enumerate(products, 1):
+        name = product.get("name", "منتج غير محدد")
+        quantity = product.get("quantity", 0)
+
+        products_text += f"{i}. {name}\n"
+        products_text += f"   📦 الكمية: {quantity} قطعة\n"
+
+    message = f"""📦 *تنبيه طلب منتجات جديد*
+
+━━━━━━━━━━━━━━━━━━━━
+
+📅 *تاريخ الطلب:* {request_time}
+👤 *المستخدم:* {user_display}
+
+🏪 *من متجر:* {requesting_store_name}
+🏬 *إلى متجر:* {requested_store_name}
+
+
+━━━━━━━━━━━━━━━━━━━━
+
+🛍️ *تفاصيل المنتجات المطلوبة:*
+
+{products_text}━━━━━━━━━━━━━━━━━━━━
+"""
+
+    return message
+
+
 def check_due_installments(store_id: int):
     """
     Check for installments that are due today or overdue

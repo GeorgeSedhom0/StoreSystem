@@ -113,3 +113,28 @@ export interface StoreData {
   address: string;
   phone: string;
 }
+
+export interface ProductRequest {
+  id: number;
+  requesting_store_id: number;
+  requested_store_id: number;
+  requesting_store_name: string;
+  requested_store_name: string;
+  status: "pending" | "sent" | "received" | "completed" | "cancelled";
+  created_at: string;
+  updated_at: string;
+  items: ProductRequestItem[];
+}
+
+export interface ProductRequestItem {
+  id: number;
+  product_id: number;
+  product_name: string;
+  requested_quantity: number;
+  status: "pending" | "accepted" | "rejected";
+  notes?: string;
+}
+
+export interface CartItem extends Product {
+  requested_quantity: number;
+}

@@ -83,8 +83,8 @@ def get_user_profile(user: dict = Depends(get_current_user)) -> JSONResponse:
             cur.execute(
                 """
                 SELECT
-                    ARRAY_AGG(pages.name) AS pages,
-                    ARRAY_AGG(pages.path) AS paths
+                    ARRAY_AGG(pages.name ORDER BY pages.id) AS pages,
+                    ARRAY_AGG(pages.path ORDER BY pages.id) AS paths
                 FROM users
                 JOIN scopes ON users.scope_id = scopes.id
                 JOIN pages ON pages.id = ANY(scopes.pages)
