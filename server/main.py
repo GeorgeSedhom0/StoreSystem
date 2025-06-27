@@ -848,11 +848,11 @@ def update_bill(
 
             cur.execute(
                 """
-                INSERT INTO bills (id, store_id)
-                VALUES (%s, %s)
+                INSERT INTO bills (id, store_id, time)
+                VALUES (%s, %s, %s)
                 ON CONFLICT (id, store_id) DO NOTHING
                 """,
-                (negative_bill_id, store_id),
+                (negative_bill_id, store_id, datetime.now().isoformat()),
             )
 
             # Get the products_flow entries associated with this bill
@@ -885,6 +885,7 @@ def update_bill(
                     -product["amount"],
                     product["wholesale_price"],
                     product["price"],
+                    datetime.now().isoformat(),
                 )
                 for product in old_products_flow
             ]
@@ -898,6 +899,7 @@ def update_bill(
                     product_flow.amount,
                     product_flow.wholesale_price,
                     product_flow.price,
+                    datetime.now().isoformat(),
                 )
                 for product_flow in bill.products
             ]
@@ -907,9 +909,9 @@ def update_bill(
                 """
                 INSERT INTO products_flow (
                     store_id, bill_id, product_id,
-                    amount, wholesale_price, price
+                    amount, wholesale_price, price, time
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 values,
             )
@@ -1067,6 +1069,7 @@ def add_bill(
                     else product_flow.quantity,
                     product_flow.wholesale_price,
                     product_flow.price,
+                    datetime.now().isoformat(),
                 )
                 for product_flow in bill.products_flow
             ]
@@ -1075,9 +1078,9 @@ def add_bill(
                 """
                 INSERT INTO products_flow (
                     store_id, bill_id, product_id,
-                    amount, wholesale_price, price
+                    amount, wholesale_price, price, time
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 values,
             )

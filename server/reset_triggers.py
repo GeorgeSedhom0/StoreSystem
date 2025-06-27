@@ -58,6 +58,9 @@ def drop_all_triggers(cur):
     cur.execute(
         "DROP FUNCTION IF EXISTS delete_cash_flow_after_delete_installment_flow() CASCADE;"
     )
+    cur.execute(
+        "DROP FUNCTION IF EXISTS update_products_flow_total_after_insert() CASCADE;"
+    )
 
 
 def reset_all_triggers(cur):

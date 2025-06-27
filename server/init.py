@@ -287,6 +287,8 @@ def create_all_tables(cur):
       wholesale_price FLOAT,
       price FLOAT,
       amount INT,
+      time TIMESTAMP NOT NULL,
+      total INT NOT NULL,
       PRIMARY KEY (id, store_id),
       FOREIGN KEY (store_id, bill_id) REFERENCES bills(store_id, id),
       FOREIGN KEY (product_id) REFERENCES products(id)
@@ -883,6 +885,48 @@ def create_all_triggers(cur):
     AFTER DELETE ON installments
     FOR EACH ROW
     EXECUTE FUNCTION delete_cash_flow_after_delete_installment();
+    """)
+
+    # Create the trigger to update total after inserting a products_flow
+    cur.execute("""
+    -- Trigger to update total after insert in products_flow
+    CREATE OR REPLACE FUNCTION update_products_flow_total_after_insert()
+    RETURNS TRIGGER AS $$
+    DECLARE
+        latest_total INTEGER;
+        latest_record RECORD;
+    BEGIN
+        -- Lock the latest products_flow record for this store and product to prevent race conditions
+        SELECT id, total INTO latest_record
+        FROM products_flow
+        WHERE store_id = NEW.store_id
+        AND product_id = NEW.product_id
+        AND (time < NEW.time OR (time = NEW.time AND id < NEW.id))
+        ORDER BY time DESC, id DESC
+        LIMIT 1
+        FOR UPDATE;
+
+        -- If no previous record exists, start from 0
+        IF latest_record.total IS NULL THEN
+            latest_total := 0;
+        ELSE
+            latest_total := latest_record.total;
+        END IF;
+
+        -- Update the total for the current row
+        UPDATE products_flow
+        SET total = COALESCE(NEW.amount, 0) + latest_total
+        WHERE id = NEW.id
+        AND store_id = NEW.store_id;
+
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trigger_update_products_flow_total_after_insert
+    AFTER INSERT ON products_flow
+    FOR EACH ROW
+    EXECUTE FUNCTION update_products_flow_total_after_insert();
     """)
 
 
