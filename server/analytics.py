@@ -1,7 +1,7 @@
 from fastapi import HTTPException, APIRouter, Depends
 from fastapi.responses import JSONResponse
 import psycopg2
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from dotenv import load_dotenv
 from os import getenv
@@ -33,21 +33,12 @@ logging.basicConfig(
 )
 
 
-def _ensure_date_range_coverage(data: List, start_date: str, end_date: str) -> List:
-    all_dates = pd.date_range(start=start_date, end=end_date)
-    data_map = {d[0]: d for d in data}
-    return [
-        data_map.get(dt.strftime("%Y-%m-%d"), [dt.strftime("%Y-%m-%d"), 0, False])
-        for dt in all_dates
-    ]
-
-
 def _get_historical_and_prediction_bounds(start_date: str, end_date: str) -> tuple:
     start_date_obj = parse_date(start_date)
     end_date_obj = parse_date(end_date)
     today = datetime.now()
     is_future_prediction = end_date_obj.date() > today.date()
-    historical_end_date = min(end_date_obj, today - timedelta(days=1))
+    historical_end_date = min(end_date_obj, today)
     return (
         start_date_obj,
         end_date_obj,
@@ -207,10 +198,17 @@ def sales(
         with Database(HOST, DATABASE, USER, PASS, real_dict_cursor=False) as cursor:
             cursor.execute(
                 """
-                SELECT DATE_TRUNC('day', bills.time) AS day, SUM(total) as total
+                SELECT
+                    DATE_TRUNC('day', bills.time) AS day,
+                    SUM(total) as total
                 FROM bills
-                WHERE bills.time > %s AND bills.time <= %s
-                AND bills.type IN %s AND bills.store_id = %s
+                LEFT JOIN assosiated_parties ap ON bills.party_id = ap.id
+                WHERE
+                    bills.time >= %s
+                    AND bills.time <= %s
+                    AND bills.type IN %s
+                    AND bills.store_id = %s
+                    AND NOT (bills.party_id IS NOT NULL AND bills.type = 'sell' AND ap.type = 'store')
                 GROUP BY day
                 ORDER BY day
                 """,
@@ -233,7 +231,7 @@ def sales(
                 ]
             )
 
-        return _ensure_date_range_coverage(result_data, start_date, end_date)
+        return result_data
 
     except psycopg2.Error as e:
         logging.error(e)
@@ -514,13 +512,29 @@ def shifts_analytics(
         with Database(HOST, DATABASE, USER, PASS) as cursor:
             cursor.execute(
                 """
-                SELECT start_date_time, end_date_time,
-                    (SELECT COALESCE(SUM(total), 0) FROM bills
-                     WHERE time >= start_date_time AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
-                     AND type IN %s AND store_id = %s) AS total
+                SELECT
+                    start_date_time,
+                    CASE
+                        WHEN end_date_time IS NULL THEN NOW()::timestamp
+                        ELSE end_date_time
+                    END AS end_date_time,
+                    -- Calculate total sales for the shift
+                    (SELECT
+                        SUM(total)
+                        FROM bills
+                        LEFT JOIN assosiated_parties ap ON bills.party_id = ap.id
+                        WHERE time >= start_date_time
+                        AND time <= CASE
+                            WHEN end_date_time IS NULL THEN CURRENT_TIMESTAMP
+                            ELSE end_date_time
+                        END
+                        AND bills.type IN %s
+                        AND store_id = %s
+                        AND NOT (bills.party_id IS NOT NULL AND bills.type = 'sell' AND ap.type = 'store')
+                    ) AS total
                 FROM shifts
                 WHERE start_date_time >= %s AND start_date_time <= %s
-                AND store_id = %s AND current = FALSE
+                AND store_id = %s
                 ORDER BY start_date_time
                 """,
                 (
@@ -543,7 +557,7 @@ def shifts_analytics(
                     "start_date_time": str(row["start_date_time"]),
                     "end_date_time": str(row["end_date_time"]),
                     "duration_hours": duration_hours,
-                    "total": float(row["total"]),
+                    "total": float(row["total"] if row["total"] is not None else 0),
                     "is_prediction": False,
                 }
             )

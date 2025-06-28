@@ -65,8 +65,8 @@ const ShiftsAnalytics = () => {
     queryKey: ["analytics", startDate, endDate, requiredTypes, storeId],
     queryFn: () =>
       getAnalytics(
-        startDate.toISOString(),
-        endDate.toISOString(),
+        startDate.startOf("day").toISOString(),
+        endDate.endOf("day").toISOString(),
         requiredTypes,
         storeId,
       ),

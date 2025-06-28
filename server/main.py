@@ -1646,11 +1646,13 @@ def shift_total(
             # Get bill totals by type
             cur.execute(
                 """
-                SELECT type, COALESCE(SUM(total), 0) AS total, COUNT(*) as count
+                SELECT bills.type, COALESCE(SUM(total), 0) AS total, COUNT(*) as count
                 FROM bills
+                LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
                 WHERE time >= %s
                 AND bills.store_id = %s
-                GROUP BY type
+                AND (bills.party_id IS NULL OR assosiated_parties.type != 'store')
+                GROUP BY bills.type
                 """,
                 (shift_start_time, store_id),
             )
