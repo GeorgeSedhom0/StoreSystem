@@ -623,7 +623,7 @@ def _calculate_product_profit_fifo(
     product_id: int, store_id: int, start_date: datetime, end_date: datetime, cursor
 ) -> dict:
     """
-    Calculate profit for a single product using FIFO method.
+    Calculate profit for a single product using FIFO method with future borrowing capability.
     """
     # Find the earliest point where total was <= 0 before our period
     cursor.execute(
@@ -677,12 +677,35 @@ def _calculate_product_profit_fifo(
 
     transactions = cursor.fetchall()
 
+    # Get future purchases beyond our period for borrowing
+    cursor.execute(
+        """
+        SELECT pf.time, pf.amount, pf.wholesale_price
+        FROM products_flow pf
+        JOIN bills b ON pf.bill_id = b.id
+        WHERE pf.product_id = %s AND pf.store_id = %s 
+        AND pf.time > %s AND b.id > 0 AND b.type = 'buy'
+        AND pf.amount > 0
+        ORDER BY pf.time
+    """,
+        (product_id, store_id, end_date),
+    )
+
+    future_purchases = cursor.fetchall()
+
     # FIFO inventory queue: [(cost, quantity), ...]
     inventory_queue = []
+    # Future inventory queue for borrowing outside bounds: [(cost, quantity), ...]
+    future_inventory_queue = [
+        (float(fp["wholesale_price"] or 0), float(fp["amount"]))
+        for fp in future_purchases
+    ]
+
     total_profit = 0.0
     daily_profit = {}
+    last_known_cost = None
 
-    for transaction in transactions:
+    for i, transaction in enumerate(transactions):
         date_str = transaction["time"].strftime("%Y-%m-%d")
         amount = float(transaction["amount"])
         wholesale_price = float(transaction["wholesale_price"] or 0)
@@ -697,9 +720,10 @@ def _calculate_product_profit_fifo(
         if bill_type == "buy" and amount > 0:
             # Add inventory (buy transaction)
             inventory_queue.append((wholesale_price, amount))
+            last_known_cost = wholesale_price
 
         elif bill_type == "sell" and amount < 0:
-            # Sell transaction - calculate profit using FIFO
+            # Sell transaction - calculate profit using FIFO with borrowing
             sell_quantity = abs(amount)
 
             # Skip profit calculation for sales to store parties
@@ -713,6 +737,7 @@ def _calculate_product_profit_fifo(
                 sale_profit = 0.0
                 remaining_to_sell = sell_quantity
 
+                # STEP 1: Use current inventory (normal FIFO)
                 while remaining_to_sell > 0 and inventory_queue:
                     cost, available_qty = inventory_queue[0]
 
@@ -729,6 +754,92 @@ def _calculate_product_profit_fifo(
                         inventory_queue[0] = (cost, available_qty - remaining_to_sell)
                         remaining_to_sell = 0
 
+                # STEP 2: Borrow from future buys within the same period
+                if remaining_to_sell > 0:
+                    # Look for future buy transactions in the remaining transactions
+                    future_within_period = []
+                    for j in range(i + 1, len(transactions)):
+                        future_tx = transactions[j]
+                        if (
+                            future_tx["type"] == "buy"
+                            and float(future_tx["amount"]) > 0
+                        ):
+                            future_within_period.append(
+                                (
+                                    float(future_tx["wholesale_price"] or 0),
+                                    float(future_tx["amount"]),
+                                )
+                            )
+
+                    # Use future inventory within period
+                    future_within_idx = 0
+                    while remaining_to_sell > 0 and future_within_idx < len(
+                        future_within_period
+                    ):
+                        cost, available_qty = future_within_period[future_within_idx]
+
+                        if available_qty <= remaining_to_sell:
+                            # Use entire future batch
+                            profit_for_batch = available_qty * (sell_price - cost)
+                            sale_profit += profit_for_batch
+                            remaining_to_sell -= available_qty
+                            # Mark this future inventory as used
+                            future_within_period[future_within_idx] = (cost, 0)
+                            future_within_idx += 1
+                        else:
+                            # Use partial future batch
+                            profit_for_batch = remaining_to_sell * (sell_price - cost)
+                            sale_profit += profit_for_batch
+                            future_within_period[future_within_idx] = (
+                                cost,
+                                available_qty - remaining_to_sell,
+                            )
+                            remaining_to_sell = 0
+
+                    # Update the main transactions to reflect used future inventory
+                    future_within_idx = 0
+                    for j in range(i + 1, len(transactions)):
+                        if (
+                            transactions[j]["type"] == "buy"
+                            and float(transactions[j]["amount"]) > 0
+                        ):
+                            if future_within_idx < len(future_within_period):
+                                _, remaining_qty = future_within_period[
+                                    future_within_idx
+                                ]
+                                # Update the transaction amount to reflect what's left
+                                transactions[j] = dict(transactions[j])
+                                transactions[j]["amount"] = remaining_qty
+                                future_within_idx += 1
+
+                # STEP 3: Borrow from future purchases outside the period
+                while remaining_to_sell > 0 and future_inventory_queue:
+                    cost, available_qty = future_inventory_queue[0]
+
+                    if available_qty <= remaining_to_sell:
+                        # Use entire future batch
+                        profit_for_batch = available_qty * (sell_price - cost)
+                        sale_profit += profit_for_batch
+                        remaining_to_sell -= available_qty
+                        future_inventory_queue.pop(0)
+                    else:
+                        # Use partial future batch
+                        profit_for_batch = remaining_to_sell * (sell_price - cost)
+                        sale_profit += profit_for_batch
+                        future_inventory_queue[0] = (
+                            cost,
+                            available_qty - remaining_to_sell,
+                        )
+                        remaining_to_sell = 0
+
+                # STEP 4: Final fallback - use last known cost
+                if remaining_to_sell > 0 and last_known_cost is not None:
+                    profit_for_batch = remaining_to_sell * (
+                        sell_price - last_known_cost
+                    )
+                    sale_profit += profit_for_batch
+                    remaining_to_sell = 0
+
                 total_profit += sale_profit
                 if date_str not in daily_profit:
                     daily_profit[date_str] = 0.0
@@ -740,19 +851,17 @@ def _calculate_product_profit_fifo(
     return {"total": total_profit, "daily": daily_profit}
 
 
-def _remove_from_fifo_queue(inventory_queue: list, quantity_to_remove: float):
-    """Remove quantity from FIFO inventory queue without calculating profit"""
-    remaining_to_remove = quantity_to_remove
-
-    while remaining_to_remove > 0 and inventory_queue:
-        cost, available_qty = inventory_queue[0]
-
-        if available_qty <= remaining_to_remove:
-            remaining_to_remove -= available_qty
-            inventory_queue.pop(0)
+def _remove_from_fifo_queue(queue, quantity_to_remove):
+    """Helper function to remove quantity from FIFO queue without calculating profit."""
+    remaining = quantity_to_remove
+    while remaining > 0 and queue:
+        cost, available_qty = queue[0]
+        if available_qty <= remaining:
+            remaining -= available_qty
+            queue.pop(0)
         else:
-            inventory_queue[0] = (cost, available_qty - remaining_to_remove)
-            remaining_to_remove = 0
+            queue[0] = (cost, available_qty - remaining)
+            remaining = 0
 
 
 def _calculate_profit_simple(
