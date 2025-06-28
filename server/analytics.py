@@ -247,7 +247,7 @@ def income_analytics(
     store_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    method: Optional[str] = "simple",  # "simple", "fifo" or "weighted_average"
+    method: Optional[str] = "simple",  # "simple", "fifo"
     current_user: dict = Depends(get_current_user),
 ):
     """Get income analytics including cash flow and profit data"""
@@ -272,11 +272,7 @@ def income_analytics(
             cash_summary = cursor.fetchone()
 
             # Calculate profit using selected method
-            if method == "weighted_average":
-                total_profit, daily_profit_data = _calculate_profit_weighted_average(
-                    store_id, start_date, end_date, cursor
-                )
-            elif method == "fifo":
+            if method == "fifo":
                 total_profit, daily_profit_data = _calculate_profit_fifo(
                     store_id, start_date, end_date, cursor
                 )
@@ -757,53 +753,6 @@ def _remove_from_fifo_queue(inventory_queue: list, quantity_to_remove: float):
         else:
             inventory_queue[0] = (cost, available_qty - remaining_to_remove)
             remaining_to_remove = 0
-
-
-def _calculate_profit_weighted_average(
-    store_id: int, start_date: str, end_date: str, cursor
-) -> tuple:
-    """
-    Calculate profit using weighted average method.
-    Returns (total_profit, daily_profit_data)
-    """
-    start_date_obj = parse_date(start_date)
-    end_date_obj = parse_date(end_date)
-
-    # Get all products that had transactions in the selected period
-    cursor.execute(
-        """
-        SELECT DISTINCT pf.product_id
-        FROM products_flow pf
-        JOIN bills b ON pf.bill_id = b.id
-        WHERE pf.store_id = %s AND b.time > %s AND b.time <= %s
-        AND b.id > 0 AND b.type IN ('sell', 'buy')
-    """,
-        (store_id, start_date, end_date),
-    )
-
-    product_ids = [row["product_id"] for row in cursor.fetchall()]
-
-    total_profit = 0.0
-    daily_profit = {}
-
-    for product_id in product_ids:
-        product_profit = _calculate_product_profit_weighted_average(
-            product_id, store_id, start_date_obj, end_date_obj, cursor
-        )
-        total_profit += product_profit["total"]
-
-        # Aggregate daily profits
-        for date_str, profit in product_profit["daily"].items():
-            if date_str not in daily_profit:
-                daily_profit[date_str] = 0.0
-            daily_profit[date_str] += profit
-
-    # Convert daily profit dict to sorted list
-    daily_profit_data = [
-        [date_str, profit] for date_str, profit in sorted(daily_profit.items())
-    ]
-
-    return total_profit, daily_profit_data
 
 
 def _calculate_product_profit_weighted_average(

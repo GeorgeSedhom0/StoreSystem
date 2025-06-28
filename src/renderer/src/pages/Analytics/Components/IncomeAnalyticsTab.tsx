@@ -73,8 +73,8 @@ const IncomeAnalyticsTab = () => {
     queryKey: ["analytics", "income", startDate, endDate, storeId, method],
     queryFn: () =>
       getIncomeAnalytics(
-        startDate.toISOString(),
-        endDate.toISOString(),
+        startDate.startOf("day").toISOString(),
+        endDate.endOf("day").toISOString(),
         storeId,
         method,
       ),
@@ -246,7 +246,6 @@ const IncomeAnalyticsTab = () => {
               >
                 <MenuItem value="simple">السعر الثابت (البسيط)</MenuItem>
                 <MenuItem value="fifo">FIFO (الوارد أولاً يصرف أولاً)</MenuItem>
-                <MenuItem value="weighted_average">المتوسط المرجح</MenuItem>
               </Select>
             </FormControl>
           </Box>
