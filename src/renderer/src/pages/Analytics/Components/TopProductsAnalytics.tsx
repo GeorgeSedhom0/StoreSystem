@@ -54,8 +54,8 @@ const TopProductsAnalytics = () => {
     queryKey: ["analytics", "top-products", startDate, endDate, storeId],
     queryFn: () =>
       getAnalytics(
-        startDate.startOf("day").toISOString(),
-        endDate.endOf("day").toISOString(),
+        startDate.startOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
+        endDate.endOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
         storeId,
       ),
     initialData: {} as ProductsAnalyticsType,

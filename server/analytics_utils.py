@@ -315,7 +315,7 @@ def get_historical_shifts_data(
                 (SELECT COALESCE(SUM(total), 0) FROM bills
                  LEFT JOIN assosiated_parties ap ON bills.party_id = ap.id
                  WHERE time >= start_date_time AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
-                 AND type IN %s AND store_id = %s
+                 AND bills.type IN %s AND store_id = %s
                  AND NOT (bills.party_id IS NOT NULL AND bills.type = 'sell' AND ap.type = 'store')) AS total
             FROM shifts
             WHERE start_date_time >= %s AND start_date_time <= %s

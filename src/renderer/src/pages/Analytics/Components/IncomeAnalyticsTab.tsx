@@ -73,8 +73,8 @@ const IncomeAnalyticsTab = () => {
     queryKey: ["analytics", "income", startDate, endDate, storeId, method],
     queryFn: () =>
       getIncomeAnalytics(
-        startDate.startOf("day").toISOString(),
-        endDate.endOf("day").toISOString(),
+        startDate.startOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
+        endDate.endOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
         storeId,
         method,
       ),

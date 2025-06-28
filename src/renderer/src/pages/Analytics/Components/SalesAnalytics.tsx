@@ -58,8 +58,8 @@ const SalesAnalytics = () => {
     queryKey: ["analytics", "sales", startDate, endDate, types, storeId],
     queryFn: () =>
       getAnalytics(
-        startDate.startOf("day").toISOString(),
-        endDate.endOf("day").toISOString(),
+        startDate.startOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
+        endDate.endOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
         types,
         storeId,
       ),
