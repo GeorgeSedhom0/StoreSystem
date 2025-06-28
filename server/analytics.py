@@ -60,8 +60,10 @@ def alerts(store_id: int, current_user: dict = Depends(get_current_user)):
                     SELECT DISTINCT pf.product_id
                     FROM products_flow pf
                     JOIN bills b ON pf.bill_id = b.id
+                    LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
                     WHERE b.store_id = %s AND b.type = 'sell' AND pf.amount < 0
                     AND b.time >= NOW() - INTERVAL '90 days'
+                    AND NOT (b.party_id IS NOT NULL AND b.type = 'sell' AND ap.type = 'store')
                 ),
                 product_sales_stats AS (
                     SELECT pf.product_id,
@@ -70,8 +72,10 @@ def alerts(store_id: int, current_user: dict = Depends(get_current_user)):
                            AVG(pf.amount) * -1 as avg_per_transaction
                     FROM products_flow pf
                     JOIN bills b ON pf.bill_id = b.id
+                    LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
                     WHERE b.store_id = %s AND b.type = 'sell' AND pf.amount < 0
                     AND b.time >= NOW() - INTERVAL '60 days'
+                    AND NOT (b.party_id IS NOT NULL AND b.type = 'sell' AND ap.type = 'store')
                     GROUP BY pf.product_id
                 )
                 SELECT p.id, p.name, p.category, pi.stock,
@@ -222,7 +226,7 @@ def sales(
         ]
 
         if is_future_prediction:
-            prediction_days = (end_date_obj.date() - today.date()).days + 1
+            prediction_days = (end_date_obj.date() - today.date()).days
             predictions = predict_total_sales(store_id, types, prediction_days)
             result_data.extend(
                 [
@@ -329,12 +333,21 @@ def _get_products_data(
 ) -> Dict[str, List]:
     with Database(HOST, DATABASE, USER, PASS) as cursor:
         query = """
-            SELECT p.name, DATE_TRUNC('day', b.time) AS day, SUM(pf.amount) * -1 AS total
+            SELECT
+                p.name,
+                DATE_TRUNC('day', b.time) AS day,
+                SUM(pf.amount) * -1 AS total
             FROM products_flow pf
             JOIN products p ON pf.product_id = p.id
             JOIN bills b ON pf.bill_id = b.id
-            WHERE {product_filter} b.store_id = %s AND pf.amount < 0 AND b.type = 'sell'
-            AND b.time > %s AND b.time <= %s
+            LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+            WHERE {product_filter}
+                b.store_id = %s
+                AND pf.amount < 0
+                AND b.type = 'sell'
+                AND b.time >= %s
+                AND b.time <= %s
+                AND NOT (b.party_id IS NOT NULL AND b.type = 'sell' AND ap.type = 'store')
             GROUP BY p.name, day ORDER BY day
         """
 
@@ -344,21 +357,32 @@ def _get_products_data(
                 (
                     tuple(product_ids),
                     store_id,
-                    start_date_obj.date(),
-                    historical_end_date.date(),
+                    start_date_obj,
+                    historical_end_date,
                 ),
             )
         else:
             cursor.execute(
                 """
-                SELECT p.id, p.name, SUM(pf.amount) * -1 as total_sold
+                SELECT
+                    p.id,
+                    p.name,
+                    SUM(pf.amount) * -1 as total_sold
                 FROM products_flow pf
                 JOIN products p ON pf.product_id = p.id
                 JOIN bills b ON pf.bill_id = b.id
-                WHERE b.time > %s AND b.time <= %s AND pf.store_id = %s AND b.type = 'sell'
-                GROUP BY p.id, p.name ORDER BY total_sold DESC LIMIT 5
+                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+                WHERE
+                    b.time >= %s
+                    AND b.time <= %s
+                    AND pf.store_id = %s
+                    AND b.type = 'sell'
+                    AND NOT (b.party_id IS NOT NULL AND b.type = 'sell' AND ap.type = 'store')
+                GROUP BY p.id, p.name
+                ORDER BY total_sold DESC
+                LIMIT 5
                 """,
-                (start_date_obj.date(), historical_end_date.date(), store_id),
+                (start_date_obj, historical_end_date, store_id),
             )
             top_products = cursor.fetchall()
             product_ids = [p["id"] for p in top_products]
@@ -368,8 +392,8 @@ def _get_products_data(
                 (
                     tuple(product_ids),
                     store_id,
-                    start_date_obj.date(),
-                    historical_end_date.date(),
+                    start_date_obj,
+                    historical_end_date,
                 ),
             )
 
@@ -415,19 +439,6 @@ def top_products(
                 products_data, product_ids, store_id, end_date_obj, today
             )
 
-        all_dates = pd.date_range(
-            start=start_date_obj.strftime("%Y-%m-%d"),
-            end=end_date_obj.strftime("%Y-%m-%d"),
-        )
-        for pname, arr in products_data.items():
-            date_map = {d[0]: d for d in arr}
-            products_data[pname] = [
-                date_map.get(
-                    dt.strftime("%Y-%m-%d"), [dt.strftime("%Y-%m-%d"), 0, False]
-                )
-                for dt in all_dates
-            ]
-
         return products_data
 
     except Exception as e:
@@ -467,19 +478,6 @@ def products(
             products_data = process_products_data_with_predictions(
                 products_data, products_ids, store_id, end_date_obj, today
             )
-
-        all_dates = pd.date_range(
-            start=start_date_obj.strftime("%Y-%m-%d"),
-            end=end_date_obj.strftime("%Y-%m-%d"),
-        )
-        for pname, arr in products_data.items():
-            date_map = {d[0]: d for d in arr}
-            products_data[pname] = [
-                date_map.get(
-                    dt.strftime("%Y-%m-%d"), [dt.strftime("%Y-%m-%d"), 0, False]
-                )
-                for dt in all_dates
-            ]
 
         return products_data
 
@@ -565,7 +563,7 @@ def shifts_analytics(
         if is_future_prediction:
             from analytics_utils import process_shifts_data_with_predictions
 
-            prediction_days = (end_date_obj.date() - today.date()).days + 1
+            prediction_days = (end_date_obj.date() - today.date()).days
             predictions = process_shifts_data_with_predictions(
                 store_id, bills_type, prediction_days
             )

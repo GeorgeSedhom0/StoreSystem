@@ -66,8 +66,8 @@ const ProductsAnalytics = () => {
     queryKey: ["analytics", selectedProducts, startDate, endDate, storeId],
     queryFn: () =>
       getAnalytics(
-        startDate.toISOString(),
-        endDate.toISOString(),
+        startDate.startOf("day").toISOString(),
+        endDate.endOf("day").toISOString(),
         selectedProducts,
         storeId,
       ),

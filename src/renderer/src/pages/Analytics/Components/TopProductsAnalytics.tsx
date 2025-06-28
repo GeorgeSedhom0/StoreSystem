@@ -53,7 +53,11 @@ const TopProductsAnalytics = () => {
   const { data, isFetching } = useQuery({
     queryKey: ["analytics", "top-products", startDate, endDate, storeId],
     queryFn: () =>
-      getAnalytics(startDate.toISOString(), endDate.toISOString(), storeId),
+      getAnalytics(
+        startDate.startOf("day").toISOString(),
+        endDate.endOf("day").toISOString(),
+        storeId,
+      ),
     initialData: {} as ProductsAnalyticsType,
   });
 

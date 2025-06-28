@@ -117,8 +117,10 @@ def get_historical_sales_data(
                     COALESCE(SUM(pf.amount) * -1, 0) AS total
                 FROM products_flow pf
                 JOIN bills ON pf.bill_id = bills.id
+                LEFT JOIN assosiated_parties ap ON bills.party_id = ap.id
                 WHERE pf.product_id = %s AND bills.store_id = %s AND bills.type = 'sell'
                 AND pf.amount < 0 AND bills.time >= %s AND bills.time <= %s
+                AND NOT (bills.party_id IS NOT NULL AND bills.type = 'sell' AND ap.type = 'store')
                 GROUP BY DATE_TRUNC('day', bills.time)::date
             )
             SELECT ds.day, COALESCE(sd.total, 0) AS total
@@ -183,8 +185,10 @@ def predict_total_sales(
                         DATE_TRUNC('day', bills.time)::date AS day,
                         COALESCE(SUM(bills.total), 0) AS total
                     FROM bills
+                    LEFT JOIN assosiated_parties ap ON bills.party_id = ap.id
                     WHERE bills.store_id = %s AND bills.type IN %s
                     AND bills.time >= %s AND bills.time <= %s
+                    AND NOT (bills.party_id IS NOT NULL AND bills.type = 'sell' AND ap.type = 'store')
                     GROUP BY DATE_TRUNC('day', bills.time)::date
                 )
                 SELECT ds.day, COALESCE(sd.total, 0) AS total
@@ -309,8 +313,10 @@ def get_historical_shifts_data(
             """
             SELECT start_date_time, end_date_time,
                 (SELECT COALESCE(SUM(total), 0) FROM bills
+                 LEFT JOIN assosiated_parties ap ON bills.party_id = ap.id
                  WHERE time >= start_date_time AND time <= COALESCE(end_date_time, CURRENT_TIMESTAMP)
-                 AND type IN %s AND store_id = %s) AS total
+                 AND type IN %s AND store_id = %s
+                 AND NOT (bills.party_id IS NOT NULL AND bills.type = 'sell' AND ap.type = 'store')) AS total
             FROM shifts
             WHERE start_date_time >= %s AND start_date_time <= %s
             AND store_id = %s AND current = FALSE
