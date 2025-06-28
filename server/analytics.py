@@ -1,7 +1,6 @@
 from fastapi import HTTPException, APIRouter, Depends
 from fastapi.responses import JSONResponse
 import psycopg2
-from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 import logging
 from dotenv import load_dotenv
@@ -246,6 +245,7 @@ def income_analytics(
     store_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    method: Optional[str] = "simple",  # "simple", "fifo" or "weighted_average"
     current_user: dict = Depends(get_current_user),
 ):
     """Get income analytics including cash flow and profit data"""
@@ -269,20 +269,19 @@ def income_analytics(
             )
             cash_summary = cursor.fetchone()
 
-            # Calculate profit
-            cursor.execute(
-                """
-                SELECT 
-                    COALESCE(SUM((pf.price - p.wholesale_price) * (-pf.amount)), 0) as profit
-                FROM products_flow pf
-                JOIN products p ON pf.product_id = p.id
-                JOIN bills b ON pf.bill_id = b.id
-                WHERE pf.store_id = %s AND b.time > %s AND b.time <= %s
-                AND pf.amount < 0 AND b.type = 'sell'
-                """,
-                (store_id, start_date, end_date),
-            )
-            profit_data = cursor.fetchone()
+            # Calculate profit using selected method
+            if method == "weighted_average":
+                total_profit, daily_profit_data = _calculate_profit_weighted_average(
+                    store_id, start_date, end_date, cursor
+                )
+            elif method == "fifo":
+                total_profit, daily_profit_data = _calculate_profit_fifo(
+                    store_id, start_date, end_date, cursor
+                )
+            else:  # default to simple
+                total_profit, daily_profit_data = _calculate_profit_simple(
+                    store_id, start_date, end_date, cursor
+                )
 
             # Get daily cash flow
             cursor.execute(
@@ -299,23 +298,6 @@ def income_analytics(
             )
             daily_cashflow = cursor.fetchall()
 
-            # Get daily profit
-            cursor.execute(
-                """
-                SELECT 
-                    DATE_TRUNC('day', b.time) AS day,
-                       SUM((pf.price - p.wholesale_price) * (-pf.amount)) as profit
-                FROM products_flow pf
-                JOIN products p ON pf.product_id = p.id
-                JOIN bills b ON pf.bill_id = b.id
-                WHERE pf.store_id = %s AND b.time > %s AND b.time <= %s
-                AND pf.amount < 0 AND b.type = 'sell'
-                GROUP BY day ORDER BY day
-                """,
-                (store_id, start_date, end_date),
-            )
-            daily_profit = cursor.fetchall()
-
             cashflow_data = [
                 [
                     row["day"].strftime("%Y-%m-%d"),
@@ -326,19 +308,14 @@ def income_analytics(
                 for row in daily_cashflow
             ]
 
-            profit_data_list = [
-                [row["day"].strftime("%Y-%m-%d"), float(row["profit"] or 0)]
-                for row in daily_profit
-            ]
-
             return {
                 "cash_in": float(cash_summary["cash_in"] or 0),
                 "cash_out": float(cash_summary["cash_out"] or 0),
                 "net_cash": float(cash_summary["cash_in"] or 0)
                 - float(cash_summary["cash_out"] or 0),
-                "profit": float(profit_data["profit"] or 0),
+                "profit": float(total_profit),
                 "daily_cashflow": cashflow_data,
-                "daily_profit": profit_data_list,
+                "daily_profit": daily_profit_data,
             }
 
     except Exception as e:
@@ -585,3 +562,398 @@ def shifts_analytics(
     except Exception as e:
         logging.error(f"Error in shifts analytics: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def _calculate_profit_fifo(
+    store_id: int, start_date: str, end_date: str, cursor
+) -> tuple:
+    """
+    Calculate profit using FIFO method.
+    Returns (total_profit, daily_profit_data)
+    """
+    start_date_obj = parse_date(start_date)
+    end_date_obj = parse_date(end_date)
+
+    # Get all products that had transactions in the selected period
+    cursor.execute(
+        """
+        SELECT DISTINCT pf.product_id
+        FROM products_flow pf
+        JOIN bills b ON pf.bill_id = b.id
+        WHERE pf.store_id = %s AND b.time > %s AND b.time <= %s
+        AND b.id > 0 AND b.type IN ('sell', 'buy')
+    """,
+        (store_id, start_date, end_date),
+    )
+
+    product_ids = [row["product_id"] for row in cursor.fetchall()]
+
+    total_profit = 0.0
+    daily_profit = {}
+
+    for product_id in product_ids:
+        product_profit = _calculate_product_profit_fifo(
+            product_id, store_id, start_date_obj, end_date_obj, cursor
+        )
+        total_profit += product_profit["total"]
+
+        # Aggregate daily profits
+        for date_str, profit in product_profit["daily"].items():
+            if date_str not in daily_profit:
+                daily_profit[date_str] = 0.0
+            daily_profit[date_str] += profit
+
+    # Convert daily profit dict to sorted list
+    daily_profit_data = [
+        [date_str, profit] for date_str, profit in sorted(daily_profit.items())
+    ]
+
+    return total_profit, daily_profit_data
+
+
+def _calculate_product_profit_fifo(
+    product_id: int, store_id: int, start_date: datetime, end_date: datetime, cursor
+) -> dict:
+    """
+    Calculate profit for a single product using FIFO method.
+    """
+    # Find the earliest point where total was <= 0 before our period
+    cursor.execute(
+        """
+        SELECT pf.time, pf.total
+        FROM products_flow pf
+        JOIN bills b ON pf.bill_id = b.id
+        WHERE pf.product_id = %s AND pf.store_id = %s 
+        AND b.time < %s AND b.id > 0
+        AND pf.total <= 0
+        ORDER BY pf.time DESC
+        LIMIT 1
+    """,
+        (product_id, store_id, start_date),
+    )
+
+    starting_point = cursor.fetchone()
+    if starting_point:
+        fifo_start_time = starting_point["time"]
+    else:
+        # If no zero point found, start from the very beginning
+        cursor.execute(
+            """
+            SELECT MIN(pf.time) as min_time
+            FROM products_flow pf
+            JOIN bills b ON pf.bill_id = b.id
+            WHERE pf.product_id = %s AND pf.store_id = %s AND b.id > 0
+        """,
+            (product_id, store_id),
+        )
+        result = cursor.fetchone()
+        fifo_start_time = (
+            result["min_time"] if result and result["min_time"] else start_date
+        )
+
+    # Get all transactions from the FIFO start point to the end of our period
+    cursor.execute(
+        """
+        SELECT pf.time, pf.amount, pf.wholesale_price, pf.price, pf.total,
+               b.type, b.party_id, ap.type as party_type
+        FROM products_flow pf
+        JOIN bills b ON pf.bill_id = b.id
+        LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+        WHERE pf.product_id = %s AND pf.store_id = %s 
+        AND pf.time >= %s AND pf.time <= %s
+        AND b.id > 0 AND b.type IN ('sell', 'buy')
+        ORDER BY pf.time
+    """,
+        (product_id, store_id, fifo_start_time, end_date),
+    )
+
+    transactions = cursor.fetchall()
+
+    # FIFO inventory queue: [(cost, quantity), ...]
+    inventory_queue = []
+    total_profit = 0.0
+    daily_profit = {}
+
+    for transaction in transactions:
+        date_str = transaction["time"].strftime("%Y-%m-%d")
+        amount = float(transaction["amount"])
+        wholesale_price = float(transaction["wholesale_price"] or 0)
+        sell_price = float(transaction["price"] or 0)
+        bill_type = transaction["type"]
+        party_type = transaction["party_type"]
+        transaction_time = transaction["time"]
+
+        # Only process transactions within our target date range for profit calculation
+        is_in_target_period = start_date <= transaction_time <= end_date
+
+        if bill_type == "buy" and amount > 0:
+            # Add inventory (buy transaction)
+            inventory_queue.append((wholesale_price, amount))
+
+        elif bill_type == "sell" and amount < 0:
+            # Sell transaction - calculate profit using FIFO
+            sell_quantity = abs(amount)
+
+            # Skip profit calculation for sales to store parties
+            if party_type == "store":
+                # Still remove from inventory but don't count profit
+                _remove_from_fifo_queue(inventory_queue, sell_quantity)
+                continue
+
+            if is_in_target_period:
+                # Calculate profit for this sale
+                sale_profit = 0.0
+                remaining_to_sell = sell_quantity
+
+                while remaining_to_sell > 0 and inventory_queue:
+                    cost, available_qty = inventory_queue[0]
+
+                    if available_qty <= remaining_to_sell:
+                        # Use entire batch
+                        profit_for_batch = available_qty * (sell_price - cost)
+                        sale_profit += profit_for_batch
+                        remaining_to_sell -= available_qty
+                        inventory_queue.pop(0)
+                    else:
+                        # Use partial batch
+                        profit_for_batch = remaining_to_sell * (sell_price - cost)
+                        sale_profit += profit_for_batch
+                        inventory_queue[0] = (cost, available_qty - remaining_to_sell)
+                        remaining_to_sell = 0
+
+                total_profit += sale_profit
+                if date_str not in daily_profit:
+                    daily_profit[date_str] = 0.0
+                daily_profit[date_str] += sale_profit
+            else:
+                # Remove from inventory but don't count profit (outside target period)
+                _remove_from_fifo_queue(inventory_queue, sell_quantity)
+
+    return {"total": total_profit, "daily": daily_profit}
+
+
+def _remove_from_fifo_queue(inventory_queue: list, quantity_to_remove: float):
+    """Remove quantity from FIFO inventory queue without calculating profit"""
+    remaining_to_remove = quantity_to_remove
+
+    while remaining_to_remove > 0 and inventory_queue:
+        cost, available_qty = inventory_queue[0]
+
+        if available_qty <= remaining_to_remove:
+            remaining_to_remove -= available_qty
+            inventory_queue.pop(0)
+        else:
+            inventory_queue[0] = (cost, available_qty - remaining_to_remove)
+            remaining_to_remove = 0
+
+
+def _calculate_profit_weighted_average(
+    store_id: int, start_date: str, end_date: str, cursor
+) -> tuple:
+    """
+    Calculate profit using weighted average method.
+    Returns (total_profit, daily_profit_data)
+    """
+    start_date_obj = parse_date(start_date)
+    end_date_obj = parse_date(end_date)
+
+    # Get all products that had transactions in the selected period
+    cursor.execute(
+        """
+        SELECT DISTINCT pf.product_id
+        FROM products_flow pf
+        JOIN bills b ON pf.bill_id = b.id
+        WHERE pf.store_id = %s AND b.time > %s AND b.time <= %s
+        AND b.id > 0 AND b.type IN ('sell', 'buy')
+    """,
+        (store_id, start_date, end_date),
+    )
+
+    product_ids = [row["product_id"] for row in cursor.fetchall()]
+
+    total_profit = 0.0
+    daily_profit = {}
+
+    for product_id in product_ids:
+        product_profit = _calculate_product_profit_weighted_average(
+            product_id, store_id, start_date_obj, end_date_obj, cursor
+        )
+        total_profit += product_profit["total"]
+
+        # Aggregate daily profits
+        for date_str, profit in product_profit["daily"].items():
+            if date_str not in daily_profit:
+                daily_profit[date_str] = 0.0
+            daily_profit[date_str] += profit
+
+    # Convert daily profit dict to sorted list
+    daily_profit_data = [
+        [date_str, profit] for date_str, profit in sorted(daily_profit.items())
+    ]
+
+    return total_profit, daily_profit_data
+
+
+def _calculate_product_profit_weighted_average(
+    product_id: int, store_id: int, start_date: datetime, end_date: datetime, cursor
+) -> dict:
+    """
+    Calculate profit for a single product using weighted average method.
+    """
+    # Find the earliest point where total was <= 0 before our period
+    cursor.execute(
+        """
+        SELECT pf.time, pf.total
+        FROM products_flow pf
+        JOIN bills b ON pf.bill_id = b.id
+        WHERE pf.product_id = %s AND pf.store_id = %s 
+        AND b.time < %s AND b.id > 0
+        AND pf.total <= 0
+        ORDER BY pf.time DESC
+        LIMIT 1
+    """,
+        (product_id, store_id, start_date),
+    )
+
+    starting_point = cursor.fetchone()
+    if starting_point:
+        wa_start_time = starting_point["time"]
+    else:
+        # If no zero point found, start from the very beginning
+        cursor.execute(
+            """
+            SELECT MIN(pf.time) as min_time
+            FROM products_flow pf
+            JOIN bills b ON pf.bill_id = b.id
+            WHERE pf.product_id = %s AND pf.store_id = %s AND b.id > 0
+        """,
+            (product_id, store_id),
+        )
+        result = cursor.fetchone()
+        wa_start_time = (
+            result["min_time"] if result and result["min_time"] else start_date
+        )
+
+    # Get all transactions from the start point to the end of our period
+    cursor.execute(
+        """
+        SELECT pf.time, pf.amount, pf.wholesale_price, pf.price, pf.total,
+               b.type, b.party_id, ap.type as party_type
+        FROM products_flow pf
+        JOIN bills b ON pf.bill_id = b.id
+        LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+        WHERE pf.product_id = %s AND pf.store_id = %s 
+        AND pf.time >= %s AND pf.time <= %s
+        AND b.id > 0 AND b.type IN ('sell', 'buy')
+        ORDER BY pf.time
+    """,
+        (product_id, store_id, wa_start_time, end_date),
+    )
+
+    transactions = cursor.fetchall()
+
+    # Weighted average tracking
+    total_cost = 0.0
+    total_quantity = 0.0
+    weighted_avg_cost = 0.0
+
+    total_profit = 0.0
+    daily_profit = {}
+
+    for transaction in transactions:
+        date_str = transaction["time"].strftime("%Y-%m-%d")
+        amount = float(transaction["amount"])
+        wholesale_price = float(transaction["wholesale_price"] or 0)
+        sell_price = float(transaction["price"] or 0)
+        bill_type = transaction["type"]
+        party_type = transaction["party_type"]
+        transaction_time = transaction["time"]
+
+        # Only process transactions within our target date range for profit calculation
+        is_in_target_period = start_date <= transaction_time <= end_date
+
+        if bill_type == "buy" and amount > 0:
+            # Update weighted average cost
+            new_cost = amount * wholesale_price
+            total_cost += new_cost
+            total_quantity += amount
+
+            if total_quantity > 0:
+                weighted_avg_cost = total_cost / total_quantity
+
+        elif bill_type == "sell" and amount < 0:
+            # Sell transaction - calculate profit using weighted average
+            sell_quantity = abs(amount)
+
+            # Skip profit calculation for sales to store parties
+            if party_type == "store":
+                # Still update quantity tracking but don't count profit
+                total_quantity -= sell_quantity
+                if total_quantity > 0:
+                    total_cost = total_quantity * weighted_avg_cost
+                else:
+                    total_cost = 0.0
+                    weighted_avg_cost = 0.0
+                continue
+
+            if is_in_target_period and weighted_avg_cost > 0:
+                # Calculate profit for this sale
+                sale_profit = sell_quantity * (sell_price - weighted_avg_cost)
+
+                total_profit += sale_profit
+                if date_str not in daily_profit:
+                    daily_profit[date_str] = 0.0
+                daily_profit[date_str] += sale_profit
+
+            # Update quantity tracking
+            total_quantity -= sell_quantity
+            if total_quantity > 0:
+                total_cost = total_quantity * weighted_avg_cost
+            else:
+                total_cost = 0.0
+                weighted_avg_cost = 0.0
+
+    return {"total": total_profit, "daily": daily_profit}
+
+
+def _calculate_profit_simple(
+    store_id: int, start_date: str, end_date: str, cursor
+) -> tuple:
+    """
+    Calculate profit using simple method (current wholesale vs sell prices).
+    Returns (total_profit, daily_profit_data)
+    """
+    try:
+        # Get daily profit using the original simple method
+        cursor.execute(
+            """
+            SELECT 
+                DATE_TRUNC('day', b.time) AS day,
+                SUM((pf.price - p.wholesale_price) * (-pf.amount)) as profit
+            FROM products_flow pf
+            JOIN products p ON pf.product_id = p.id
+            JOIN bills b ON pf.bill_id = b.id
+            LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+            WHERE pf.store_id = %s AND b.time > %s AND b.time <= %s
+            AND pf.amount < 0 AND b.type = 'sell' AND b.id > 0
+            AND (ap.type IS NULL OR ap.type != 'store')
+            GROUP BY day ORDER BY day
+            """,
+            (store_id, start_date, end_date),
+        )
+        daily_profit_raw = cursor.fetchall()
+
+        # Calculate total profit
+        total_profit = sum(float(row["profit"] or 0) for row in daily_profit_raw)
+
+        # Convert to the expected format
+        daily_profit_data = [
+            [row["day"].strftime("%Y-%m-%d"), float(row["profit"] or 0)]
+            for row in daily_profit_raw
+        ]
+
+        return total_profit, daily_profit_data
+
+    except Exception as e:
+        logging.error(f"Error in simple profit calculation: {e}")
+        return 0.0, []

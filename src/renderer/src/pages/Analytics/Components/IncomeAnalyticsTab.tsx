@@ -1,4 +1,14 @@
-import { Grid2, Paper, Typography, Box, Card } from "@mui/material";
+import {
+  Grid2,
+  Paper,
+  Typography,
+  Box,
+  Card,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
@@ -29,12 +39,14 @@ const getIncomeAnalytics = async (
   startDate: string,
   endDate: string,
   storeId: number,
+  method: string = "fifo",
 ) => {
   const { data } = await axios.get<CashFlowData>("/analytics/income", {
     params: {
       start_date: startDate,
       end_date: endDate,
       store_id: storeId,
+      method: method,
     },
   });
   return data;
@@ -50,6 +62,7 @@ const formatCurrency = (value: number): string => {
 const IncomeAnalyticsTab = () => {
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("month"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
+  const [method, setMethod] = useState<string>("simple");
   const { storeId } = useContext(StoreContext);
 
   const {
@@ -57,12 +70,13 @@ const IncomeAnalyticsTab = () => {
   } = useTheme();
 
   const { data, isFetching } = useQuery({
-    queryKey: ["analytics", "income", startDate, endDate, storeId],
+    queryKey: ["analytics", "income", startDate, endDate, storeId, method],
     queryFn: () =>
       getIncomeAnalytics(
         startDate.toISOString(),
         endDate.toISOString(),
         storeId,
+        method,
       ),
     initialData: {
       cash_in: 0,
@@ -222,6 +236,19 @@ const IncomeAnalyticsTab = () => {
                 disabled={isFetching}
               />
             </LocalizationProvider>
+
+            <FormControl fullWidth disabled={isFetching}>
+              <InputLabel>طريقة حساب الأرباح</InputLabel>
+              <Select
+                value={method}
+                label="طريقة حساب الأرباح"
+                onChange={(e) => setMethod(e.target.value)}
+              >
+                <MenuItem value="simple">السعر الثابت (البسيط)</MenuItem>
+                <MenuItem value="fifo">FIFO (الوارد أولاً يصرف أولاً)</MenuItem>
+                <MenuItem value="weighted_average">المتوسط المرجح</MenuItem>
+              </Select>
+            </FormControl>
           </Box>
         </Paper>
       </Grid2>
