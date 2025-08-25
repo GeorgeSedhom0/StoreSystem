@@ -5,9 +5,10 @@ WORKDIR /app
 # Update and install basic dependencies 
 RUN apt-get update && apt-get install -y wget gnupg2 lsb-release curl
 
-# Add PostgreSQL repository properly
-RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-RUN wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+## Add PostgreSQL repository (modern method – apt-key deprecated/removed)
+RUN mkdir -p /usr/share/keyrings && \
+    wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
 
 # Clean apt cache and update
 RUN apt-get clean && apt-get update
