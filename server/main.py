@@ -491,9 +491,9 @@ def update_product(
                                 """
                                 INSERT INTO products_flow (
                                     store_id, bill_id, product_id,
-                                    amount, wholesale_price, price
+                                    amount, wholesale_price, price, time
                                 )
-                                VALUES (%s, %s, %s, %s, %s, %s)
+                                VALUES (%s, %s, %s, %s, %s, %s, NOW())
                                 """,
                                 (
                                     store_id,
@@ -686,6 +686,10 @@ def update_bill(
     # manipulate the bill to be able to update it
     # 1. set the total to a negative value in case of return or buy bills
     bill.total = -bill.total if bill.type in ["buy", "return"] else bill.total
+    # Special case, no products in bill
+    if not bill.products:
+        bill.total = 0
+        bill.discount = 0
     # 2. set the amount in the products to a negative value in case of return or buy bills
     products = bill.products
     for product in products:
