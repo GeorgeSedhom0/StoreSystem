@@ -23,6 +23,7 @@ from installment import router as installment_router
 from analytics import router as analytics_router
 from employee import router as employee_router
 from whatsapp import router as whatsapp_router
+from detailed_analytics import router as detailed_analytics_router
 from auth_middleware import get_current_user, get_store_info
 from whatsapp_utils import (
     send_whatsapp_notification_background,
@@ -51,6 +52,7 @@ app.include_router(installment_router)
 app.include_router(analytics_router)
 app.include_router(employee_router)
 app.include_router(whatsapp_router)
+app.include_router(detailed_analytics_router)
 
 origins = [
     "http://localhost",

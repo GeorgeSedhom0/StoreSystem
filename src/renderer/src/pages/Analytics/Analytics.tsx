@@ -5,6 +5,7 @@ import autoAnimate from "@formkit/auto-animate";
 import GeneralAnalyticsTab from "./Components/GeneralAnalyticsTab";
 import ProductsAnalyticsTab from "./Components/ProductsAnalyticsTab";
 import IncomeAnalyticsTab from "./Components/IncomeAnalyticsTab";
+import DetailedAnalyticsTab from "./Components/DetailedAnalyticsTab";
 import {
   Analytics as AnalyticsIcon,
   Dashboard as DashboardIcon,
@@ -119,6 +120,12 @@ const Analytics = () => {
             label="التقرير المالى"
             value="3"
           />
+          <Tab
+            icon={<AnalyticsIcon />}
+            iconPosition="start"
+            label="تفصيلى"
+            value="4"
+          />
         </TabList>
 
         <Divider sx={{ opacity: 0.3 }} />
@@ -132,6 +139,9 @@ const Analytics = () => {
           </TabPanel>
           <TabPanel value="3" sx={{ p: 0 }}>
             <IncomeAnalyticsTab />
+          </TabPanel>
+          <TabPanel value="4" sx={{ p: 0 }}>
+            <DetailedAnalyticsTab />
           </TabPanel>
         </Box>
       </TabContext>
