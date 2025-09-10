@@ -9,7 +9,7 @@
     "test": "node test_service.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.33.1",
+    "whatsapp-web.js": "^1.34.0",
     "qrcode": "^1.5.4",
     "express": "^4.18.2"
   },

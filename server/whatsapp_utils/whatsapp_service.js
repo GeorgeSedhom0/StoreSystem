@@ -247,12 +247,19 @@ class WhatsAppService {
       if (this.client.info && this.client.info.wid) {
         this.phoneNumber = this.client.info.wid.user;
         console.log(`Connected as: ${this.phoneNumber}`);
+      } else {
+        // In some cases, wid is available shortly after ready
+        this.trySetPhoneNumber();
       }
     });
 
     this.client.on("authenticated", () => {
       console.log("WhatsApp client authenticated!");
+      // Mark as connected on authentication to avoid stuck status if 'ready' delays
+      this.isConnected = true;
       this.currentQR = null;
+      // Try to populate phone number if available (multi-device safe)
+      this.trySetPhoneNumber();
     });
 
     this.client.on("auth_failure", (msg) => {
@@ -282,6 +289,33 @@ class WhatsAppService {
       console.error("WhatsApp client error:", error);
       // Don't restart on every error, just log it
     });
+
+    // Track state changes to ensure isConnected reflects reality across versions
+    this.client.on("change_state", (state) => {
+      console.log("WhatsApp client state:", state);
+      if (state === "CONNECTED") {
+        this.isConnected = true;
+        // Attempt to set phone number if still missing
+        if (!this.phoneNumber) this.trySetPhoneNumber();
+      }
+    });
+  }
+
+  async trySetPhoneNumber(retries = 5, waitMs = 1000) {
+    try {
+      for (let i = 0; i < retries; i++) {
+        const num = this.client?.info?.wid?.user;
+        if (num) {
+          this.phoneNumber = num;
+          console.log(`Connected as: ${this.phoneNumber}`);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
+      console.warn("Phone number not available yet (wid.user missing)");
+    } catch (e) {
+      console.warn("Error while retrieving phone number:", e?.message || e);
+    }
   }
 
   generateQRCode(qr) {
@@ -296,27 +330,46 @@ class WhatsAppService {
         this.currentQR = url;
       }
     });
-  }  async sendMessage(phoneNumber, message) {
+  }
+
+  async sendMessage(phoneNumber, message) {
     try {
       if (!this.isConnected) {
         throw new Error("WhatsApp not connected");
-      }      // Format phone number properly
-      let formattedNumber = phoneNumber.replace(/[^\d]/g, ""); // Remove all non-digits including +
-      
-      console.log(`Processing phone number: ${phoneNumber} -> ${formattedNumber} (length: ${formattedNumber.length})`);
-      
+      }
+
+      // Format phone number properly
+      let formattedNumber = String(phoneNumber || "").replace(/[^\d+]/g, "");
+      // Remove leading + for resolution step
+      if (formattedNumber.startsWith("+")) {
+        formattedNumber = formattedNumber.slice(1);
+      }
+
+      console.log(
+        `Processing phone number: ${phoneNumber} -> ${formattedNumber} (length: ${formattedNumber.length})`,
+      );
+
       // Handle Egyptian numbers specifically
       if (formattedNumber.startsWith("201") && formattedNumber.length === 12) {
         // Already in correct format: 201XXXXXXXXX (12 digits total)
         // Keep as is
-      } else if (formattedNumber.startsWith("20") && formattedNumber.length === 11) {
+      } else if (
+        formattedNumber.startsWith("20") &&
+        formattedNumber.length === 11
+      ) {
         // Format: 20XXXXXXXXX - this shouldn't happen for valid Egyptian numbers
         // But handle it anyway
         formattedNumber = "201" + formattedNumber.substring(2);
-      } else if (formattedNumber.startsWith("01") && formattedNumber.length === 11) {
+      } else if (
+        formattedNumber.startsWith("01") &&
+        formattedNumber.length === 11
+      ) {
         // Format: 01XXXXXXXXX - replace with 201
         formattedNumber = "201" + formattedNumber.substring(2);
-      } else if (formattedNumber.startsWith("1") && formattedNumber.length === 10) {
+      } else if (
+        formattedNumber.startsWith("1") &&
+        formattedNumber.length === 10
+      ) {
         // Format: 1XXXXXXXXX - add 20
         formattedNumber = "20" + formattedNumber;
       } else if (formattedNumber.length === 9) {
@@ -324,11 +377,18 @@ class WhatsAppService {
         formattedNumber = "201" + formattedNumber;
       } else {
         // Log unhandled cases for debugging
-        console.log(`Unhandled phone number format: ${formattedNumber} (length: ${formattedNumber.length})`);
+        console.log(
+          `Unhandled phone number format: ${formattedNumber} (length: ${formattedNumber.length})`,
+        );
       }
-      
-      // Add WhatsApp suffix
-      const chatId = formattedNumber + "@c.us";
+
+      // Resolve number to a valid WhatsApp ID using official API (more robust across versions)
+      const numberId = await this.client.getNumberId(formattedNumber);
+      if (!numberId) {
+        throw new Error("Phone number is not registered on WhatsApp");
+      }
+
+      const chatId = numberId._serialized || `${formattedNumber}@c.us`;
 
       console.log(`Sending message to ${chatId}: ${message}`);
       await this.client.sendMessage(chatId, message);
