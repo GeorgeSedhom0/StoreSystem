@@ -288,7 +288,7 @@ def create_all_tables(cur):
       price FLOAT,
       amount INT,
       time TIMESTAMP NOT NULL,
-      total INT NOT NULL,
+      total INT,
       PRIMARY KEY (id, store_id),
       FOREIGN KEY (store_id, bill_id) REFERENCES bills(store_id, id),
       FOREIGN KEY (product_id) REFERENCES products(id)
