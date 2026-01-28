@@ -2,6 +2,8 @@ import { Dispatch, SetStateAction, useEffect } from "react";
 import { Product } from "../../utils/types";
 import { AlertMsg } from "../AlertMessage";
 
+const CLIENT_BARCODE_PREFIX = "CL";
+
 const useBarcodeDetection = (
   products: Product[],
   addToCart: (product: Product) => void,
@@ -19,6 +21,12 @@ const useBarcodeDetection = (
 
       if (e.key === "Enter") {
         if (code.length >= 2) {
+          // Skip client barcodes - they are handled by useClientBarcodeDetection
+          if (code.startsWith(CLIENT_BARCODE_PREFIX)) {
+            code = "";
+            return;
+          }
+
           const product = products.find((prod) => prod.bar_code === code);
           if (product) {
             addToCart(product);

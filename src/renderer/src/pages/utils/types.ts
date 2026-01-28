@@ -99,6 +99,7 @@ export interface Party {
   address: string;
   type: string;
   extra_info: { [key: string]: string };
+  bar_code?: string;
 }
 
 export interface Employee {

@@ -11,6 +11,8 @@ import {
   Typography,
   Paper,
   Box,
+  IconButton,
+  InputAdornment,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { Party } from "../../utils/types";
@@ -21,7 +23,11 @@ import {
   Business as BusinessIcon,
   Phone as PhoneIcon,
   LocationOn as LocationIcon,
+  QrCode as QrCodeIcon,
+  AutoAwesome as AutoAwesomeIcon,
+  Print as PrintIcon,
 } from "@mui/icons-material";
+import PrintBarCode from "../../Shared/PrintBarCode";
 
 const Parties = () => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
@@ -30,6 +36,9 @@ const Parties = () => {
   const [partyPhone, setPartyPhone] = useState("");
   const [partyAddress, setPartyAddress] = useState("");
   const [partyType, setPartyType] = useState("عميل");
+  const [partyBarcode, setPartyBarcode] = useState("");
+  const [printBarcodeOpen, setPrintBarcodeOpen] = useState(false);
+  const [generatingBarcode, setGeneratingBarcode] = useState(false);
 
   const {
     parties,
@@ -37,11 +46,32 @@ const Parties = () => {
     addPartyLoading,
     updatePartyMutation,
     updatePartyLoading,
+    generateClientBarcode,
   } = useParties(setMsg);
+
+  const handleGenerateBarcode = async () => {
+    setGeneratingBarcode(true);
+    try {
+      const barcode = await generateClientBarcode();
+      setPartyBarcode(barcode);
+    } catch {
+      setMsg({ type: "error", text: "حدث خطأ اثناء توليد الباركود" });
+    } finally {
+      setGeneratingBarcode(false);
+    }
+  };
 
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       <AlertMessage message={msg} setMessage={setMsg} />
+
+      {printBarcodeOpen && partyBarcode && (
+        <PrintBarCode
+          code={partyBarcode}
+          name={partyName}
+          setOpen={setPrintBarcodeOpen}
+        />
+      )}
 
       {/* Header */}
       <Paper
@@ -95,6 +125,8 @@ const Parties = () => {
                     address: "",
                     phone: "",
                     type: "",
+                    extra_info: {},
+                    bar_code: "",
                   },
                   ...parties,
                 ] as Party[]
@@ -112,6 +144,8 @@ const Parties = () => {
                   address: "",
                   phone: "",
                   type: "",
+                  extra_info: {},
+                  bar_code: "",
                 } as Party)
               }
               filterOptions={(options, params) => {
@@ -129,6 +163,9 @@ const Parties = () => {
                       .includes(params.inputValue.toLowerCase()) ||
                     option.type
                       .toLowerCase()
+                      .includes(params.inputValue.toLowerCase()) ||
+                    (option.bar_code || "")
+                      .toLowerCase()
                       .includes(params.inputValue.toLowerCase()),
                 );
               }}
@@ -139,12 +176,14 @@ const Parties = () => {
                   setPartyPhone(value.phone);
                   setPartyAddress(value.address);
                   setPartyType(value.type);
+                  setPartyBarcode(value.bar_code || "");
                 } else {
                   setPartyId(null);
                   setPartyName("");
                   setPartyPhone("");
                   setPartyAddress("");
                   setPartyType("عميل");
+                  setPartyBarcode("");
                 }
               }}
               isOptionEqualToValue={(option, value) => option.id === value.id}
@@ -246,6 +285,41 @@ const Parties = () => {
               </Grid2>
 
               <Grid2 size={12}>
+                <TextField
+                  fullWidth
+                  label="الباركود"
+                  value={partyBarcode}
+                  onChange={(e) => setPartyBarcode(e.target.value)}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <QrCodeIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      ),
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={handleGenerateBarcode}
+                            disabled={generatingBarcode}
+                            title="توليد باركود تلقائي"
+                          >
+                            <AutoAwesomeIcon />
+                          </IconButton>
+                          {partyBarcode && (
+                            <IconButton
+                              onClick={() => setPrintBarcodeOpen(true)}
+                              title="طباعة الباركود"
+                            >
+                              <PrintIcon />
+                            </IconButton>
+                          )}
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                />
+              </Grid2>
+
+              <Grid2 size={12}>
                 <LoadingButton
                   fullWidth
                   variant="contained"
@@ -260,12 +334,14 @@ const Parties = () => {
                         address: partyAddress,
                         type: partyType,
                         extra_info: {},
+                        bar_code: partyBarcode || undefined,
                       });
                       setPartyId(null);
                       setPartyName("");
                       setPartyPhone("");
                       setPartyAddress("");
                       setPartyType("عميل");
+                      setPartyBarcode("");
                     } else {
                       addPartyMutation({
                         id: partyId,
@@ -274,12 +350,14 @@ const Parties = () => {
                         address: partyAddress,
                         type: partyType,
                         extra_info: {},
+                        bar_code: partyBarcode || undefined,
                       });
                       setPartyId(null);
                       setPartyName("");
                       setPartyPhone("");
                       setPartyAddress("");
                       setPartyType("عميل");
+                      setPartyBarcode("");
                     }
                   }}
                   sx={{
