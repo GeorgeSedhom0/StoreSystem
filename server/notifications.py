@@ -514,3 +514,181 @@ def remove_expiration_notification(store_id: int, product_id: int):
         if conn:
             conn.rollback()
             conn.close()
+
+
+def create_low_stock_notification(
+    store_id: int,
+    products_below_zero: list,
+):
+    """
+    Create a notification for products that have reached zero or negative stock.
+
+    Args:
+        store_id: The store ID
+        products_below_zero: List of dicts with product info (name, stock, product_id)
+    """
+    if not products_below_zero:
+        return
+
+    try:
+        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        for product in products_below_zero:
+            product_name = product.get("name", "منتج غير معروف")
+            current_stock = product.get("stock", 0)
+            product_id = product.get("product_id")
+
+            if current_stock < 0:
+                title = f"🔴 مخزون سالب: {product_name}"
+                urgency = f"الكمية: {current_stock} (سالب)"
+            else:
+                title = f"⚠️ نفد المخزون: {product_name}"
+                urgency = "الكمية: 0"
+
+            content = f"""{urgency}
+
+يرجى إعادة تعبئة المخزون في أقرب وقت."""
+
+            # Check if a low_stock notification already exists for this product
+            cur.execute(
+                """
+                SELECT id, content FROM notifications
+                WHERE store_id = %s AND type = 'low_stock' AND reference_id = %s
+                AND deleted_at IS NULL
+                """,
+                (store_id, product_id),
+            )
+            existing = cur.fetchone()
+
+            if existing:
+                # Update existing notification - reset is_read if content changed
+                if existing["content"] != content:
+                    cur.execute(
+                        """
+                        UPDATE notifications
+                        SET title = %s, content = %s, is_read = FALSE, 
+                            read_at = NULL, updated_at = NOW()
+                        WHERE id = %s
+                        """,
+                        (title, content, existing["id"]),
+                    )
+            else:
+                # Create new notification
+                cur.execute(
+                    """
+                    INSERT INTO notifications (store_id, title, content, type, reference_id)
+                    VALUES (%s, %s, %s, 'low_stock', %s)
+                    """,
+                    (store_id, title, content, product_id),
+                )
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print(f"Error creating low stock notification: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()
+
+
+def create_due_installments_notification(
+    store_id: int,
+    due_installments: list,
+):
+    """
+    Create notifications for installments that are due or overdue.
+
+    Args:
+        store_id: The store ID
+        due_installments: List of dicts with installment info
+    """
+    if not due_installments:
+        return
+
+    try:
+        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        for installment in due_installments:
+            installment_id = installment.get("id")
+            party_name = installment.get("party_name", "عميل غير معروف")
+            party_phone = installment.get("party_phone", "غير متاح")
+            total = installment.get("total", 0)
+            total_paid = installment.get("total_paid", 0)
+            remaining = total - total_paid
+            next_due_date = installment.get("next_due_date")
+
+            # Calculate days overdue
+            try:
+                from datetime import datetime
+
+                due_date = datetime.fromisoformat(
+                    str(next_due_date).replace("Z", "+00:00")
+                )
+                days_overdue = (datetime.now().date() - due_date.date()).days
+                formatted_due_date = due_date.strftime("%Y-%m-%d")
+
+                if days_overdue > 0:
+                    title = f"🔴 قسط متأخر: {party_name}"
+                    due_status = f"متأخر {days_overdue} يوم"
+                else:
+                    title = f"⚠️ قسط مستحق اليوم: {party_name}"
+                    due_status = "مستحق اليوم"
+            except Exception:
+                formatted_due_date = str(next_due_date)
+                title = f"⚠️ قسط مستحق: {party_name}"
+                due_status = "مستحق"
+
+            content = f"""👤 العميل: {party_name}
+📞 الهاتف: {party_phone}
+📅 تاريخ الاستحقاق: {formatted_due_date}
+⏰ الحالة: {due_status}
+💰 إجمالي الفاتورة: {total:.2f} ج.م
+✅ المدفوع: {total_paid:.2f} ج.م
+💳 المتبقي: {remaining:.2f} ج.م"""
+
+            # Check if notification already exists for this installment
+            cur.execute(
+                """
+                SELECT id, content FROM notifications
+                WHERE store_id = %s AND type = 'installment_due' AND reference_id = %s
+                AND deleted_at IS NULL
+                """,
+                (store_id, installment_id),
+            )
+            existing = cur.fetchone()
+
+            if existing:
+                # Update existing notification - reset is_read if content changed
+                if existing["content"] != content:
+                    cur.execute(
+                        """
+                        UPDATE notifications
+                        SET title = %s, content = %s, is_read = FALSE, 
+                            read_at = NULL, updated_at = NOW()
+                        WHERE id = %s
+                        """,
+                        (title, content, existing["id"]),
+                    )
+            else:
+                # Create new notification
+                cur.execute(
+                    """
+                    INSERT INTO notifications (store_id, title, content, type, reference_id)
+                    VALUES (%s, %s, %s, 'installment_due', %s)
+                    """,
+                    (store_id, title, content, installment_id),
+                )
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print(f"Error creating due installments notification: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()

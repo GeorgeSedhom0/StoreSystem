@@ -446,10 +446,15 @@ def send_low_stock_notification_background(
     store_name: str = None,
     user_name: str = None,
 ):
-    """Background task to send low stock WhatsApp notification"""
+    """Background task to send low stock WhatsApp notification and create in-app notification"""
     try:
         if not products_below_zero:
             return
+
+        # Create in-app notification
+        from notifications import create_low_stock_notification
+
+        create_low_stock_notification(store_id, products_below_zero)
 
         message = format_low_stock_message(
             products_below_zero=products_below_zero,
@@ -784,10 +789,17 @@ def send_due_installments_notification_background(
 ):
     """
     Background task to check for due installments and send WhatsApp notification
+    Also creates in-app notifications for each due installment
     """
     try:
         # Check for due installments
         due_installments = check_due_installments(store_id)
+
+        # Create in-app notifications for due installments
+        if due_installments:
+            from notifications import create_due_installments_notification
+
+            create_due_installments_notification(store_id, due_installments)
 
         # Always send a notification (even if no due installments)
         message = format_due_installments_message(
