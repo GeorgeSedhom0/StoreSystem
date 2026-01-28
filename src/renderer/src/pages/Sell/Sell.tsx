@@ -6,6 +6,8 @@ import {
   FormControl,
   FormControlLabel,
   Grid2,
+  IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
@@ -19,6 +21,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { AutoAwesome as AutoAwesomeIcon } from "@mui/icons-material";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Bill, Party, Product, SCProduct } from "../utils/types";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -30,6 +33,7 @@ import { printBill } from "../utils/functions";
 import { useNavigate } from "react-router-dom";
 import PartyDetails from "../Shared/PartyDetails";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
+import useClientBarcodeDetection from "../Shared/hooks/useClientBarcodeDetection";
 import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import Installments from "./Components/Installments";
@@ -69,6 +73,7 @@ const Sell = () => {
     address: "",
     type: "عميل",
     extra_info: {},
+    bar_code: "",
   });
   const [shiftDialog, setShiftDialog] = useState<boolean>(false);
   const [lastBill, setLastBill] = useState<Bill | null>(null);
@@ -93,7 +98,8 @@ const Sell = () => {
 
   const { shift, isShiftLoading, isShiftError } = useShift();
 
-  const { parties, addPartyMutationAsync } = useParties(setMsg);
+  const { parties, addPartyMutationAsync, generateClientBarcode } =
+    useParties(setMsg);
 
   const { createBill, isCreatingBill } = useBills();
 
@@ -162,6 +168,24 @@ const Sell = () => {
   useQuickHandle(shoppingCart, setShoppingCart);
   useBarcodeDetection(products, addToCart, setMsg);
 
+  // Handle client found via barcode scan
+  const handleClientFound = useCallback(
+    (party: Party) => {
+      if (party.id) {
+        setPartyId(party.id);
+        setAddingParty(false);
+        setMsg({
+          type: "success",
+          text: `تم اختيار العميل: ${party.name}`,
+        });
+      }
+    },
+    [setMsg],
+  );
+
+  // Client barcode detection - only enabled when third parties section is visible
+  useClientBarcodeDetection(parties, handleClientFound, setMsg, usingThirdParties);
+
   // Create a debounced version of the submit function to prevent multiple submissions
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
@@ -219,8 +243,9 @@ const Sell = () => {
             name: "",
             phone: "",
             address: "",
-            type: "مورد",
+            type: "عميل",
             extra_info: {},
+            bar_code: "",
           });
         }
 
@@ -247,6 +272,7 @@ const Sell = () => {
           address: "",
           type: "عميل",
           extra_info: {},
+          bar_code: "",
         });
 
         await updateProducts();
@@ -510,6 +536,30 @@ const Sell = () => {
                   onChange={(e) =>
                     setNewParty({ ...newParty, address: e.target.value })
                   }
+                />
+                <TextField
+                  label="الباركود (اختياري)"
+                  value={newParty.bar_code || ""}
+                  onChange={(e) =>
+                    setNewParty({ ...newParty, bar_code: e.target.value })
+                  }
+                  slotProps={{
+                    input: {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={async () => {
+                              const barcode = await generateClientBarcode();
+                              setNewParty({ ...newParty, bar_code: barcode });
+                            }}
+                            title="توليد باركود تلقائي"
+                          >
+                            <AutoAwesomeIcon />
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
                 />
               </Grid2>
             )}

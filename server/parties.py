@@ -72,13 +72,66 @@ class Party(BaseModel):
     address: str
     type: str
     extra_info: dict
+    bar_code: Optional[str] = None
+
+
+@router.get("/party/barcode")
+async def get_party_bar_code(current_user: dict = Depends(get_current_user)) -> str:
+    """
+    Get the next available client barcode.
+    Format: CL + 10 digit zero-padded number (e.g., CL0000000001)
+    """
+    with Database(HOST, DATABASE, USER, PASS) as cur:
+        # Find the maximum existing client barcode number
+        cur.execute("""
+            SELECT MAX(
+                CAST(SUBSTRING(bar_code FROM 3) AS BIGINT)
+            ) AS max_num
+            FROM assosiated_parties
+            WHERE bar_code IS NOT NULL
+            AND bar_code ~ '^CL[0-9]+$'
+        """)
+        result = cur.fetchone()
+        max_num = result["max_num"] if result["max_num"] else 0
+
+        # Generate next barcode
+        next_num = max_num + 1
+        next_barcode = f"CL{next_num:010d}"
+
+        return next_barcode
+
+
+@router.get("/party/by-barcode/{barcode}")
+async def get_party_by_barcode(
+    barcode: str,
+    current_user: dict = Depends(get_current_user),
+) -> JSONResponse:
+    """
+    Get a party by their barcode.
+    Returns the party details if found, 404 if not found.
+    """
+    with Database(HOST, DATABASE, USER, PASS) as cur:
+        cur.execute(
+            """
+            SELECT id, name, phone, address, type, extra_info, bar_code
+            FROM assosiated_parties
+            WHERE bar_code = %s
+            """,
+            (barcode,),
+        )
+        party = cur.fetchone()
+
+        if not party:
+            raise HTTPException(status_code=404, detail="Party not found")
+
+        return JSONResponse(content=party)
 
 
 @router.get("/parties")
 async def get_parties(current_user: dict = Depends(get_current_user)) -> JSONResponse:
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute("""
-        SELECT * FROM assosiated_parties
+        SELECT id, name, phone, address, type, extra_info, bar_code FROM assosiated_parties
         """)
         return JSONResponse(content=cur.fetchall())
 
@@ -90,8 +143,8 @@ async def add_party(
     with Database(HOST, DATABASE, USER, PASS) as cur:
         cur.execute(
             """
-        INSERT INTO assosiated_parties (name, phone, address, type, extra_info)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO assosiated_parties (name, phone, address, type, extra_info, bar_code)
+        VALUES (%s, %s, %s, %s, %s, %s)
         returning id
         """,
             (
@@ -100,6 +153,7 @@ async def add_party(
                 party.address,
                 party.type,
                 json.dumps(party.extra_info),
+                party.bar_code if party.bar_code else None,
             ),
         )
         party_id = cur.fetchone()["id"]
@@ -137,7 +191,7 @@ async def edit_party(
         cur.execute(
             """
         UPDATE assosiated_parties
-        SET name = %s, phone = %s, address = %s, type = %s, extra_info = %s
+        SET name = %s, phone = %s, address = %s, type = %s, extra_info = %s, bar_code = %s
         WHERE id = %s
         """,
             (
@@ -146,6 +200,7 @@ async def edit_party(
                 party.address,
                 party.type,
                 json.dumps(party.extra_info),
+                party.bar_code if party.bar_code else None,
                 party_id,
             ),
         )

@@ -26,6 +26,11 @@ const deleteParty = async (partyId: number) => {
   });
 };
 
+const generateClientBarcode = async (): Promise<string> => {
+  const { data } = await axios.get<string>("/party/barcode");
+  return data;
+};
+
 const useParties = (setMsg: Dispatch<SetStateAction<AlertMsg>>) => {
   const { data: parties, refetch: refetchParties } = useQuery({
     queryKey: ["parties"],
@@ -74,6 +79,7 @@ const useParties = (setMsg: Dispatch<SetStateAction<AlertMsg>>) => {
 
   return {
     parties,
+    refetchParties,
     addPartyMutation,
     addPartyMutationAsync,
     addPartyLoading,
@@ -81,6 +87,7 @@ const useParties = (setMsg: Dispatch<SetStateAction<AlertMsg>>) => {
     updatePartyLoading,
     deletePartyMutation,
     deletePartyLoading,
+    generateClientBarcode,
   };
 };
 

@@ -147,8 +147,12 @@ const Basics = () => {
       setAddress(storeInfo.address);
       // Load extra_info settings
       const extraInfo = storeInfo.extra_info || {};
-      setExpirationAlertDays(extraInfo.expiration_alert_days ?? 14);
-      setExpirationCheckTime(extraInfo.expiration_check_time ?? "15:00");
+      setExpirationAlertDays(
+        extraInfo.expiration_alert_days
+          ? parseInt(extraInfo.expiration_alert_days as any)
+          : 14,
+      );
+      setExpirationCheckTime(extraInfo.expiration_check_time || "15:00");
     }
   }, [storeInfo]);
   return (
