@@ -24,6 +24,7 @@ import {
   TrendingUp as TrendingUpIcon,
   Receipt as ReceiptIcon,
   Percent as PercentIcon,
+  ShoppingCart as ShoppingCartIcon,
 } from "@mui/icons-material";
 import { useCallback, useEffect, useMemo, useState, useContext } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -193,6 +194,21 @@ const BillsAdmin = () => {
 
     const totalAmount = actualBills.reduce((sum, bill) => sum + bill.total, 0);
 
+    // Calculate actual sales total (for BNPL and installment, use product prices instead of bill total)
+    const totalSalesAmount = actualBills.reduce((sum, bill) => {
+      if (bill.type === "BNPL" || bill.type === "installment") {
+        // Calculate actual total from products (amounts are negative for sales, so negate to get positive value)
+        const productsTotal = bill.products.reduce(
+          (prodSum, product) =>
+            prodSum + (product.price || 0) * (product.amount || 0),
+          0,
+        );
+        // Negate because amounts are negative for sales, then subtract discount
+        return sum + -productsTotal - (bill.discount || 0);
+      }
+      return sum + bill.total;
+    }, 0);
+
     const totalDiscount = actualBills.reduce((sum, bill) => {
       return sum + (bill.discount || 0);
     }, 0);
@@ -245,6 +261,7 @@ const BillsAdmin = () => {
     return {
       totalTransactions: actualBills.length,
       totalAmount,
+      totalSalesAmount,
       averageDiscount,
       productFlow,
     };
@@ -267,7 +284,7 @@ const BillsAdmin = () => {
         <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 2, mt: 2 }}>
             <Grid2 container spacing={2}>
-              <Grid2 size={{ xs: 12, sm: 4 }}>
+              <Grid2 size={{ xs: 12, sm: 3 }}>
                 <Card
                   sx={{
                     p: 2,
@@ -293,7 +310,7 @@ const BillsAdmin = () => {
                   </Typography>
                 </Card>
               </Grid2>
-              <Grid2 size={{ xs: 12, sm: 4 }}>
+              <Grid2 size={{ xs: 12, sm: 3 }}>
                 <Card
                   sx={{
                     p: 2,
@@ -323,7 +340,37 @@ const BillsAdmin = () => {
                   </Typography>
                 </Card>
               </Grid2>
-              <Grid2 size={{ xs: 12, sm: 4 }}>
+              <Grid2 size={{ xs: 12, sm: 3 }}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: "center",
+                    bgcolor: "info.light",
+                    color: "info.contrastText",
+                    boxShadow: 2,
+                    borderRadius: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <ShoppingCartIcon sx={{ fontSize: 32, mb: 1 }} />
+                  <Typography
+                    variant="caption"
+                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "0.9rem" }}
+                  >
+                    إجمالي المبيعات (مدفوع وغير مدفوع)
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    {new Intl.NumberFormat("ar-EG", {
+                      style: "currency",
+                      currency: "EGP",
+                      minimumFractionDigits: 0,
+                    }).format(statistics.totalSalesAmount)}
+                  </Typography>
+                </Card>
+              </Grid2>
+              <Grid2 size={{ xs: 12, sm: 3 }}>
                 <Card
                   sx={{
                     p: 2,

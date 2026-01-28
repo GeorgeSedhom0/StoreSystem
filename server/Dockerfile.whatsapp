@@ -2,8 +2,9 @@ FROM node:18-slim
 
 WORKDIR /app
 
-# Install dependencies for Chrome/Puppeteer
+# Install dependencies for Chrome/Puppeteer and git for npm packages from GitHub
 RUN apt-get update && apt-get install -y \
+    git \
     libnss3 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \

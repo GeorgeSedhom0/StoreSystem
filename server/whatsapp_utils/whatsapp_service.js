@@ -332,7 +332,7 @@ class WhatsAppService {
     });
   }
 
-  async sendMessage(phoneNumber, message) {
+  async sendMessage(phoneNumber, message, retries = 2) {
     try {
       if (!this.isConnected) {
         throw new Error("WhatsApp not connected");
@@ -391,7 +391,9 @@ class WhatsAppService {
       const chatId = numberId._serialized || `${formattedNumber}@c.us`;
 
       console.log(`Sending message to ${chatId}: ${message}`);
-      await this.client.sendMessage(chatId, message);
+
+      // Send message with sendSeen disabled to avoid markedUnread errors
+      await this.client.sendMessage(chatId, message, { sendSeen: false });
 
       return {
         success: true,
@@ -399,6 +401,19 @@ class WhatsAppService {
       };
     } catch (error) {
       console.error("Error sending message:", error);
+
+      // Retry on specific errors that might be transient
+      const isRetryableError =
+        error.message?.includes("markedUnread") ||
+        error.message?.includes("Evaluation failed") ||
+        error.message?.includes("Protocol error");
+
+      if (isRetryableError && retries > 0) {
+        console.log(`Retrying message send... (${retries} retries left)`);
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retry
+        return this.sendMessage(phoneNumber, message, retries - 1);
+      }
+
       return {
         success: false,
         message: error.message,
