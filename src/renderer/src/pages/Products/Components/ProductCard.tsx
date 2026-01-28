@@ -1,10 +1,15 @@
 import {
   Button,
+  IconButton,
   InputAdornment,
   TableCell,
   TableRow,
   TextField,
+  Tooltip,
+  Chip,
+  Box,
 } from "@mui/material";
+import { CalendarMonth, Warning } from "@mui/icons-material";
 import { Product } from "../../utils/types";
 import { useMemo, useState } from "react";
 import PrintBarCode from "@renderer/pages/Shared/PrintBarCode";
@@ -17,6 +22,9 @@ interface ProductCardProps {
   deleteProduct: (productId: number) => void;
   restoreProduct: (productId: number) => void;
   isShowingDeleted: boolean;
+  onOpenBatchModal: (product: Product) => void;
+  earliestExpiration?: string | null;
+  hasExpiringBatches?: boolean;
 }
 
 const ProductCard = ({
@@ -27,6 +35,9 @@ const ProductCard = ({
   deleteProduct,
   restoreProduct,
   isShowingDeleted,
+  onOpenBatchModal,
+  earliestExpiration,
+  hasExpiringBatches,
 }: ProductCardProps) => {
   const [isPrintingCode, setIsPrintingCode] = useState(false);
 
@@ -203,6 +214,39 @@ const ProductCard = ({
             })
           }
         />
+      </TableCell>
+
+      <TableCell>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Tooltip title="إدارة تواريخ الصلاحية">
+            <IconButton
+              size="small"
+              color={hasExpiringBatches ? "warning" : "default"}
+              onClick={() => onOpenBatchModal(product)}
+            >
+              <CalendarMonth />
+              {hasExpiringBatches && (
+                <Warning
+                  sx={{
+                    position: "absolute",
+                    top: -2,
+                    right: -2,
+                    fontSize: 14,
+                    color: "warning.main",
+                  }}
+                />
+              )}
+            </IconButton>
+          </Tooltip>
+          {earliestExpiration && (
+            <Chip
+              size="small"
+              label={earliestExpiration}
+              color={hasExpiringBatches ? "warning" : "default"}
+              variant="outlined"
+            />
+          )}
+        </Box>
       </TableCell>
 
       <TableCell>

@@ -366,6 +366,7 @@ const Buy = () => {
                   <TableCell>سعر الشراء</TableCell>
                   <TableCell>السعر</TableCell>
                   <TableCell>الاجمالي</TableCell>
+                  <TableCell>الصلاحية</TableCell>
                   <TableCell></TableCell>
                   <TableCell></TableCell>
                 </TableRow>

@@ -30,6 +30,12 @@ export interface DBAdminProducts {
   reserved_products: { [key: number]: { [key: string | number]: number } };
 }
 
+export interface BatchInfo {
+  quantity: number;
+  expiration_date: string | null;
+  batch_id?: number;
+}
+
 export interface SCProduct {
   id: number;
   name: string;
@@ -38,6 +44,8 @@ export interface SCProduct {
   quantity: number;
   stock: number;
   barCode?: string;
+  batches?: BatchInfo[];
+  batch_id?: number;
 }
 
 export interface Bill {

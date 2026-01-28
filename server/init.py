@@ -51,6 +51,8 @@ def drop_all_tables(cur):
     cur.execute("DROP TABLE IF EXISTS employee CASCADE")
     cur.execute("DROP TABLE IF EXISTS salaries CASCADE")
     cur.execute("DROP TABLE IF EXISTS bills_collections CASCADE")
+    cur.execute("DROP TABLE IF EXISTS notifications CASCADE")
+    cur.execute("DROP TABLE IF EXISTS product_batches CASCADE")
     cur.execute("SET TIME ZONE 'Africa/Cairo'")
     cur.execute(f"ALTER DATABASE {DATABASE} SET timezone TO 'Africa/Cairo';")
 
@@ -70,7 +72,7 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
     """)
     cur.execute("""
     INSERT INTO scopes (name, pages)
@@ -104,6 +106,7 @@ def create_all_tables(cur):
     ('الاعدادات', '/settings'),
     ('ادارة الاقساط', '/installments'),
     ('الموظفين', '/employees'),
+    ('الإشعارات', '/notifications'),
     ('admin', '/admin')
     """)
 
@@ -332,6 +335,50 @@ def create_all_tables(cur):
         deductions FLOAT,
         time TIMESTAMP
     )
+    """)
+
+    # Create the notifications table
+    cur.execute("""
+    CREATE TABLE notifications (
+        id BIGSERIAL PRIMARY KEY,
+        store_id BIGINT NOT NULL REFERENCES store_data(id),
+        title VARCHAR(255) NOT NULL,
+        content TEXT,
+        type VARCHAR(50) NOT NULL DEFAULT 'general',
+        reference_id BIGINT,
+        is_read BOOLEAN DEFAULT FALSE,
+        read_at TIMESTAMP,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    )
+    """)
+
+    # Create indexes for notifications
+    cur.execute("""
+        CREATE INDEX idx_notifications_store_id ON notifications(store_id);
+        CREATE INDEX idx_notifications_type_reference ON notifications(store_id, type, reference_id);
+        CREATE INDEX idx_notifications_deleted_at ON notifications(deleted_at) WHERE deleted_at IS NULL;
+    """)
+
+    # Create the product_batches table for tracking inventory by expiration date
+    cur.execute("""
+    CREATE TABLE product_batches (
+        id BIGSERIAL PRIMARY KEY,
+        store_id BIGINT NOT NULL REFERENCES store_data(id),
+        product_id BIGINT NOT NULL REFERENCES products(id),
+        quantity INT NOT NULL DEFAULT 0,
+        expiration_date DATE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(store_id, product_id, expiration_date)
+    )
+    """)
+
+    # Create indexes for product_batches
+    cur.execute("""
+        CREATE INDEX idx_product_batches_store_product ON product_batches(store_id, product_id);
+        CREATE INDEX idx_product_batches_expiration ON product_batches(expiration_date);
+        CREATE INDEX idx_product_batches_store_expiration ON product_batches(store_id, expiration_date);
     """)
 
 
@@ -927,6 +974,23 @@ def create_all_triggers(cur):
     AFTER INSERT ON products_flow
     FOR EACH ROW
     EXECUTE FUNCTION update_products_flow_total_after_insert();
+    """)
+
+    # Create trigger to update notifications updated_at timestamp
+    cur.execute("""
+    -- Trigger to update updated_at timestamp on notifications
+    CREATE OR REPLACE FUNCTION update_notification_timestamp()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trigger_update_notification_timestamp
+    BEFORE UPDATE ON notifications
+    FOR EACH ROW
+    EXECUTE FUNCTION update_notification_timestamp();
     """)
 
 

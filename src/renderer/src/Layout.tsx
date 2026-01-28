@@ -20,6 +20,7 @@ import SetBaseUrl from "./SetBaseUrl";
 import { StoreData } from "./pages/utils/types";
 import LoadingScreen from "./pages/Shared/LoadingScreen";
 import AddIcon from "@mui/icons-material/Add";
+import NotificationBell from "./pages/Shared/NotificationBell";
 
 const logoutWihtoutEndingShift = async () => {
   await axios.get("/switch", {
@@ -141,7 +142,7 @@ const Layout = ({
             >
               {profile &&
                 profile.user.pages
-                  .filter((page) => page !== "admin")
+                  .filter((page) => page !== "admin" && page !== "الإشعارات")
                   .map((page, index) => (
                     <NavLink key={index} to={profile.user.paths[index]}>
                       <Button>{page}</Button>
@@ -184,6 +185,9 @@ const Layout = ({
               >
                 تبديل المستخدم
               </Button>
+              {profile?.user.paths.includes("/notifications") && (
+                <NotificationBell />
+              )}
               <IconButton
                 onClick={() => {
                   window.electron.ipcRenderer.invoke("open-new-window");

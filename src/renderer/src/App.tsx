@@ -29,6 +29,7 @@ import ProductsAdmin from "./pages/ProductsAdmin/ProductdsAdmin";
 import MoveProducts from "./pages/MoveProducts/MoveProducts";
 import PartiesBills from "./pages/PartiesBills/PartiesBills";
 import AdminSell from "./pages/AdminSell/AdminSell";
+import Notifications from "./pages/Notifications/Notifications";
 
 axios.defaults.withCredentials = true;
 
@@ -218,6 +219,7 @@ const App = () => {
                   <Route path="/employees" element={<Employee />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/parties-bills" element={<PartiesBills />} />
+                  <Route path="/notifications" element={<Notifications />} />
 
                   {/* if any route other than the defined go to /sell */}
                   <Route path="*" element={<Navigate to="/sell" />} />

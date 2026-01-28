@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useCallback, useMemo, useState, useContext } from "react";
+import { useCallback, useMemo, useState, useContext, useEffect } from "react";
 import { Product } from "../utils/types";
 import {
   Button,
@@ -35,6 +35,13 @@ import useProducts from "../Shared/hooks/useProducts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { exportToExcel } from "../Analytics/utils";
 import ProductCard from "./Components/ProductCard";
+import BatchManagementModal from "../Shared/BatchManagementModal";
+
+interface BatchExpirationInfo {
+  productId: number;
+  earliestExpiration: string | null;
+  hasExpiringBatches: boolean;
+}
 
 const Products = () => {
   const [editedProducts, setEditedProducts] = useState<Product[]>([]);
@@ -46,6 +53,11 @@ const Products = () => {
   const [changedOnly, setChangedOnly] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
+  
+  // Batch management state
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [selectedProductForBatch, setSelectedProductForBatch] = useState<Product | null>(null);
+  const [batchExpirationInfo, setBatchExpirationInfo] = useState<Map<number, BatchExpirationInfo>>(new Map());
 
   // Enhanced table state
   const [orderBy, setOrderBy] = useState<keyof Product>("name");
@@ -61,6 +73,53 @@ const Products = () => {
   } = useProducts(showDeleted);
 
   const { storeId } = useContext(StoreContext);
+
+  // Load batch expiration info for all products in one request
+  const loadBatchExpirationInfo = useCallback(async () => {
+    if (!storeId) return;
+    
+    try {
+      const response = await axios.get(`/batches/expiration-info`, {
+        params: { store_id: storeId, threshold_days: 14 },
+      });
+      
+      const data = response.data as Record<string, { earliest_expiration: string | null; has_expiring_batches: boolean }>;
+      const infoMap = new Map<number, BatchExpirationInfo>();
+      
+      Object.entries(data).forEach(([productIdStr, info]) => {
+        const productId = parseInt(productIdStr, 10);
+        infoMap.set(productId, {
+          productId,
+          earliestExpiration: info.earliest_expiration 
+            ? new Date(info.earliest_expiration).toLocaleDateString('en-GB') 
+            : null,
+          hasExpiringBatches: info.has_expiring_batches,
+        });
+      });
+      
+      setBatchExpirationInfo(infoMap);
+    } catch (error) {
+      console.error("Error loading batch expiration info:", error);
+    }
+  }, [storeId]);
+
+  useEffect(() => {
+    if (storeId) {
+      loadBatchExpirationInfo();
+    }
+  }, [storeId, loadBatchExpirationInfo]);
+
+  const handleOpenBatchModal = useCallback((product: Product) => {
+    setSelectedProductForBatch(product);
+    setBatchModalOpen(true);
+  }, []);
+
+  const handleCloseBatchModal = useCallback(() => {
+    setBatchModalOpen(false);
+    setSelectedProductForBatch(null);
+    // Refresh batch info after modal closes
+    loadBatchExpirationInfo();
+  }, [loadBatchExpirationInfo]);
 
   // Extract unique categories from products
   const availableCategories = useMemo(() => {
@@ -474,22 +533,29 @@ const Products = () => {
                         المجموعة
                       </TableSortLabel>
                     </TableCell>
+                    <TableCell>الصلاحية</TableCell>
                     <TableCell>إجراءات</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {paginatedProducts.map((product) => (
-                    <ProductCard
-                      key={product.id || product.bar_code}
-                      product={product}
-                      reserved={reservedProducts[product.id!]?.stock || 0}
-                      setEditedProducts={setEditedProducts}
-                      editedProducts={editedProducts}
-                      deleteProduct={deleteProduct}
-                      restoreProduct={restoreProduct}
-                      isShowingDeleted={showDeleted}
-                    />
-                  ))}
+                  {paginatedProducts.map((product) => {
+                    const batchInfo = product.id ? batchExpirationInfo.get(product.id) : undefined;
+                    return (
+                      <ProductCard
+                        key={product.id || product.bar_code}
+                        product={product}
+                        reserved={reservedProducts[product.id!]?.stock || 0}
+                        setEditedProducts={setEditedProducts}
+                        editedProducts={editedProducts}
+                        deleteProduct={deleteProduct}
+                        restoreProduct={restoreProduct}
+                        isShowingDeleted={showDeleted}
+                        onOpenBatchModal={handleOpenBatchModal}
+                        earliestExpiration={batchInfo?.earliestExpiration}
+                        hasExpiringBatches={batchInfo?.hasExpiringBatches}
+                      />
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -510,6 +576,17 @@ const Products = () => {
           </Card>
         </Grid2>
       </Grid2>
+
+      {/* Batch Management Modal */}
+      {selectedProductForBatch && selectedProductForBatch.id && (
+        <BatchManagementModal
+          open={batchModalOpen}
+          onClose={handleCloseBatchModal}
+          productId={selectedProductForBatch.id}
+          productName={selectedProductForBatch.name}
+          currentStock={selectedProductForBatch.stock}
+        />
+      )}
     </>
   );
 };

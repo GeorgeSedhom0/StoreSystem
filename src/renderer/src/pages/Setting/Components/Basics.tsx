@@ -12,22 +12,31 @@ import {
   Store as StoreIcon,
   Save as SaveIcon,
   Business as BusinessIcon,
+  Notifications as NotificationsIcon,
 } from "@mui/icons-material";
+
+interface ExtraInfo {
+  expiration_alert_days?: number;
+  expiration_check_time?: string;
+  [key: string]: unknown;
+}
 
 const saveStoreData = async ({
   name,
   phone,
   address,
+  extra_info,
   storeId,
 }: {
   name: string;
   phone: string;
   address: string;
+  extra_info: ExtraInfo;
   storeId: number;
 }) => {
   await axios.put(
     "/store-data",
-    {},
+    { extra_info },
     {
       params: {
         name,
@@ -53,6 +62,8 @@ const Basics = () => {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [expirationAlertDays, setExpirationAlertDays] = useState(14);
+  const [expirationCheckTime, setExpirationCheckTime] = useState("15:00");
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
 
   const queryClient = useQueryClient();
@@ -134,6 +145,10 @@ const Basics = () => {
       setName(storeInfo.name);
       setPhone(storeInfo.phone);
       setAddress(storeInfo.address);
+      // Load extra_info settings
+      const extraInfo = storeInfo.extra_info || {};
+      setExpirationAlertDays(extraInfo.expiration_alert_days ?? 14);
+      setExpirationCheckTime(extraInfo.expiration_check_time ?? "15:00");
     }
   }, [storeInfo]);
   return (
@@ -296,6 +311,68 @@ const Basics = () => {
                   }}
                 />
               </Grid2>
+            </Grid2>
+          </Paper>
+        </Grid2>
+
+        {/* Expiration Settings Section */}
+        <Grid2 size={12}>
+          <Paper
+            elevation={1}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+              <NotificationsIcon sx={{ color: "warning.main" }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                إعدادات تنبيهات الصلاحية
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              ضبط إعدادات تنبيهات انتهاء صلاحية المنتجات
+            </Typography>
+
+            <Grid2 container spacing={3}>
+              <Grid2 size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  size="medium"
+                  label="عدد أيام التنبيه قبل انتهاء الصلاحية"
+                  type="number"
+                  value={expirationAlertDays}
+                  onChange={(e) => setExpirationAlertDays(parseInt(e.target.value) || 14)}
+                  variant="outlined"
+                  helperText="سيتم إرسال تنبيه للمنتجات التي ستنتهي صلاحيتها خلال هذه الفترة"
+                  inputProps={{ min: 1, max: 365 }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 2,
+                    },
+                  }}
+                />
+              </Grid2>
+              <Grid2 size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  size="medium"
+                  label="وقت الفحص اليومي"
+                  type="time"
+                  value={expirationCheckTime}
+                  onChange={(e) => setExpirationCheckTime(e.target.value)}
+                  variant="outlined"
+                  helperText="الوقت الذي سيتم فيه فحص المنتجات يومياً"
+                  InputLabelProps={{ shrink: true }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 2,
+                    },
+                  }}
+                />
+              </Grid2>
               <Grid2 size={12}>
                 <Box
                   sx={{ display: "flex", justifyContent: "flex-end", mt: 2 }}
@@ -304,7 +381,16 @@ const Basics = () => {
                     variant="contained"
                     loading={loading}
                     onClick={() =>
-                      setStoreData({ name, phone, address, storeId })
+                      setStoreData({
+                        name,
+                        phone,
+                        address,
+                        extra_info: {
+                          expiration_alert_days: expirationAlertDays,
+                          expiration_check_time: expirationCheckTime,
+                        },
+                        storeId,
+                      })
                     }
                     startIcon={<SaveIcon />}
                     size="large"

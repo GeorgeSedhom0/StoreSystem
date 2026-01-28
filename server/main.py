@@ -24,6 +24,8 @@ from analytics import router as analytics_router
 from employee import router as employee_router
 from whatsapp import router as whatsapp_router
 from detailed_analytics import router as detailed_analytics_router
+from notifications import router as notifications_router
+from batches import router as batches_router
 from auth_middleware import get_current_user, get_store_info
 from whatsapp_utils import (
     send_whatsapp_notification_background,
@@ -31,6 +33,8 @@ from whatsapp_utils import (
     check_and_send_low_stock_notification,
     format_store_transfer_message,
 )
+from expiration_scheduler import start_expiration_scheduler
+from batches import consume_batches_fefo, add_to_batch, adjust_batches_for_stock_change
 
 load_dotenv()
 
@@ -53,6 +57,16 @@ app.include_router(analytics_router)
 app.include_router(employee_router)
 app.include_router(whatsapp_router)
 app.include_router(detailed_analytics_router)
+app.include_router(notifications_router)
+app.include_router(batches_router)
+
+
+# Startup event to initialize the expiration scheduler
+@app.on_event("startup")
+async def startup_event():
+    """Initialize background tasks on startup"""
+    start_expiration_scheduler()
+
 
 origins = [
     "http://localhost",
@@ -98,6 +112,13 @@ class Product(BaseModel):
         return data
 
 
+class BatchInfo(BaseModel):
+    """Define the BatchInfo model for expiration date tracking"""
+    quantity: int
+    expiration_date: Optional[str] = None  # ISO format date string
+    batch_id: Optional[int] = None  # Specific batch ID when selling
+
+
 class ProductFlow(BaseModel):
     "Define the ProductFlow model"
 
@@ -105,6 +126,8 @@ class ProductFlow(BaseModel):
     quantity: int
     price: float
     wholesale_price: float
+    batches: Optional[list[BatchInfo]] = None  # For buy operations with expiration dates
+    batch_id: Optional[int] = None  # For sell operations to specify which batch
 
     def dict(self, *args, **kwargs):
         data = super().dict(*args, **kwargs)
@@ -505,6 +528,14 @@ def update_product(
                                     product.wholesale_price,
                                     product.price,
                                 ),
+                            )
+                            # Adjust batches for manual stock change
+                            adjust_batches_for_stock_change(
+                                cur,
+                                store_id,
+                                product.id,
+                                current_stock,
+                                product.stock
                             )
                     else:
                         # If no inventory entry exists, create one
@@ -1095,6 +1126,55 @@ def add_bill(
                 raise HTTPException(
                     status_code=400, detail="Insert into products_flow failed"
                 )
+
+            # Handle batch operations for products with expiration dates
+            for product_flow in bill.products_flow:
+                if move_type in ["buy", "return"]:
+                    # Adding products - create/update batches
+                    if product_flow.batches:
+                        # Use specified batches with expiration dates
+                        for batch in product_flow.batches:
+                            add_to_batch(
+                                cur,
+                                store_id,
+                                product_flow.id,
+                                batch.quantity,
+                                batch.expiration_date
+                            )
+                    # If no batches specified, products go untracked (no batch entry)
+                    
+                elif move_type in ["sell", "BNPL", "installment", "buy-return"]:
+                    # Removing products - consume from batches
+                    if product_flow.batches and len(product_flow.batches) > 0:
+                        # User specified which batches to consume from
+                        for batch in product_flow.batches:
+                            if batch.batch_id:
+                                # Consume from specific batch by ID
+                                consume_batches_fefo(
+                                    cur,
+                                    store_id,
+                                    product_flow.id,
+                                    batch.quantity,
+                                    batch.batch_id
+                                )
+                            else:
+                                # Consume by expiration date match (FEFO will handle)
+                                consume_batches_fefo(
+                                    cur,
+                                    store_id,
+                                    product_flow.id,
+                                    batch.quantity,
+                                    None
+                                )
+                    else:
+                        # No specific batches - use FEFO automatically
+                        consume_batches_fefo(
+                            cur,
+                            store_id,
+                            product_flow.id,
+                            product_flow.quantity,
+                            product_flow.batch_id  # Optional specific batch (legacy support)
+                        )
 
             # Check for low stock after sales transactions (as background task)
             if move_type in ["sell", "BNPL", "installment", "buy-return"]:

@@ -6,7 +6,7 @@ import logging
 from dotenv import load_dotenv
 from os import getenv
 from fastapi import APIRouter
-from typing import Any
+from typing import Any, Optional
 import json
 from auth_middleware import get_current_user
 
@@ -181,12 +181,21 @@ def update_store_data(
     name: str,
     address: str,
     phone: str,
-    extra_info: dict[str, Any],
     store_id: int,
+    body: Optional[dict] = None,
     current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     try:
+        extra_info = body.get("extra_info", {}) if body else {}
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # First get existing extra_info to merge with new values
+            cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
+            existing = cur.fetchone()
+            existing_extra_info = existing["extra_info"] if existing and existing.get("extra_info") else {}
+            
+            # Merge existing with new extra_info (new values override existing)
+            merged_extra_info = {**existing_extra_info, **extra_info}
+            
             cur.execute(
                 """
                 INSERT INTO store_data
@@ -199,7 +208,7 @@ def update_store_data(
                 extra_info = EXCLUDED.extra_info
                 RETURNING *
                 """,
-                (store_id, name, address, phone, json.dumps(extra_info)),
+                (store_id, name, address, phone, json.dumps(merged_extra_info)),
             )
             store = cur.fetchone()
             return JSONResponse(content=store)

@@ -546,6 +546,7 @@ const AdminSell = () => {
                   <TableCell>الاجمالي</TableCell>
                   <TableCell>حذف</TableCell>
                   <TableCell>الكمية المتاحة بالمخزن</TableCell>
+                  <TableCell>الصلاحية</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
