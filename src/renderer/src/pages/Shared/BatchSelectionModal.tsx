@@ -42,7 +42,7 @@ const isExpiringSoon = (dateString: string | null, days: number = 14) => {
   const expDate = new Date(dateString);
   const now = new Date();
   const diffDays = Math.ceil(
-    (expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    (expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
   );
   return diffDays <= days;
 };
@@ -67,7 +67,9 @@ const BatchSelectionModal = ({
 }: BatchSelectionModalProps) => {
   const { storeId } = useContext(StoreContext);
   const [availableBatches, setAvailableBatches] = useState<Batch[]>([]);
-  const [selectedQuantities, setSelectedQuantities] = useState<Map<number, number>>(new Map());
+  const [selectedQuantities, setSelectedQuantities] = useState<
+    Map<number, number>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
@@ -75,26 +77,26 @@ const BatchSelectionModal = ({
   useEffect(() => {
     const loadBatches = async () => {
       if (!open || !product.id || !storeId) return;
-      
+
       setLoading(true);
       setError("");
-      
+
       try {
         const response = await axios.get(`/product/${product.id}/batches`, {
           params: { store_id: storeId },
         });
         const batches = (response.data.batches || []).filter(
-          (b: Batch) => b.quantity > 0
+          (b: Batch) => b.quantity > 0,
         );
         setAvailableBatches(batches);
-        
+
         // Initialize with FEFO distribution if product already has batches selected
         if (product.batches && product.batches.length > 0) {
           const qtyMap = new Map<number, number>();
           // Match by expiration date
           product.batches.forEach((pb) => {
             const matchingBatch = batches.find(
-              (b: Batch) => b.expiration_date === pb.expiration_date
+              (b: Batch) => b.expiration_date === pb.expiration_date,
             );
             if (matchingBatch) {
               qtyMap.set(matchingBatch.id, pb.quantity);
@@ -118,15 +120,18 @@ const BatchSelectionModal = ({
   const distributeFefo = (batches: Batch[], totalQty: number) => {
     const qtyMap = new Map<number, number>();
     let remaining = totalQty;
-    
+
     // Sort by expiration date (FEFO)
     const sorted = [...batches].sort((a, b) => {
       if (!a.expiration_date && !b.expiration_date) return 0;
       if (!a.expiration_date) return 1;
       if (!b.expiration_date) return -1;
-      return new Date(a.expiration_date).getTime() - new Date(b.expiration_date).getTime();
+      return (
+        new Date(a.expiration_date).getTime() -
+        new Date(b.expiration_date).getTime()
+      );
     });
-    
+
     for (const batch of sorted) {
       if (remaining <= 0) break;
       const takeQty = Math.min(remaining, batch.quantity);
@@ -135,7 +140,7 @@ const BatchSelectionModal = ({
         remaining -= takeQty;
       }
     }
-    
+
     setSelectedQuantities(qtyMap);
   };
 
@@ -159,12 +164,14 @@ const BatchSelectionModal = ({
 
   const validateAndSave = () => {
     const totalSelected = getTotalSelected();
-    
+
     if (totalSelected !== product.quantity) {
-      setError(`الكمية المحددة (${totalSelected}) يجب أن تساوي كمية المنتج (${product.quantity})`);
+      setError(
+        `الكمية المحددة (${totalSelected}) يجب أن تساوي كمية المنتج (${product.quantity})`,
+      );
       return;
     }
-    
+
     // Check if any selected quantity exceeds available
     for (const [batchId, qty] of selectedQuantities) {
       const batch = availableBatches.find((b) => b.id === batchId);
@@ -173,7 +180,7 @@ const BatchSelectionModal = ({
         return;
       }
     }
-    
+
     // Convert to BatchInfo array
     const batchInfos: BatchInfo[] = [];
     selectedQuantities.forEach((qty, batchId) => {
@@ -186,7 +193,7 @@ const BatchSelectionModal = ({
         });
       }
     });
-    
+
     onSave(batchInfos);
     onClose();
   };
@@ -203,8 +210,13 @@ const BatchSelectionModal = ({
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">اختيار الدفعات للبيع - {product.name}</Typography>
-          <Chip label={`الكمية المطلوبة: ${product.quantity}`} color="primary" />
+          <Typography variant="h6">
+            اختيار الدفعات للبيع - {product.name}
+          </Typography>
+          <Chip
+            label={`الكمية المطلوبة: ${product.quantity}`}
+            color="primary"
+          />
         </Box>
       </DialogTitle>
 
@@ -236,8 +248,8 @@ const BatchSelectionModal = ({
               {difference === 0
                 ? "✓ تم تحديد الكمية المطلوبة"
                 : difference > 0
-                ? `⚠️ متبقي ${difference} وحدة للتحديد`
-                : `⚠️ تم تحديد ${Math.abs(difference)} وحدة زيادة`}
+                  ? `⚠️ متبقي ${difference} وحدة للتحديد`
+                  : `⚠️ تم تحديد ${Math.abs(difference)} وحدة زيادة`}
             </Typography>
 
             {availableBatches.length === 0 ? (
@@ -281,8 +293,8 @@ const BatchSelectionModal = ({
                                 batch.id,
                                 Math.min(
                                   parseInt(e.target.value) || 0,
-                                  batch.quantity
-                                )
+                                  batch.quantity,
+                                ),
                               )
                             }
                             inputProps={{ min: 0, max: batch.quantity }}

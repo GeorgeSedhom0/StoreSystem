@@ -114,6 +114,7 @@ class Product(BaseModel):
 
 class BatchInfo(BaseModel):
     """Define the BatchInfo model for expiration date tracking"""
+
     quantity: int
     expiration_date: Optional[str] = None  # ISO format date string
     batch_id: Optional[int] = None  # Specific batch ID when selling
@@ -126,7 +127,9 @@ class ProductFlow(BaseModel):
     quantity: int
     price: float
     wholesale_price: float
-    batches: Optional[list[BatchInfo]] = None  # For buy operations with expiration dates
+    batches: Optional[list[BatchInfo]] = (
+        None  # For buy operations with expiration dates
+    )
     batch_id: Optional[int] = None  # For sell operations to specify which batch
 
     def dict(self, *args, **kwargs):
@@ -531,11 +534,7 @@ def update_product(
                             )
                             # Adjust batches for manual stock change
                             adjust_batches_for_stock_change(
-                                cur,
-                                store_id,
-                                product.id,
-                                current_stock,
-                                product.stock
+                                cur, store_id, product.id, current_stock, product.stock
                             )
                     else:
                         # If no inventory entry exists, create one
@@ -1139,10 +1138,10 @@ def add_bill(
                                 store_id,
                                 product_flow.id,
                                 batch.quantity,
-                                batch.expiration_date
+                                batch.expiration_date,
                             )
                     # If no batches specified, products go untracked (no batch entry)
-                    
+
                 elif move_type in ["sell", "BNPL", "installment", "buy-return"]:
                     # Removing products - consume from batches
                     if product_flow.batches and len(product_flow.batches) > 0:
@@ -1155,16 +1154,12 @@ def add_bill(
                                     store_id,
                                     product_flow.id,
                                     batch.quantity,
-                                    batch.batch_id
+                                    batch.batch_id,
                                 )
                             else:
                                 # Consume by expiration date match (FEFO will handle)
                                 consume_batches_fefo(
-                                    cur,
-                                    store_id,
-                                    product_flow.id,
-                                    batch.quantity,
-                                    None
+                                    cur, store_id, product_flow.id, batch.quantity, None
                                 )
                     else:
                         # No specific batches - use FEFO automatically
@@ -1173,7 +1168,7 @@ def add_bill(
                             store_id,
                             product_flow.id,
                             product_flow.quantity,
-                            product_flow.batch_id  # Optional specific batch (legacy support)
+                            product_flow.batch_id,  # Optional specific batch (legacy support)
                         )
 
             # Check for low stock after sales transactions (as background task)

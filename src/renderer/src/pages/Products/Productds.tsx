@@ -53,11 +53,14 @@ const Products = () => {
   const [changedOnly, setChangedOnly] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
   const [showDeleted, setShowDeleted] = useState<boolean>(false);
-  
+
   // Batch management state
   const [batchModalOpen, setBatchModalOpen] = useState(false);
-  const [selectedProductForBatch, setSelectedProductForBatch] = useState<Product | null>(null);
-  const [batchExpirationInfo, setBatchExpirationInfo] = useState<Map<number, BatchExpirationInfo>>(new Map());
+  const [selectedProductForBatch, setSelectedProductForBatch] =
+    useState<Product | null>(null);
+  const [batchExpirationInfo, setBatchExpirationInfo] = useState<
+    Map<number, BatchExpirationInfo>
+  >(new Map());
 
   // Enhanced table state
   const [orderBy, setOrderBy] = useState<keyof Product>("name");
@@ -77,26 +80,29 @@ const Products = () => {
   // Load batch expiration info for all products in one request
   const loadBatchExpirationInfo = useCallback(async () => {
     if (!storeId) return;
-    
+
     try {
       const response = await axios.get(`/batches/expiration-info`, {
         params: { store_id: storeId, threshold_days: 14 },
       });
-      
-      const data = response.data as Record<string, { earliest_expiration: string | null; has_expiring_batches: boolean }>;
+
+      const data = response.data as Record<
+        string,
+        { earliest_expiration: string | null; has_expiring_batches: boolean }
+      >;
       const infoMap = new Map<number, BatchExpirationInfo>();
-      
+
       Object.entries(data).forEach(([productIdStr, info]) => {
         const productId = parseInt(productIdStr, 10);
         infoMap.set(productId, {
           productId,
-          earliestExpiration: info.earliest_expiration 
-            ? new Date(info.earliest_expiration).toLocaleDateString('en-GB') 
+          earliestExpiration: info.earliest_expiration
+            ? new Date(info.earliest_expiration).toLocaleDateString("en-GB")
             : null,
           hasExpiringBatches: info.has_expiring_batches,
         });
       });
-      
+
       setBatchExpirationInfo(infoMap);
     } catch (error) {
       console.error("Error loading batch expiration info:", error);
@@ -539,7 +545,9 @@ const Products = () => {
                 </TableHead>
                 <TableBody>
                   {paginatedProducts.map((product) => {
-                    const batchInfo = product.id ? batchExpirationInfo.get(product.id) : undefined;
+                    const batchInfo = product.id
+                      ? batchExpirationInfo.get(product.id)
+                      : undefined;
                     return (
                       <ProductCard
                         key={product.id || product.bar_code}

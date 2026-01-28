@@ -1,6 +1,19 @@
-import { Button, TextField, TableRow, TableCell, Tooltip, Chip } from "@mui/material";
+import {
+  Button,
+  TextField,
+  TableRow,
+  TableCell,
+  Tooltip,
+  Chip,
+} from "@mui/material";
 import { SCProduct, BatchInfo } from "../utils/types";
-import { Dispatch, SetStateAction, useState, useEffect, useContext } from "react";
+import {
+  Dispatch,
+  SetStateAction,
+  useState,
+  useEffect,
+  useContext,
+} from "react";
 import PrintBarCode from "./PrintBarCode";
 import ExpirationModal from "./ExpirationModal";
 import BatchSelectionModal from "./BatchSelectionModal";
@@ -224,8 +237,8 @@ const ExpirationColumn = ({
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
 }) => {
   const hasBatches = product.batches && product.batches.length > 0;
-  const hasExpDates = product.batches?.some(b => b.expiration_date);
-  
+  const hasExpDates = product.batches?.some((b) => b.expiration_date);
+
   return (
     <TableCell>
       {isExpirationModalOpen && (
@@ -237,14 +250,21 @@ const ExpirationColumn = ({
             setShoppingCart((prev) =>
               prev.map((item) =>
                 item.id === product.id
-                  ? { ...item, batches: batches.length > 0 ? batches : undefined }
-                  : item
-              )
+                  ? {
+                      ...item,
+                      batches: batches.length > 0 ? batches : undefined,
+                    }
+                  : item,
+              ),
             );
           }}
         />
       )}
-      <Tooltip title={hasExpDates ? "تم تحديد تواريخ الصلاحية" : "تحديد تواريخ الصلاحية"}>
+      <Tooltip
+        title={
+          hasExpDates ? "تم تحديد تواريخ الصلاحية" : "تحديد تواريخ الصلاحية"
+        }
+      >
         <Button
           variant={hasBatches ? "contained" : "outlined"}
           color={hasExpDates ? "success" : "primary"}
@@ -290,10 +310,12 @@ const ExpirationInfoColumn = ({
           params: { store_id: storeId },
         });
         const batches = response.data.batches || [];
-        const batchesWithQty = batches.filter((b: { quantity: number }) => b.quantity > 0);
-        
+        const batchesWithQty = batches.filter(
+          (b: { quantity: number }) => b.quantity > 0,
+        );
+
         setHasBatches(batchesWithQty.length > 0);
-        
+
         // If product has selected batches, show that info
         if (product.batches && product.batches.length > 0) {
           const selectedCount = product.batches.length;
@@ -301,7 +323,9 @@ const ExpirationInfoColumn = ({
             if (!b.expiration_date) return false;
             const expDate = new Date(b.expiration_date);
             const today = new Date();
-            const daysUntilExpiry = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            const daysUntilExpiry = Math.ceil(
+              (expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+            );
             return daysUntilExpiry <= 14;
           });
           setIsExpiringSoon(hasExpiring);
@@ -309,18 +333,27 @@ const ExpirationInfoColumn = ({
         } else if (batchesWithQty.length > 0) {
           // Find earliest expiration from batches with quantity
           const sortedBatches = batchesWithQty
-            .filter((b: { expiration_date: string | null }) => b.expiration_date)
-            .sort((a: { expiration_date: string }, b: { expiration_date: string }) => 
-              new Date(a.expiration_date).getTime() - new Date(b.expiration_date).getTime()
+            .filter(
+              (b: { expiration_date: string | null }) => b.expiration_date,
+            )
+            .sort(
+              (
+                a: { expiration_date: string },
+                b: { expiration_date: string },
+              ) =>
+                new Date(a.expiration_date).getTime() -
+                new Date(b.expiration_date).getTime(),
             );
-          
+
           if (sortedBatches.length > 0) {
             const earliest = sortedBatches[0].expiration_date;
             const expDate = new Date(earliest);
             const today = new Date();
-            const daysUntilExpiry = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-            
-            setDisplayInfo(expDate.toLocaleDateString('en-GB')); // dd/mm/yyyy format
+            const daysUntilExpiry = Math.ceil(
+              (expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+            );
+
+            setDisplayInfo(expDate.toLocaleDateString("en-GB")); // dd/mm/yyyy format
             setIsExpiringSoon(daysUntilExpiry <= 14);
           } else {
             setDisplayInfo("تلقائي");
@@ -340,8 +373,8 @@ const ExpirationInfoColumn = ({
       prev.map((item) =>
         item.id === product.id
           ? { ...item, batches: batches.length > 0 ? batches : undefined }
-          : item
-      )
+          : item,
+      ),
     );
   };
 
@@ -359,12 +392,26 @@ const ExpirationInfoColumn = ({
           onSave={handleSaveBatches}
         />
       )}
-      <Tooltip title={hasBatches ? "انقر لاختيار الدفعات" : "لا توجد دفعات مسجلة"}>
+      <Tooltip
+        title={hasBatches ? "انقر لاختيار الدفعات" : "لا توجد دفعات مسجلة"}
+      >
         <Chip
           size="small"
           label={displayInfo}
-          color={product.batches && product.batches.length > 0 ? "success" : isExpiringSoon ? "warning" : "default"}
-          variant={product.batches && product.batches.length > 0 ? "filled" : isExpiringSoon ? "filled" : "outlined"}
+          color={
+            product.batches && product.batches.length > 0
+              ? "success"
+              : isExpiringSoon
+                ? "warning"
+                : "default"
+          }
+          variant={
+            product.batches && product.batches.length > 0
+              ? "filled"
+              : isExpiringSoon
+                ? "filled"
+                : "outlined"
+          }
           onClick={hasBatches ? () => setIsBatchModalOpen(true) : undefined}
           sx={{ cursor: hasBatches ? "pointer" : "default" }}
         />
@@ -402,8 +449,24 @@ const typeToColumns: {
     "delete",
     "printBarCode",
   ],
-  sell: ["name", "quantity", "price", "totalPrice", "delete", "stock", "expirationInfo"],
-  "sell-admin": ["name", "quantity", "price", "totalPrice", "delete", "stock", "expirationInfo"],
+  sell: [
+    "name",
+    "quantity",
+    "price",
+    "totalPrice",
+    "delete",
+    "stock",
+    "expirationInfo",
+  ],
+  "sell-admin": [
+    "name",
+    "quantity",
+    "price",
+    "totalPrice",
+    "delete",
+    "stock",
+    "expirationInfo",
+  ],
   transfer: [
     "name",
     "quantity",
@@ -522,7 +585,7 @@ const ProductInCart = ({
   const [isExpirationModalOpen, setIsExpirationModalOpen] = useState(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const { storeId } = useContext(StoreContext);
-  
+
   return (
     <TableRow>
       {typeToColumns[type].map((column, index) => (

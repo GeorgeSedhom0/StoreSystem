@@ -67,7 +67,7 @@ const getProductBatches = async (productId: number, storeId: number) => {
     `/product/${productId}/batches`,
     {
       params: { store_id: storeId },
-    }
+    },
   );
   return data;
 };
@@ -75,12 +75,12 @@ const getProductBatches = async (productId: number, storeId: number) => {
 const updateProductBatches = async (
   productId: number,
   storeId: number,
-  batches: { quantity: number; expiration_date: string | null }[]
+  batches: { quantity: number; expiration_date: string | null }[],
 ) => {
   await axios.put(
     `/product/${productId}/batches`,
     { batches },
-    { params: { store_id: storeId } }
+    { params: { store_id: storeId } },
   );
 };
 
@@ -89,7 +89,7 @@ const isExpiringSoon = (dateString: string | null, days: number = 14) => {
   const expDate = new Date(dateString);
   const now = new Date();
   const diffDays = Math.ceil(
-    (expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    (expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
   );
   return diffDays <= days;
 };
@@ -120,8 +120,9 @@ const BatchManagementModal = ({
   });
 
   const { mutate: saveBatches, isPending: isSaving } = useMutation({
-    mutationFn: (batches: { quantity: number; expiration_date: string | null }[]) =>
-      updateProductBatches(productId, storeId, batches),
+    mutationFn: (
+      batches: { quantity: number; expiration_date: string | null }[],
+    ) => updateProductBatches(productId, storeId, batches),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["productBatches"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -168,7 +169,10 @@ const BatchManagementModal = ({
   }, [data, open, currentStock]);
 
   const addBatch = () => {
-    const totalAssigned = editableBatches.reduce((sum, b) => sum + b.quantity, 0);
+    const totalAssigned = editableBatches.reduce(
+      (sum, b) => sum + b.quantity,
+      0,
+    );
     const remaining = currentStock - totalAssigned;
 
     setEditableBatches([
@@ -190,24 +194,22 @@ const BatchManagementModal = ({
   const updateBatch = (
     id: string,
     field: "quantity" | "expiration_date",
-    value: any
+    value: any,
   ) => {
     setEditableBatches(
-      editableBatches.map((b) =>
-        b.id === id ? { ...b, [field]: value } : b
-      )
+      editableBatches.map((b) => (b.id === id ? { ...b, [field]: value } : b)),
     );
   };
 
   const validateAndSave = () => {
     const totalQuantity = editableBatches.reduce(
       (sum, b) => sum + (b.quantity || 0),
-      0
+      0,
     );
 
     if (totalQuantity !== currentStock) {
       setError(
-        `إجمالي الكميات (${totalQuantity}) يجب أن يساوي المخزون الحالي (${currentStock})`
+        `إجمالي الكميات (${totalQuantity}) يجب أن يساوي المخزون الحالي (${currentStock})`,
       );
       return;
     }
@@ -229,7 +231,7 @@ const BatchManagementModal = ({
 
   const totalAssigned = editableBatches.reduce(
     (sum, b) => sum + (b.quantity || 0),
-    0
+    0,
   );
   const difference = currentStock - totalAssigned;
 
@@ -237,7 +239,9 @@ const BatchManagementModal = ({
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">إدارة تواريخ الصلاحية - {productName}</Typography>
+          <Typography variant="h6">
+            إدارة تواريخ الصلاحية - {productName}
+          </Typography>
           <Chip label={`المخزون: ${currentStock}`} color="primary" />
         </Box>
       </DialogTitle>
@@ -270,8 +274,8 @@ const BatchManagementModal = ({
               {difference === 0
                 ? "✓ تم توزيع كل المخزون"
                 : difference > 0
-                ? `⚠️ متبقي ${difference} وحدة للتوزيع`
-                : `⚠️ تم توزيع ${Math.abs(difference)} وحدة زيادة`}
+                  ? `⚠️ متبقي ${difference} وحدة للتوزيع`
+                  : `⚠️ تم توزيع ${Math.abs(difference)} وحدة زيادة`}
             </Typography>
 
             <TableContainer component={Paper} sx={{ mb: 2 }}>
@@ -296,7 +300,7 @@ const BatchManagementModal = ({
                             updateBatch(
                               batch.id,
                               "quantity",
-                              parseInt(e.target.value) || 0
+                              parseInt(e.target.value) || 0,
                             )
                           }
                           sx={{ width: 100 }}
@@ -305,12 +309,16 @@ const BatchManagementModal = ({
                       <TableCell>
                         <LocalizationProvider dateAdapter={AdapterDayjs}>
                           <DatePicker
-                            value={batch.expiration_date ? dayjs(batch.expiration_date) : null}
+                            value={
+                              batch.expiration_date
+                                ? dayjs(batch.expiration_date)
+                                : null
+                            }
                             onChange={(newValue) =>
                               updateBatch(
                                 batch.id,
                                 "expiration_date",
-                                newValue ? newValue.format("YYYY-MM-DD") : ""
+                                newValue ? newValue.format("YYYY-MM-DD") : "",
                               )
                             }
                             format="DD/MM/YYYY"

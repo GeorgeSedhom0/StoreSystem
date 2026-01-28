@@ -43,7 +43,10 @@ interface BatchRow {
   shelf_life_days: number;
 }
 
-const calculateExpirationDate = (productionDate: string, shelfLifeDays: number): string => {
+const calculateExpirationDate = (
+  productionDate: string,
+  shelfLifeDays: number,
+): string => {
   if (!productionDate || shelfLifeDays <= 0) return "";
   const date = new Date(productionDate);
   date.setDate(date.getDate() + shelfLifeDays);
@@ -71,7 +74,7 @@ const ExpirationModal = ({
             useProductionDate: false,
             production_date: "",
             shelf_life_days: 0,
-          }))
+          })),
         );
       } else {
         // Default to single batch with full quantity
@@ -93,7 +96,7 @@ const ExpirationModal = ({
   const addBatch = () => {
     const totalAssigned = batches.reduce((sum, b) => sum + b.quantity, 0);
     const remaining = product.quantity - totalAssigned;
-    
+
     setBatches([
       ...batches,
       {
@@ -116,37 +119,44 @@ const ExpirationModal = ({
     setBatches(
       batches.map((b) => {
         if (b.id !== id) return b;
-        
+
         const updated = { ...b, [field]: value };
-        
+
         // Auto-calculate expiration date from production date
         if (field === "production_date" || field === "shelf_life_days") {
-          if (updated.useProductionDate && updated.production_date && updated.shelf_life_days > 0) {
+          if (
+            updated.useProductionDate &&
+            updated.production_date &&
+            updated.shelf_life_days > 0
+          ) {
             updated.expiration_date = calculateExpirationDate(
               updated.production_date,
-              updated.shelf_life_days
+              updated.shelf_life_days,
             );
           }
         }
-        
+
         // Clear production fields when switching off
         if (field === "useProductionDate" && !value) {
           updated.production_date = "";
           updated.shelf_life_days = 0;
         }
-        
+
         return updated;
-      })
+      }),
     );
   };
 
   const validateAndSave = () => {
     // Check total quantity matches
-    const totalQuantity = batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
-    
+    const totalQuantity = batches.reduce(
+      (sum, b) => sum + (b.quantity || 0),
+      0,
+    );
+
     if (totalQuantity !== product.quantity) {
       setError(
-        `إجمالي الكميات (${totalQuantity}) يجب أن يساوي كمية المنتج (${product.quantity})`
+        `إجمالي الكميات (${totalQuantity}) يجب أن يساوي كمية المنتج (${product.quantity})`,
       );
       return;
     }
@@ -176,9 +186,7 @@ const ExpirationModal = ({
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">
-            تواريخ الصلاحية - {product.name}
-          </Typography>
+          <Typography variant="h6">تواريخ الصلاحية - {product.name}</Typography>
           <Typography variant="body2" color="text.secondary">
             الكمية الإجمالية: {product.quantity}
           </Typography>
@@ -225,7 +233,11 @@ const ExpirationModal = ({
                       size="small"
                       value={batch.quantity}
                       onChange={(e) =>
-                        updateBatch(batch.id, "quantity", parseInt(e.target.value) || 0)
+                        updateBatch(
+                          batch.id,
+                          "quantity",
+                          parseInt(e.target.value) || 0,
+                        )
                       }
                       sx={{ width: 80 }}
                     />
@@ -237,7 +249,11 @@ const ExpirationModal = ({
                           size="small"
                           checked={batch.useProductionDate}
                           onChange={(e) =>
-                            updateBatch(batch.id, "useProductionDate", e.target.checked)
+                            updateBatch(
+                              batch.id,
+                              "useProductionDate",
+                              e.target.checked,
+                            )
                           }
                         />
                       }
@@ -248,12 +264,16 @@ const ExpirationModal = ({
                     {batch.useProductionDate && (
                       <LocalizationProvider dateAdapter={AdapterDayjs}>
                         <DatePicker
-                          value={batch.production_date ? dayjs(batch.production_date) : null}
+                          value={
+                            batch.production_date
+                              ? dayjs(batch.production_date)
+                              : null
+                          }
                           onChange={(newValue) =>
                             updateBatch(
                               batch.id,
                               "production_date",
-                              newValue ? newValue.format("YYYY-MM-DD") : ""
+                              newValue ? newValue.format("YYYY-MM-DD") : "",
                             )
                           }
                           format="DD/MM/YYYY"
@@ -277,7 +297,7 @@ const ExpirationModal = ({
                           updateBatch(
                             batch.id,
                             "shelf_life_days",
-                            parseInt(e.target.value) || 0
+                            parseInt(e.target.value) || 0,
                           )
                         }
                         sx={{ width: 80 }}
@@ -287,12 +307,16 @@ const ExpirationModal = ({
                   <TableCell>
                     <LocalizationProvider dateAdapter={AdapterDayjs}>
                       <DatePicker
-                        value={batch.expiration_date ? dayjs(batch.expiration_date) : null}
+                        value={
+                          batch.expiration_date
+                            ? dayjs(batch.expiration_date)
+                            : null
+                        }
                         onChange={(newValue) =>
                           updateBatch(
                             batch.id,
                             "expiration_date",
-                            newValue ? newValue.format("YYYY-MM-DD") : ""
+                            newValue ? newValue.format("YYYY-MM-DD") : "",
                           )
                         }
                         format="DD/MM/YYYY"

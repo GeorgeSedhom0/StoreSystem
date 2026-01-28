@@ -48,7 +48,7 @@ const getUnreadCount = async (storeId: number) => {
     "/notifications/unread-count",
     {
       params: { store_id: storeId },
-    }
+    },
   );
   return data.unread_count;
 };

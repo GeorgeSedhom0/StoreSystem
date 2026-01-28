@@ -38,7 +38,10 @@ interface NotificationsResponse {
   unread_count: number;
 }
 
-const getNotifications = async (storeId: number, includeRead: boolean = true) => {
+const getNotifications = async (
+  storeId: number,
+  includeRead: boolean = true,
+) => {
   const { data } = await axios.get<NotificationsResponse>("/notifications", {
     params: { store_id: storeId, include_read: includeRead },
   });
@@ -71,7 +74,8 @@ const deleteNotification = async (notificationId: number, storeId: number) => {
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
-  return date.toLocaleDateString("en-GB", { // dd/mm/yyyy format
+  return date.toLocaleDateString("en-GB", {
+    // dd/mm/yyyy format
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -127,7 +131,8 @@ const Notifications = () => {
   });
 
   const { mutate: markUnread } = useMutation({
-    mutationFn: (notificationId: number) => markAsUnread(notificationId, storeId),
+    mutationFn: (notificationId: number) =>
+      markAsUnread(notificationId, storeId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
       queryClient.invalidateQueries({ queryKey: ["notificationsUnreadCount"] });
@@ -158,9 +163,7 @@ const Notifications = () => {
   const unreadCount = data?.unread_count || 0;
 
   const filteredNotifications =
-    tabValue === 0
-      ? notifications
-      : notifications.filter((n) => !n.is_read);
+    tabValue === 0 ? notifications : notifications.filter((n) => !n.is_read);
 
   if (isLoading) {
     return (
@@ -223,9 +226,7 @@ const Notifications = () => {
             sx={{ fontSize: 64, color: "text.disabled", mb: 2 }}
           />
           <Typography variant="h6" color="text.secondary">
-            {tabValue === 0
-              ? "لا توجد إشعارات"
-              : "لا توجد إشعارات غير مقروءة"}
+            {tabValue === 0 ? "لا توجد إشعارات" : "لا توجد إشعارات غير مقروءة"}
           </Typography>
         </Box>
       ) : (
@@ -266,7 +267,9 @@ const Notifications = () => {
                       </Typography>
                       <Chip
                         label={getNotificationTypeLabel(notification.type)}
-                        color={getNotificationTypeColor(notification.type) as any}
+                        color={
+                          getNotificationTypeColor(notification.type) as any
+                        }
                         size="small"
                       />
                     </Box>

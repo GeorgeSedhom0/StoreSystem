@@ -28,12 +28,14 @@ router = APIRouter(tags=["Product Batches"])
 
 class BatchCreate(BaseModel):
     """Model for creating/updating a batch"""
+
     quantity: int
     expiration_date: Optional[str] = None  # ISO format date string
 
 
 class BatchUpdate(BaseModel):
     """Model for updating batches"""
+
     batches: List[BatchCreate]
 
 
@@ -76,11 +78,11 @@ def get_product_batches(
 ):
     """
     Get all batches for a product in a store, sorted by expiration date (FEFO).
-    
+
     Args:
         product_id: The product ID
         store_id: The store ID
-        
+
     Returns:
         List of batches with their quantities and expiration dates
     """
@@ -104,14 +106,18 @@ def get_product_batches(
                 (product_id, store_id),
             )
             batches = cur.fetchall()
-            
+
             # Convert date objects to strings for JSON serialization
             for batch in batches:
-                if batch.get("expiration_date") and isinstance(batch["expiration_date"], (date, datetime)):
+                if batch.get("expiration_date") and isinstance(
+                    batch["expiration_date"], (date, datetime)
+                ):
                     batch["expiration_date"] = batch["expiration_date"].isoformat()
-                if batch.get("created_at") and isinstance(batch["created_at"], datetime):
+                if batch.get("created_at") and isinstance(
+                    batch["created_at"], datetime
+                ):
                     batch["created_at"] = batch["created_at"].isoformat()
-            
+
             # Get total stock for verification
             cur.execute(
                 """
@@ -122,17 +128,19 @@ def get_product_batches(
             )
             inventory = cur.fetchone()
             total_stock = inventory["stock"] if inventory else 0
-            
+
             # Calculate total batch quantity
             total_batch_qty = sum(b["quantity"] for b in batches)
-            
-            return JSONResponse(content={
-                "batches": batches,
-                "total_stock": total_stock,
-                "total_batch_quantity": total_batch_qty,
-                "untracked_quantity": total_stock - total_batch_qty
-            })
-            
+
+            return JSONResponse(
+                content={
+                    "batches": batches,
+                    "total_stock": total_stock,
+                    "total_batch_quantity": total_batch_qty,
+                    "untracked_quantity": total_stock - total_batch_qty,
+                }
+            )
+
     except Exception as e:
         print(f"Error getting product batches: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -148,11 +156,11 @@ def get_all_batches_expiration_info(
     Get expiration info for all products with batches in a store.
     Returns earliest expiration date and whether product has expiring batches.
     This is a bulk endpoint to avoid N+1 queries.
-    
+
     Args:
         store_id: The store ID
         threshold_days: Number of days to consider as "expiring soon"
-        
+
     Returns:
         Dict mapping product_id to expiration info
     """
@@ -174,7 +182,7 @@ def get_all_batches_expiration_info(
                 (threshold_days, store_id),
             )
             results = cur.fetchall()
-            
+
             # Build response dict
             expiration_info = {}
             for row in results:
@@ -182,11 +190,11 @@ def get_all_batches_expiration_info(
                 earliest = row["earliest_expiration"]
                 expiration_info[product_id] = {
                     "earliest_expiration": earliest.isoformat() if earliest else None,
-                    "has_expiring_batches": row["has_expiring_batches"] or False
+                    "has_expiring_batches": row["has_expiring_batches"] or False,
                 }
-            
+
             return JSONResponse(content=expiration_info)
-            
+
     except Exception as e:
         print(f"Error getting batches expiration info: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -201,12 +209,12 @@ def update_product_batches(
 ):
     """
     Replace all batches for a product. Validates total equals current stock.
-    
+
     Args:
         product_id: The product ID
         store_id: The store ID
         batch_update: The new batch configuration
-        
+
     Returns:
         Updated batches
     """
@@ -222,19 +230,21 @@ def update_product_batches(
             )
             inventory = cur.fetchone()
             if not inventory:
-                raise HTTPException(status_code=404, detail="Product not found in inventory")
-            
+                raise HTTPException(
+                    status_code=404, detail="Product not found in inventory"
+                )
+
             current_stock = inventory["stock"]
-            
+
             # Calculate total from new batches
             total_new_qty = sum(b.quantity for b in batch_update.batches)
-            
+
             if total_new_qty != current_stock:
                 raise HTTPException(
-                    status_code=400, 
-                    detail=f"Total batch quantity ({total_new_qty}) must equal current stock ({current_stock})"
+                    status_code=400,
+                    detail=f"Total batch quantity ({total_new_qty}) must equal current stock ({current_stock})",
                 )
-            
+
             # Delete existing batches
             cur.execute(
                 """
@@ -243,7 +253,7 @@ def update_product_batches(
                 """,
                 (product_id, store_id),
             )
-            
+
             # Insert new batches (aggregate by expiration date)
             aggregated = {}
             for batch in batch_update.batches:
@@ -252,7 +262,7 @@ def update_product_batches(
                     aggregated[exp_date] += batch.quantity
                 else:
                     aggregated[exp_date] = batch.quantity
-            
+
             for exp_date, qty in aggregated.items():
                 if qty > 0:
                     cur.execute(
@@ -262,7 +272,7 @@ def update_product_batches(
                         """,
                         (store_id, product_id, qty, exp_date),
                     )
-            
+
             # Return updated batches
             cur.execute(
                 """
@@ -274,19 +284,25 @@ def update_product_batches(
                 (product_id, store_id),
             )
             updated_batches = cur.fetchall()
-            
+
             # Convert date objects to strings for JSON serialization
             for batch in updated_batches:
-                if batch.get("expiration_date") and isinstance(batch["expiration_date"], (date, datetime)):
+                if batch.get("expiration_date") and isinstance(
+                    batch["expiration_date"], (date, datetime)
+                ):
                     batch["expiration_date"] = batch["expiration_date"].isoformat()
-                if batch.get("created_at") and isinstance(batch["created_at"], datetime):
+                if batch.get("created_at") and isinstance(
+                    batch["created_at"], datetime
+                ):
                     batch["created_at"] = batch["created_at"].isoformat()
-            
-            return JSONResponse(content={
-                "message": "Batches updated successfully",
-                "batches": updated_batches
-            })
-            
+
+            return JSONResponse(
+                content={
+                    "message": "Batches updated successfully",
+                    "batches": updated_batches,
+                }
+            )
+
     except HTTPException:
         raise
     except Exception as e:
@@ -304,12 +320,12 @@ def add_to_batches(
     """
     Add quantities to batches (used when buying products).
     Creates new batches or updates existing ones with the same expiration date.
-    
+
     Args:
         product_id: The product ID
         store_id: The store ID
         batches: List of batches to add
-        
+
     Returns:
         Updated batches
     """
@@ -318,7 +334,7 @@ def add_to_batches(
             for batch in batches:
                 if batch.quantity <= 0:
                     continue
-                    
+
                 # Use upsert to add to existing batch or create new one
                 cur.execute(
                     """
@@ -329,7 +345,7 @@ def add_to_batches(
                     """,
                     (store_id, product_id, batch.quantity, batch.expiration_date),
                 )
-            
+
             # Return updated batches
             cur.execute(
                 """
@@ -341,19 +357,25 @@ def add_to_batches(
                 (product_id, store_id),
             )
             updated_batches = cur.fetchall()
-            
+
             # Convert date objects to strings for JSON serialization
             for batch in updated_batches:
-                if batch.get("expiration_date") and isinstance(batch["expiration_date"], (date, datetime)):
+                if batch.get("expiration_date") and isinstance(
+                    batch["expiration_date"], (date, datetime)
+                ):
                     batch["expiration_date"] = batch["expiration_date"].isoformat()
-                if batch.get("created_at") and isinstance(batch["created_at"], datetime):
+                if batch.get("created_at") and isinstance(
+                    batch["created_at"], datetime
+                ):
                     batch["created_at"] = batch["created_at"].isoformat()
-            
-            return JSONResponse(content={
-                "message": "Batches added successfully",
-                "batches": updated_batches
-            })
-            
+
+            return JSONResponse(
+                content={
+                    "message": "Batches added successfully",
+                    "batches": updated_batches,
+                }
+            )
+
     except Exception as e:
         print(f"Error adding to batches: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -361,30 +383,31 @@ def add_to_batches(
 
 # ===== Internal functions for batch management (used by bill operations) =====
 
+
 def consume_batches_fefo(
     cur,
     store_id: int,
     product_id: int,
     quantity: int,
-    specific_batch_id: Optional[int] = None
+    specific_batch_id: Optional[int] = None,
 ) -> List[dict]:
     """
     Consume quantity from batches using FEFO (First Expired, First Out).
     If specific_batch_id is provided, consume from that batch only.
-    
+
     Args:
         cur: Database cursor
         store_id: The store ID
         product_id: The product ID
         quantity: Quantity to consume
         specific_batch_id: Optional specific batch to consume from
-        
+
     Returns:
         List of consumed batch info
     """
     consumed = []
     remaining = quantity
-    
+
     if specific_batch_id:
         # Consume from specific batch
         cur.execute(
@@ -408,20 +431,20 @@ def consume_batches_fefo(
             """,
             (store_id, product_id),
         )
-    
+
     batches = cur.fetchall()
-    
+
     for batch in batches:
         if remaining <= 0:
             break
-            
+
         batch_id = batch["id"]
         available = batch["quantity"]
         exp_date = batch["expiration_date"]
-        
+
         consume_qty = min(remaining, available)
         new_qty = available - consume_qty
-        
+
         if new_qty > 0:
             cur.execute(
                 """
@@ -436,14 +459,16 @@ def consume_batches_fefo(
                 """,
                 (batch_id,),
             )
-        
-        consumed.append({
-            "batch_id": batch_id,
-            "quantity": consume_qty,
-            "expiration_date": str(exp_date) if exp_date else None
-        })
+
+        consumed.append(
+            {
+                "batch_id": batch_id,
+                "quantity": consume_qty,
+                "expiration_date": str(exp_date) if exp_date else None,
+            }
+        )
         remaining -= consume_qty
-    
+
     return consumed
 
 
@@ -452,22 +477,22 @@ def add_to_batch(
     store_id: int,
     product_id: int,
     quantity: int,
-    expiration_date: Optional[str] = None
+    expiration_date: Optional[str] = None,
 ):
     """
     Add quantity to a batch. If expiration_date matches existing batch, add to it.
     Otherwise create new batch.
-    
+
     Args:
         cur: Database cursor
         store_id: The store ID
-        product_id: The product ID  
+        product_id: The product ID
         quantity: Quantity to add
         expiration_date: Optional expiration date
     """
     if quantity <= 0:
         return
-        
+
     cur.execute(
         """
         INSERT INTO product_batches (store_id, product_id, quantity, expiration_date)
@@ -480,17 +505,13 @@ def add_to_batch(
 
 
 def adjust_batches_for_stock_change(
-    cur,
-    store_id: int,
-    product_id: int,
-    old_stock: int,
-    new_stock: int
+    cur, store_id: int, product_id: int, old_stock: int, new_stock: int
 ):
     """
     Adjust batches when stock is manually changed in products page.
     - If stock decreased: Use FEFO to remove from earliest expiring batches
     - If stock increased: Add to the batch with highest quantity
-    
+
     Args:
         cur: Database cursor
         store_id: The store ID
@@ -499,10 +520,10 @@ def adjust_batches_for_stock_change(
         new_stock: New stock level
     """
     difference = new_stock - old_stock
-    
+
     if difference == 0:
         return
-    
+
     if difference < 0:
         # Stock decreased - consume using FEFO
         consume_batches_fefo(cur, store_id, product_id, abs(difference))
@@ -519,25 +540,33 @@ def adjust_batches_for_stock_change(
             (store_id, product_id),
         )
         largest_batch = cur.fetchone()
-        
+
         if largest_batch:
             # Add to the largest existing batch
             exp_date = largest_batch["expiration_date"]
-            add_to_batch(cur, store_id, product_id, difference, str(exp_date) if exp_date else None)
+            add_to_batch(
+                cur,
+                store_id,
+                product_id,
+                difference,
+                str(exp_date) if exp_date else None,
+            )
         else:
             # No batches exist - create one without expiration date
             add_to_batch(cur, store_id, product_id, difference, None)
 
 
-def get_earliest_expiration_batch(cur, store_id: int, product_id: int) -> Optional[dict]:
+def get_earliest_expiration_batch(
+    cur, store_id: int, product_id: int
+) -> Optional[dict]:
     """
     Get the batch with the earliest expiration date that has quantity.
-    
+
     Args:
         cur: Database cursor
         store_id: The store ID
         product_id: The product ID
-        
+
     Returns:
         Batch info or None
     """

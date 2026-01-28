@@ -191,11 +191,15 @@ def update_store_data(
             # First get existing extra_info to merge with new values
             cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
             existing = cur.fetchone()
-            existing_extra_info = existing["extra_info"] if existing and existing.get("extra_info") else {}
-            
+            existing_extra_info = (
+                existing["extra_info"]
+                if existing and existing.get("extra_info")
+                else {}
+            )
+
             # Merge existing with new extra_info (new values override existing)
             merged_extra_info = {**existing_extra_info, **extra_info}
-            
+
             cur.execute(
                 """
                 INSERT INTO store_data

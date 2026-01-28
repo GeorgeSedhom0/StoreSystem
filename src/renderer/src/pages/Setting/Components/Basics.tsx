@@ -344,7 +344,9 @@ const Basics = () => {
                   label="عدد أيام التنبيه قبل انتهاء الصلاحية"
                   type="number"
                   value={expirationAlertDays}
-                  onChange={(e) => setExpirationAlertDays(parseInt(e.target.value) || 14)}
+                  onChange={(e) =>
+                    setExpirationAlertDays(parseInt(e.target.value) || 14)
+                  }
                   variant="outlined"
                   helperText="سيتم إرسال تنبيه للمنتجات التي ستنتهي صلاحيتها خلال هذه الفترة"
                   inputProps={{ min: 1, max: 365 }}
