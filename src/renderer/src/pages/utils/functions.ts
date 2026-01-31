@@ -2,95 +2,193 @@ import { AlertMsg } from "../Shared/AlertMessage";
 import JsBarcode from "jsbarcode";
 import printJS from "print-js";
 
-const barCodeStyle = `
+// Barcode settings interface matching PrinterSettings
+interface BarcodeSettings {
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+  barcodeWidthPercent: number;
+  barcodeHeightPercent: number;
+  showProductName: boolean;
+  showPrice: boolean;
+  showStoreName: boolean;
+  showBarcodeNumber: boolean;
+  storeName: string;
+  productNameFontSize: number;
+  priceFontSize: number;
+  storeNameFontSize: number;
+  barWidth: number;
+}
+
+// Default barcode settings (same as in PrinterSettings.tsx)
+const DEFAULT_BARCODE_SETTINGS: BarcodeSettings = {
+  marginTop: 1,
+  marginBottom: 1,
+  marginLeft: 2,
+  marginRight: 2,
+  barcodeWidthPercent: 90,
+  barcodeHeightPercent: 40,
+  showProductName: true,
+  showPrice: true,
+  showStoreName: false,
+  showBarcodeNumber: true,
+  storeName: "",
+  productNameFontSize: 14,
+  priceFontSize: 12,
+  storeNameFontSize: 10,
+  barWidth: 2,
+};
+
+interface StyleParams {
+  pageWidthPx: number;
+  pageHeightPx: number;
+  marginTopPx: number;
+  marginBottomPx: number;
+  marginLeftPx: number;
+  marginRightPx: number;
+  productNameFontSize: number;
+  priceFontSize: number;
+  storeNameFontSize: number;
+}
+
+const generateBarCodeStyle = (params: StyleParams) => {
+  const {
+    pageWidthPx,
+    pageHeightPx,
+    marginTopPx,
+    marginBottomPx,
+    marginLeftPx,
+    marginRightPx,
+    productNameFontSize,
+    priceFontSize,
+    storeNameFontSize,
+  } = params;
+
+  const contentWidth = pageWidthPx - marginLeftPx - marginRightPx;
+  const contentHeight = pageHeightPx - marginTopPx - marginBottomPx;
+
+  return `
+    @page {
+      margin: 0;
+      padding: 0;
+      size: ${pageWidthPx}px ${pageHeightPx}px;
+    }
+    @media print {
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: ${pageWidthPx}px !important;
+        height: ${pageHeightPx}px !important;
+        max-height: ${pageHeightPx}px !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        page-break-after: avoid !important;
+        page-break-before: avoid !important;
+        page-break-inside: avoid !important;
+      }
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: ${pageWidthPx}px;
+      height: ${pageHeightPx}px;
+      max-height: ${pageHeightPx}px;
+      box-sizing: border-box;
+      overflow: hidden;
+      page-break-after: avoid;
+      page-break-before: avoid;
+      page-break-inside: avoid;
+    }
+    body {
+      padding: ${marginTopPx}px ${marginRightPx}px ${marginBottomPx}px ${marginLeftPx}px;
+    }
+    .barcode-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      width: ${contentWidth}px;
+      height: ${contentHeight}px;
+      max-height: ${contentHeight}px;
+      box-sizing: border-box;
+      overflow: hidden;
+      page-break-inside: avoid;
+    }
+    .barcode-container svg {
+      flex-shrink: 1;
+      max-width: 100%;
+      object-fit: contain;
+    }
+    .barcode-container .text-line {
+      display: block;
+      text-align: center;
+      direction: rtl;
+      font-weight: bold;
+      line-height: 1.2;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      flex-shrink: 0;
+    }
+    .barcode-container .store-name {
+      font-size: ${storeNameFontSize}px;
+      color: #333;
+    }
+    .barcode-container .product-name {
+      font-size: ${productNameFontSize}px;
+      margin-bottom: 2px;
+    }
+    .barcode-container .price {
+      font-size: ${priceFontSize}px;
+      margin-top: 2px;
+    }
+  `;
+};
+
+// Legacy function for fallback (web browser)
+const barCodeStyleLegacy = `
       @page {
         margin: 0;
         padding: 0;
         size: {barcodePrinterWidth}px {barcodePrinterHeight}px;
-      }
-      @media print {
-        html, body {
-          margin: 0 !important;
-          padding: 0 !important;
-          width: {barcodePrinterWidth}px !important;
-          height: {barcodePrinterHeight}px !important;
-          max-height: {barcodePrinterHeight}px !important;
-          box-sizing: border-box !important;
-          overflow: hidden !important;
-          page-break-after: avoid !important;
-          page-break-before: avoid !important;
-          page-break-inside: avoid !important;
-        }
-        body {
-          padding: 16px !important;
-        }
       }
       html, body {
         margin: 0;
         padding: 0;
         width: {barcodePrinterWidth}px;
         height: {barcodePrinterHeight}px;
-        max-height: {barcodePrinterHeight}px;
-        box-sizing: border-box;
-        overflow: hidden;
-        page-break-after: avoid;
-        page-break-before: avoid;
-        page-break-inside: avoid;
       }
-      body {
-        padding: 16px;
-      }
-      .barcode {
+      .barcode-container {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        width: calc(100% - 32px);
-        height: calc(100% - 32px);
-        max-height: calc({barcodePrinterHeight}px - 32px);
-        box-sizing: border-box;
-        overflow: hidden;
-        page-break-inside: avoid;
-      }
-      .barcode svg {
         width: 100%;
-        flex-shrink: 2;
-        min-height: 30px;
-        max-height: 50%;
-        object-fit: contain;
+        height: 100%;
+        padding: 8px;
+        box-sizing: border-box;
       }
-      .barcode span {
-        display: block;
-        text-align: center;
-        direction: rtl;
-        font-weight: bold;
-        line-height: 1;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        white-space: normal;
+      .barcode-container svg {
         max-width: 100%;
-        flex-shrink: 3;
-        overflow: hidden;
       }
-      .barcode .title {
-        font-size: clamp(18px, 3vw, 50px);
-        margin-bottom: 2px;
-        padding: 2px 4px;
-        max-height: 20%;
+      .barcode-container .text-line {
+        text-align: center;
+        font-weight: bold;
       }
-      .barcode .footer {
-        font-size: clamp(16px, 3vw, 50px);
-        margin-top: 2px;
-        padding: 2px 4px;
-        max-height: 15%;
-      }
+      .barcode-container .product-name { font-size: 14px; }
+      .barcode-container .price { font-size: 12px; }
+      .barcode-container .store-name { font-size: 10px; }
 `;
 
-const getBarCodeStyle = (
+const getBarCodeStyleLegacy = (
   barcodePrinterHeight: number,
   barcodePrinterWidth: number,
 ) => {
-  return barCodeStyle
+  return barCodeStyleLegacy
     .replaceAll("{barcodePrinterHeight}", barcodePrinterHeight.toString())
     .replaceAll("{barcodePrinterWidth}", barcodePrinterWidth.toString());
 };
@@ -138,20 +236,10 @@ export const printBill = async (
 
 export const printCode = async (
   code: string,
-  title: string,
-  footer: string,
+  productName: string,
+  priceText: string,
   quantity: number = 1,
 ) => {
-  const container = document.createElement("div");
-  const svg = document.createElement("svg");
-  const titleSpan = document.createElement("span");
-  const footerSpan = document.createElement("span");
-  container.classList.add("barcode");
-  titleSpan.classList.add("title");
-  footerSpan.classList.add("footer");
-  titleSpan.innerText = title;
-  footerSpan.innerText = footer;
-
   if (window?.electron?.ipcRenderer) {
     const printerSettings =
       await window.electron.ipcRenderer.invoke("getPrinterSettings");
@@ -159,63 +247,117 @@ export const printCode = async (
 
     if (!barcodePrinterWidth || !barcodePrinterHeight) {
       console.error("Barcode printer width and height not found");
-      alert("فشلت عملية الطباعة");
+      alert("فشلت عملية الطباعة: لم يتم تحديد أبعاد الباركود");
       return;
     }
+
+    // Merge saved settings with defaults
+    const barcodeSettings: BarcodeSettings = {
+      ...DEFAULT_BARCODE_SETTINGS,
+      ...(printerSettings.barcodeSettings || {}),
+    };
 
     // Convert mm to pixels (203 DPI thermal printer ≈ 8 pixels per mm)
     const MM_TO_PX = 8;
     const pageWidthPx = barcodePrinterWidth * MM_TO_PX;
     const pageHeightPx = barcodePrinterHeight * MM_TO_PX;
 
-    // Add 2mm margin on all sides (16px total: 2mm * 8px/mm on each side)
-    const MARGIN_PX = 2 * MM_TO_PX;
-    const printerWidthPx = pageWidthPx - MARGIN_PX * 2;
-    const printerHeightPx = pageHeightPx - MARGIN_PX * 2;
+    // Calculate margins in pixels
+    const marginTopPx = barcodeSettings.marginTop * MM_TO_PX;
+    const marginBottomPx = barcodeSettings.marginBottom * MM_TO_PX;
+    const marginLeftPx = barcodeSettings.marginLeft * MM_TO_PX;
+    const marginRightPx = barcodeSettings.marginRight * MM_TO_PX;
 
-    // Calculate safe bar width based on code length (numeric codes use CODE128C)
+    // Calculate available content area
+    const contentWidthPx = pageWidthPx - marginLeftPx - marginRightPx;
+    const contentHeightPx = pageHeightPx - marginTopPx - marginBottomPx;
+
+    // Calculate space needed for text elements
+    let textHeightPx = 0;
+    if (barcodeSettings.showStoreName && barcodeSettings.storeName) {
+      textHeightPx += barcodeSettings.storeNameFontSize + 4;
+    }
+    if (barcodeSettings.showProductName && productName) {
+      textHeightPx += barcodeSettings.productNameFontSize + 4;
+    }
+    if (barcodeSettings.showPrice && priceText) {
+      textHeightPx += barcodeSettings.priceFontSize + 4;
+    }
+    if (barcodeSettings.showBarcodeNumber) {
+      textHeightPx += 14; // Space for barcode number below bars
+    }
+
+    // Calculate barcode dimensions
+    const barcodeWidthPx = (contentWidthPx * barcodeSettings.barcodeWidthPercent) / 100;
+    const availableHeightForBarcode = contentHeightPx - textHeightPx;
+    const barcodeHeightPx = Math.max(
+      20,
+      (availableHeightForBarcode * barcodeSettings.barcodeHeightPercent) / 100,
+    );
+
+    // Calculate bar width based on code length and available width
     const estimatedSymbols = Math.ceil(code.length / 2) + 3;
     const modulesPerSymbol = 11;
     const totalModules = estimatedSymbols * modulesPerSymbol;
-    const safeBarWidth = Math.floor(printerWidthPx / totalModules);
+    const calculatedBarWidth = Math.floor(barcodeWidthPx / totalModules);
+    const barWidth = Math.max(1, Math.min(calculatedBarWidth, barcodeSettings.barWidth));
 
-    // Reserve space for text elements (with conservative sizing to prevent overflow)
-    const titleHeight = Math.min(28, printerHeightPx * 0.24);
-    const footerHeight = Math.min(22, printerHeightPx * 0.19);
-    const barcodeTextHeight = 18; // JsBarcode's human-readable text
-    const padding = 8;
+    // Build the container
+    const container = document.createElement("div");
+    container.classList.add("barcode-container");
 
-    const availableHeightForBars =
-      printerHeightPx -
-      titleHeight -
-      footerHeight -
-      barcodeTextHeight -
-      padding * 3;
+    // Add store name if enabled
+    if (barcodeSettings.showStoreName && barcodeSettings.storeName) {
+      const storeNameSpan = document.createElement("span");
+      storeNameSpan.classList.add("text-line", "store-name");
+      storeNameSpan.innerText = barcodeSettings.storeName;
+      container.appendChild(storeNameSpan);
+    }
 
-    // Limit barcode height to maximum 42% of available height to ensure everything fits
-    const barcodeHeight = Math.max(
-      25,
-      Math.min(availableHeightForBars * 0.8, printerHeightPx * 0.42),
-    );
+    // Add product name if enabled
+    if (barcodeSettings.showProductName && productName) {
+      const productNameSpan = document.createElement("span");
+      productNameSpan.classList.add("text-line", "product-name");
+      productNameSpan.innerText = productName;
+      container.appendChild(productNameSpan);
+    }
 
+    // Create and add barcode SVG
+    const svg = document.createElement("svg");
     JsBarcode(svg, code, {
       format: "CODE128",
-      width: safeBarWidth,
-      height: barcodeHeight,
-      fontSize: 16,
-      displayValue: true, // Show human-readable text
+      width: barWidth,
+      height: barcodeHeightPx,
+      fontSize: barcodeSettings.showBarcodeNumber ? 12 : 0,
+      displayValue: barcodeSettings.showBarcodeNumber,
       margin: 0,
+      textMargin: 2,
+    });
+    container.appendChild(svg);
+
+    // Add price if enabled
+    if (barcodeSettings.showPrice && priceText) {
+      const priceSpan = document.createElement("span");
+      priceSpan.classList.add("text-line", "price");
+      priceSpan.innerText = priceText;
+      container.appendChild(priceSpan);
+    }
+
+    // Generate style
+    const style = generateBarCodeStyle({
+      pageWidthPx,
+      pageHeightPx,
+      marginTopPx,
+      marginBottomPx,
+      marginLeftPx,
+      marginRightPx,
+      productNameFontSize: barcodeSettings.productNameFontSize,
+      priceFontSize: barcodeSettings.priceFontSize,
+      storeNameFontSize: barcodeSettings.storeNameFontSize,
     });
 
-    container.appendChild(titleSpan);
-    container.appendChild(svg);
-    container.appendChild(footerSpan);
-
-    // Embed the style in the html (use page dimensions for @page, not barcode dimensions)
     const containerHtmlWithStyle = `
-      <style>
-        ${getBarCodeStyle(pageHeightPx, pageWidthPx)}
-      </style>
+      <style>${style}</style>
       ${container.outerHTML}
     `;
 
@@ -230,28 +372,41 @@ export const printCode = async (
       alert("فشلت عملية الطباعة: " + result.error);
     }
   } else {
-    // Web browser fallback
+    // Web browser fallback - use basic settings
+    const container = document.createElement("div");
+    container.classList.add("barcode-container");
+
+    const productNameSpan = document.createElement("span");
+    productNameSpan.classList.add("text-line", "product-name");
+    productNameSpan.innerText = productName;
+    container.appendChild(productNameSpan);
+
+    const svg = document.createElement("svg");
     JsBarcode(svg, code, {
       format: "CODE128",
       width: 2,
       height: 50,
-      fontSize: 20,
+      fontSize: 14,
       displayValue: true,
+      margin: 0,
     });
-
-    container.appendChild(titleSpan);
     container.appendChild(svg);
-    container.appendChild(footerSpan);
+
+    if (priceText) {
+      const priceSpan = document.createElement("span");
+      priceSpan.classList.add("text-line", "price");
+      priceSpan.innerText = priceText;
+      container.appendChild(priceSpan);
+    }
 
     printJS({
       printable: container.outerHTML,
       type: "raw-html",
       targetStyles: ["*"],
       scanStyles: false,
-      style: getBarCodeStyle(100, 200),
+      style: getBarCodeStyleLegacy(200, 320),
     });
 
-    // Clean up
     container.remove();
   }
 };

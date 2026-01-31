@@ -3,6 +3,11 @@ import {
   Button,
   ButtonGroup,
   Card,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   Grid2,
@@ -82,9 +87,15 @@ const AdminSell = () => {
   const [installmentInterval, setInstallmentInterval] = useState<number>(30);
   const [paid, setPaid] = useState<number>(0);
   const [usingThirdParties, setUsingThirdParties] = useState<boolean>(false);
+  const [highDiscountDialogOpen, setHighDiscountDialogOpen] =
+    useState<boolean>(false);
+  const [pendingPrintAfterSubmit, setPendingPrintAfterSubmit] =
+    useState<boolean>(false);
 
   // Ref for the cart container to enable auto-scroll
   const cartTableRef = useRef<HTMLDivElement>(null);
+  // Track previous cart length to detect new product additions
+  const prevCartLengthRef = useRef<number>(0);
 
   // Add an internal state to track submission status
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -129,11 +140,12 @@ const AdminSell = () => {
     }
   }, [isCreatingBill, isSubmitting]);
 
-  // Auto-scroll cart to bottom when new products are added
+  // Auto-scroll cart to bottom only when a NEW product is added (not on quantity changes)
   useEffect(() => {
-    if (cartTableRef.current) {
+    if (cartTableRef.current && shoppingCart.length > prevCartLengthRef.current) {
       cartTableRef.current.scrollTop = cartTableRef.current.scrollHeight;
     }
+    prevCartLengthRef.current = shoppingCart.length;
   }, [shoppingCart]);
 
   const loading = isProductsLoading || isShiftLoading;
@@ -186,41 +198,9 @@ const AdminSell = () => {
   // Client barcode detection - only enabled when third parties section is visible
   useClientBarcodeDetection(parties, handleClientFound, setMsg, usingThirdParties);
 
-  // Create a debounced version of the submit function to prevent multiple submissions
-  const submitBill = useCallback(
-    async (shoppingCart: SCProduct[], discount: number) => {
-      // Use both the React Query state and our local state to prevent multiple submissions
-      if (isCreatingBill || isSubmitting || submissionInProgress.current) {
-        console.log(
-          "Submission already in progress, ignoring duplicate request",
-        );
-        return;
-      }
-
-      // Set our local states immediately to prevent race conditions
-      setIsSubmitting(true);
-      submissionInProgress.current = true;
-
-      if (discount >= shoppingCart.reduce((acc, item) => acc + item.price, 0)) {
-        setMsg({
-          type: "error",
-          text: "الخصم اكبر من الاجمالي",
-        });
-        setIsSubmitting(false);
-        submissionInProgress.current = false;
-        return;
-      }
-
-      if (shoppingCart.length === 0) {
-        setMsg({
-          type: "error",
-          text: "لا توجد منتجات في السلة",
-        });
-        setIsSubmitting(false);
-        submissionInProgress.current = false;
-        return;
-      }
-
+  // Core bill submission logic (without discount validation)
+  const executeBillSubmission = useCallback(
+    async (shouldPrint: boolean = false) => {
       try {
         const bill = {
           time: new Date().toLocaleString(),
@@ -280,6 +260,10 @@ const AdminSell = () => {
           type: "success",
           text: "تم اضافة الفاتورة بنجاح",
         });
+
+        if (shouldPrint) {
+          printBill(billRef, setMsg, setLastBillOpen);
+        }
       } catch (error) {
         console.log(error);
         setMsg({
@@ -305,26 +289,107 @@ const AdminSell = () => {
       installmentInterval,
       paid,
       storeId,
-      isCreatingBill,
+      discount,
+      shoppingCart,
       addPartyMutationAsync,
+      createBill,
     ],
   );
+
+  // Create a debounced version of the submit function to prevent multiple submissions
+  const submitBill = useCallback(
+    async (
+      shoppingCart: SCProduct[],
+      discount: number,
+      shouldPrint: boolean = false,
+      bypassDiscountCheck: boolean = false,
+    ) => {
+      // Use both the React Query state and our local state to prevent multiple submissions
+      if (isCreatingBill || isSubmitting || submissionInProgress.current) {
+        console.log(
+          "Submission already in progress, ignoring duplicate request",
+        );
+        return;
+      }
+
+      // Set our local states immediately to prevent race conditions
+      setIsSubmitting(true);
+      submissionInProgress.current = true;
+
+      const cartTotal = shoppingCart.reduce(
+        (acc, item) => acc + item.price * item.quantity,
+        0,
+      );
+
+      if (discount >= cartTotal) {
+        setMsg({
+          type: "error",
+          text: "الخصم اكبر من الاجمالي",
+        });
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
+        return;
+      }
+
+      if (shoppingCart.length === 0) {
+        setMsg({
+          type: "error",
+          text: "لا توجد منتجات في السلة",
+        });
+        setIsSubmitting(false);
+        submissionInProgress.current = false;
+        return;
+      }
+
+      // Check if bill total is below wholesale cost (only for sell transactions, not returns)
+      if (!bypassDiscountCheck && billPayment !== "return") {
+        const wholesaleTotal = shoppingCart.reduce(
+          (acc, item) => acc + item.wholesale_price * item.quantity,
+          0,
+        );
+        const billTotal = cartTotal - discount;
+
+        if (billTotal < wholesaleTotal) {
+          // Show confirmation dialog instead of blocking
+          setPendingPrintAfterSubmit(shouldPrint);
+          setHighDiscountDialogOpen(true);
+          setIsSubmitting(false);
+          submissionInProgress.current = false;
+          return;
+        }
+      }
+
+      await executeBillSubmission(shouldPrint);
+    },
+    [billPayment, isCreatingBill, isSubmitting, executeBillSubmission],
+  );
+
+  // Handle confirmation from high discount dialog
+  const handleHighDiscountConfirm = useCallback(async () => {
+    setHighDiscountDialogOpen(false);
+    setIsSubmitting(true);
+    submissionInProgress.current = true;
+    await executeBillSubmission(pendingPrintAfterSubmit);
+    setPendingPrintAfterSubmit(false);
+  }, [executeBillSubmission, pendingPrintAfterSubmit]);
+
+  const handleHighDiscountCancel = useCallback(() => {
+    setHighDiscountDialogOpen(false);
+    setPendingPrintAfterSubmit(false);
+  }, []);
 
   // Handle keyboard shortcuts using a single event listener that remains stable
   const handleKeyDown = useCallback(
     async (e: KeyboardEvent) => {
       if (e.key === "F2") {
         e.preventDefault();
-        await submitBill(shoppingCart, discount);
+        await submitBill(shoppingCart, discount, false);
       } else if (e.key === "F1") {
         e.preventDefault();
-        await submitBill(shoppingCart, discount);
-        if (!isSubmitting && !submissionInProgress.current) {
-          printBill(billRef, setMsg, setLastBillOpen);
-        }
+        await submitBill(shoppingCart, discount, true);
       }
     },
-    [shoppingCart, discount, submitBill, isSubmitting],
+    [shoppingCart, discount, submitBill],
   );
 
   // Set up keyboard listener only once with a stable callback reference
@@ -337,11 +402,8 @@ const AdminSell = () => {
 
   // Create a safe wrapper for the print and submit function
   const submitAndPrint = useCallback(async () => {
-    await submitBill(shoppingCart, discount);
-    if (!isSubmitting && !submissionInProgress.current) {
-      printBill(billRef, setMsg, setLastBillOpen);
-    }
-  }, [submitBill, shoppingCart, discount, isSubmitting]);
+    await submitBill(shoppingCart, discount, true);
+  }, [submitBill, shoppingCart, discount]);
 
   // Check if submit should be disabled
   const isSubmitDisabled =
@@ -361,6 +423,33 @@ const AdminSell = () => {
       />
       <LoadingScreen loading={loading} />
       <AlertMessage message={msg} setMessage={setMsg} />
+      {/* High Discount Confirmation Dialog */}
+      <Dialog
+        open={highDiscountDialogOpen}
+        onClose={handleHighDiscountCancel}
+        aria-labelledby="high-discount-dialog-title"
+      >
+        <DialogTitle id="high-discount-dialog-title">
+          تحذير: الخصم مرتفع
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            الخصم المطبق على هذه الفاتورة مرتفع جداً. هل أنت متأكد من المتابعة؟
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleHighDiscountCancel} color="primary">
+            إلغاء
+          </Button>
+          <Button
+            onClick={handleHighDiscountConfirm}
+            color="error"
+            variant="contained"
+          >
+            متابعة
+          </Button>
+        </DialogActions>
+      </Dialog>
       <ShiftDialog
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
@@ -424,7 +513,7 @@ const AdminSell = () => {
               <ButtonGroup fullWidth>
                 <Button
                   variant="contained"
-                  onClick={() => submitBill(shoppingCart, discount)}
+                  onClick={() => submitBill(shoppingCart, discount, false)}
                   disabled={isSubmitDisabled}
                 >
                   حفظ الفاتورة (F2)

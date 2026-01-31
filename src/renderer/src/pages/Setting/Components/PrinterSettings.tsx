@@ -12,6 +12,12 @@ import {
   Divider,
   Alert,
   Chip,
+  FormControlLabel,
+  Switch,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Slider,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import AlertMessage, { AlertMsg } from "@renderer/pages/Shared/AlertMessage";
@@ -21,7 +27,62 @@ import {
   QrCode as BarcodeIcon,
   Save as SaveIcon,
   Straighten as SizeIcon,
+  ExpandMore as ExpandMoreIcon,
+  Tune as TuneIcon,
 } from "@mui/icons-material";
+
+// Default barcode settings optimized for 40mm x 25mm labels
+const DEFAULT_BARCODE_SETTINGS = {
+  // Margins in mm
+  marginTop: 1,
+  marginBottom: 1,
+  marginLeft: 2,
+  marginRight: 2,
+  // Barcode size as percentage of available space
+  barcodeWidthPercent: 90,
+  barcodeHeightPercent: 40,
+  // What to show
+  showProductName: true,
+  showPrice: true,
+  showStoreName: false,
+  showBarcodeNumber: true,
+  // Store name (for when showStoreName is true)
+  storeName: "",
+  // Font sizes in pixels
+  productNameFontSize: 14,
+  priceFontSize: 12,
+  storeNameFontSize: 10,
+  // Bar width (1-4, higher = thicker bars)
+  barWidth: 2,
+};
+
+interface BarcodeSettings {
+  marginTop: number;
+  marginBottom: number;
+  marginLeft: number;
+  marginRight: number;
+  barcodeWidthPercent: number;
+  barcodeHeightPercent: number;
+  showProductName: boolean;
+  showPrice: boolean;
+  showStoreName: boolean;
+  showBarcodeNumber: boolean;
+  storeName: string;
+  productNameFontSize: number;
+  priceFontSize: number;
+  storeNameFontSize: number;
+  barWidth: number;
+}
+
+interface PrinterSettingsState {
+  billPrinter: string;
+  barcodePrinter: string;
+  billPrinterWidth: string;
+  billPrinterHeight: string;
+  barcodePrinterWidth: string;
+  barcodePrinterHeight: string;
+  barcodeSettings: BarcodeSettings;
+}
 
 const PrinterSettings = () => {
   const [printers, setPrinters] = useState<
@@ -29,13 +90,14 @@ const PrinterSettings = () => {
       name: string;
     }[]
   >([]);
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<PrinterSettingsState>({
     billPrinter: "",
     barcodePrinter: "",
     billPrinterWidth: "",
     billPrinterHeight: "",
-    barcodePrinterWidth: "",
-    barcodePrinterHeight: "",
+    barcodePrinterWidth: "40",
+    barcodePrinterHeight: "25",
+    barcodeSettings: { ...DEFAULT_BARCODE_SETTINGS },
   });
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<AlertMsg>({
@@ -52,7 +114,15 @@ const PrinterSettings = () => {
         ]);
         setPrinters(availablePrinters);
         if (savedSettings) {
-          setSettings(savedSettings);
+          // Merge saved settings with defaults to handle new fields
+          setSettings({
+            ...settings,
+            ...savedSettings,
+            barcodeSettings: {
+              ...DEFAULT_BARCODE_SETTINGS,
+              ...(savedSettings.barcodeSettings || {}),
+            },
+          });
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -77,6 +147,19 @@ const PrinterSettings = () => {
 
   const handleChange = (field: string) => (event: any) => {
     setSettings((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleBarcodeSettingChange = <K extends keyof BarcodeSettings>(
+    field: K,
+    value: BarcodeSettings[K],
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      barcodeSettings: {
+        ...prev.barcodeSettings,
+        [field]: value,
+      },
+    }));
   };
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
@@ -221,6 +304,7 @@ const PrinterSettings = () => {
             </Box>
 
             <Grid2 container spacing={3}>
+              {/* Printer Selection */}
               <Grid2 size={12}>
                 <FormControl fullWidth>
                   <InputLabel>طابعة الباركود</InputLabel>
@@ -246,10 +330,11 @@ const PrinterSettings = () => {
                 </FormControl>
               </Grid2>
 
+              {/* Label Size */}
               <Grid2 size={6}>
                 <TextField
                   fullWidth
-                  label="عرض الباركود (مم)"
+                  label="عرض الملصق (مم)"
                   type="number"
                   value={settings.barcodePrinterWidth}
                   onChange={handleChange("barcodePrinterWidth")}
@@ -260,14 +345,14 @@ const PrinterSettings = () => {
                       ),
                     },
                   }}
-                  helperText="مطلوب*"
+                  helperText="مثال: 40 مم"
                 />
               </Grid2>
 
               <Grid2 size={6}>
                 <TextField
                   fullWidth
-                  label="ارتفاع الباركود (مم)"
+                  label="ارتفاع الملصق (مم)"
                   type="number"
                   value={settings.barcodePrinterHeight}
                   onChange={handleChange("barcodePrinterHeight")}
@@ -278,8 +363,320 @@ const PrinterSettings = () => {
                       ),
                     },
                   }}
-                  helperText="مطلوب*"
+                  helperText="مثال: 25 مم"
                 />
+              </Grid2>
+
+              {/* Advanced Barcode Settings */}
+              <Grid2 size={12}>
+                <Accordion defaultExpanded={false}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <TuneIcon color="primary" />
+                      <Typography fontWeight={600}>
+                        إعدادات متقدمة للباركود
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Grid2 container spacing={3}>
+                      {/* Margins */}
+                      <Grid2 size={12}>
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          gutterBottom
+                        >
+                          الهوامش (مم)
+                        </Typography>
+                      </Grid2>
+                      <Grid2 size={3}>
+                        <TextField
+                          fullWidth
+                          label="أعلى"
+                          type="number"
+                          size="small"
+                          value={settings.barcodeSettings.marginTop}
+                          onChange={(e) =>
+                            handleBarcodeSettingChange(
+                              "marginTop",
+                              Number(e.target.value),
+                            )
+                          }
+                          inputProps={{ min: 0, max: 10, step: 0.5 }}
+                        />
+                      </Grid2>
+                      <Grid2 size={3}>
+                        <TextField
+                          fullWidth
+                          label="أسفل"
+                          type="number"
+                          size="small"
+                          value={settings.barcodeSettings.marginBottom}
+                          onChange={(e) =>
+                            handleBarcodeSettingChange(
+                              "marginBottom",
+                              Number(e.target.value),
+                            )
+                          }
+                          inputProps={{ min: 0, max: 10, step: 0.5 }}
+                        />
+                      </Grid2>
+                      <Grid2 size={3}>
+                        <TextField
+                          fullWidth
+                          label="يسار"
+                          type="number"
+                          size="small"
+                          value={settings.barcodeSettings.marginLeft}
+                          onChange={(e) =>
+                            handleBarcodeSettingChange(
+                              "marginLeft",
+                              Number(e.target.value),
+                            )
+                          }
+                          inputProps={{ min: 0, max: 10, step: 0.5 }}
+                        />
+                      </Grid2>
+                      <Grid2 size={3}>
+                        <TextField
+                          fullWidth
+                          label="يمين"
+                          type="number"
+                          size="small"
+                          value={settings.barcodeSettings.marginRight}
+                          onChange={(e) =>
+                            handleBarcodeSettingChange(
+                              "marginRight",
+                              Number(e.target.value),
+                            )
+                          }
+                          inputProps={{ min: 0, max: 10, step: 0.5 }}
+                        />
+                      </Grid2>
+
+                      {/* Barcode Size */}
+                      <Grid2 size={12}>
+                        <Divider sx={{ my: 1 }} />
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          gutterBottom
+                          sx={{ mt: 2 }}
+                        >
+                          حجم الباركود
+                        </Typography>
+                      </Grid2>
+                      <Grid2 size={6}>
+                        <Typography variant="body2" gutterBottom>
+                          عرض الباركود: {settings.barcodeSettings.barcodeWidthPercent}%
+                        </Typography>
+                        <Slider
+                          value={settings.barcodeSettings.barcodeWidthPercent}
+                          onChange={(_e, value) =>
+                            handleBarcodeSettingChange(
+                              "barcodeWidthPercent",
+                              value as number,
+                            )
+                          }
+                          min={50}
+                          max={100}
+                          valueLabelDisplay="auto"
+                        />
+                      </Grid2>
+                      <Grid2 size={6}>
+                        <Typography variant="body2" gutterBottom>
+                          ارتفاع الباركود: {settings.barcodeSettings.barcodeHeightPercent}%
+                        </Typography>
+                        <Slider
+                          value={settings.barcodeSettings.barcodeHeightPercent}
+                          onChange={(_e, value) =>
+                            handleBarcodeSettingChange(
+                              "barcodeHeightPercent",
+                              value as number,
+                            )
+                          }
+                          min={20}
+                          max={70}
+                          valueLabelDisplay="auto"
+                        />
+                      </Grid2>
+                      <Grid2 size={6}>
+                        <Typography variant="body2" gutterBottom>
+                          سُمك الخطوط: {settings.barcodeSettings.barWidth}
+                        </Typography>
+                        <Slider
+                          value={settings.barcodeSettings.barWidth}
+                          onChange={(_e, value) =>
+                            handleBarcodeSettingChange("barWidth", value as number)
+                          }
+                          min={1}
+                          max={4}
+                          step={1}
+                          marks
+                          valueLabelDisplay="auto"
+                        />
+                      </Grid2>
+
+                      {/* Display Options */}
+                      <Grid2 size={12}>
+                        <Divider sx={{ my: 1 }} />
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          gutterBottom
+                          sx={{ mt: 2 }}
+                        >
+                          العناصر المعروضة
+                        </Typography>
+                      </Grid2>
+                      <Grid2 size={6}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={settings.barcodeSettings.showProductName}
+                              onChange={(e) =>
+                                handleBarcodeSettingChange(
+                                  "showProductName",
+                                  e.target.checked,
+                                )
+                              }
+                            />
+                          }
+                          label="اسم المنتج"
+                        />
+                      </Grid2>
+                      <Grid2 size={6}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={settings.barcodeSettings.showPrice}
+                              onChange={(e) =>
+                                handleBarcodeSettingChange(
+                                  "showPrice",
+                                  e.target.checked,
+                                )
+                              }
+                            />
+                          }
+                          label="السعر"
+                        />
+                      </Grid2>
+                      <Grid2 size={6}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={settings.barcodeSettings.showBarcodeNumber}
+                              onChange={(e) =>
+                                handleBarcodeSettingChange(
+                                  "showBarcodeNumber",
+                                  e.target.checked,
+                                )
+                              }
+                            />
+                          }
+                          label="رقم الباركود"
+                        />
+                      </Grid2>
+                      <Grid2 size={6}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={settings.barcodeSettings.showStoreName}
+                              onChange={(e) =>
+                                handleBarcodeSettingChange(
+                                  "showStoreName",
+                                  e.target.checked,
+                                )
+                              }
+                            />
+                          }
+                          label="اسم المتجر"
+                        />
+                      </Grid2>
+
+                      {/* Store Name Input (shown only when showStoreName is true) */}
+                      {settings.barcodeSettings.showStoreName && (
+                        <Grid2 size={12}>
+                          <TextField
+                            fullWidth
+                            label="اسم المتجر"
+                            size="small"
+                            value={settings.barcodeSettings.storeName}
+                            onChange={(e) =>
+                              handleBarcodeSettingChange("storeName", e.target.value)
+                            }
+                            placeholder="أدخل اسم المتجر"
+                          />
+                        </Grid2>
+                      )}
+
+                      {/* Font Sizes */}
+                      <Grid2 size={12}>
+                        <Divider sx={{ my: 1 }} />
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          gutterBottom
+                          sx={{ mt: 2 }}
+                        >
+                          أحجام الخطوط (بكسل)
+                        </Typography>
+                      </Grid2>
+                      <Grid2 size={4}>
+                        <TextField
+                          fullWidth
+                          label="اسم المنتج"
+                          type="number"
+                          size="small"
+                          value={settings.barcodeSettings.productNameFontSize}
+                          onChange={(e) =>
+                            handleBarcodeSettingChange(
+                              "productNameFontSize",
+                              Number(e.target.value),
+                            )
+                          }
+                          inputProps={{ min: 8, max: 24 }}
+                          disabled={!settings.barcodeSettings.showProductName}
+                        />
+                      </Grid2>
+                      <Grid2 size={4}>
+                        <TextField
+                          fullWidth
+                          label="السعر"
+                          type="number"
+                          size="small"
+                          value={settings.barcodeSettings.priceFontSize}
+                          onChange={(e) =>
+                            handleBarcodeSettingChange(
+                              "priceFontSize",
+                              Number(e.target.value),
+                            )
+                          }
+                          inputProps={{ min: 8, max: 24 }}
+                          disabled={!settings.barcodeSettings.showPrice}
+                        />
+                      </Grid2>
+                      <Grid2 size={4}>
+                        <TextField
+                          fullWidth
+                          label="اسم المتجر"
+                          type="number"
+                          size="small"
+                          value={settings.barcodeSettings.storeNameFontSize}
+                          onChange={(e) =>
+                            handleBarcodeSettingChange(
+                              "storeNameFontSize",
+                              Number(e.target.value),
+                            )
+                          }
+                          inputProps={{ min: 8, max: 20 }}
+                          disabled={!settings.barcodeSettings.showStoreName}
+                        />
+                      </Grid2>
+                    </Grid2>
+                  </AccordionDetails>
+                </Accordion>
               </Grid2>
             </Grid2>
           </Paper>

@@ -10,6 +10,11 @@ import {
   TableRow,
   TableCell,
   IconButton,
+  ToggleButton,
+  ToggleButtonGroup,
+  TableContainer,
+  TablePagination,
+  Chip,
 } from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -59,12 +64,24 @@ interface DetailedAnalyticsResponse {
     current_price_margin_pct: number;
   }>;
   clients: {
-    new: { count: number; total_sales: number };
-    returning_lt5: { count: number; total_sales: number };
-    loyal_gte5: { count: number; total_sales: number };
+    categories: {
+      new: { count: number; total_sales: number };
+      returning_lt5: { count: number; total_sales: number };
+      loyal_gte5: { count: number; total_sales: number };
+    };
+    all_clients: Array<{
+      party_id: number;
+      name: string;
+      phone: string;
+      total: number;
+      bills_count: number;
+      prior_count: number;
+      category: string;
+    }>;
   };
   cash_flow_daily: Series3; // [date, cash_in, cash_out]
   inventory_net_value_3m: [string, number][]; // [date, net_value]
+  inventory_net_value_by_shift: [string, number][]; // [datetime, net_value] - shift end times
 }
 
 const getDetailedAnalytics = async (
@@ -93,6 +110,11 @@ const formatCurrency = (value: number): string =>
 const DetailedAnalyticsTab = () => {
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("month"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
+  const [inventoryViewMode, setInventoryViewMode] = useState<"daily" | "shift">(
+    "daily",
+  );
+  const [clientsPage, setClientsPage] = useState(0);
+  const [clientsRowsPerPage, setClientsRowsPerPage] = useState(10);
   const { storeId } = useContext(StoreContext);
 
   const {
@@ -128,12 +150,16 @@ const DetailedAnalyticsTab = () => {
       overview: { cash_in_series: [], profit_series: [] },
       top_products: [],
       clients: {
-        new: { count: 0, total_sales: 0 },
-        returning_lt5: { count: 0, total_sales: 0 },
-        loyal_gte5: { count: 0, total_sales: 0 },
+        categories: {
+          new: { count: 0, total_sales: 0 },
+          returning_lt5: { count: 0, total_sales: 0 },
+          loyal_gte5: { count: 0, total_sales: 0 },
+        },
+        all_clients: [],
       },
       cash_flow_daily: [],
       inventory_net_value_3m: [],
+      inventory_net_value_by_shift: [],
     } as DetailedAnalyticsResponse,
   });
 
@@ -231,10 +257,52 @@ const DetailedAnalyticsTab = () => {
     };
   }, [data.cash_flow_daily]);
 
-  // Inventory net value trend (3 months)
-  const inventoryValueOptions: echarts.EChartsOption = useMemo(
-    () => ({
-      tooltip: { trigger: "axis" },
+  // Inventory net value trend
+  const inventoryValueOptions: echarts.EChartsOption = useMemo(() => {
+    const isShiftView = inventoryViewMode === "shift";
+    const chartData = isShiftView
+      ? data.inventory_net_value_by_shift
+      : data.inventory_net_value_3m;
+
+    return {
+      tooltip: {
+        trigger: "axis",
+        formatter: (params: unknown) => {
+          const p = Array.isArray(params) ? params[0] : params;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const point = p as any;
+          if (!point || !point.data) return "";
+          const [timeStr, value] = point.data;
+          const formattedValue = new Intl.NumberFormat("en-EG", {
+            style: "currency",
+            currency: "EGP",
+          }).format(value || 0);
+
+          if (isShiftView) {
+            // For shift view, show the full datetime
+            const date = new Date(timeStr);
+            const formattedDate = date.toLocaleDateString("ar-EG", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            });
+            const formattedTime = date.toLocaleTimeString("ar-EG", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            return `وقت إغلاق الشيفت: ${formattedDate} ${formattedTime}<br/>قيمة المخزون: ${formattedValue}`;
+          } else {
+            // For daily view, show just the date
+            const date = new Date(timeStr);
+            const formattedDate = date.toLocaleDateString("ar-EG", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            });
+            return `${formattedDate}<br/>قيمة المخزون: ${formattedValue}`;
+          }
+        },
+      },
       toolbox: { feature: { saveAsImage: {} }, show: true },
       xAxis: { type: "time" },
       yAxis: { type: "value" },
@@ -244,12 +312,11 @@ const DetailedAnalyticsTab = () => {
           type: "line",
           smooth: true,
           areaStyle: {},
-          data: data.inventory_net_value_3m,
+          data: chartData,
         },
       ],
-    }),
-    [data.inventory_net_value_3m],
-  );
+    };
+  }, [data.inventory_net_value_3m, data.inventory_net_value_by_shift, inventoryViewMode]);
 
   // Cumulative profit (bonus insight)
   const cumulativeProfitOptions: echarts.EChartsOption = useMemo(() => {
@@ -281,20 +348,20 @@ const DetailedAnalyticsTab = () => {
           radius: ["40%", "70%"],
           avoidLabelOverlap: true,
           data: [
-            { value: data.clients.new.total_sales, name: "عملاء جدد" },
+            { value: data.clients.categories.new.total_sales, name: "عملاء جدد" },
             {
-              value: data.clients.returning_lt5.total_sales,
+              value: data.clients.categories.returning_lt5.total_sales,
               name: "عملاء عائدون (<5)",
             },
             {
-              value: data.clients.loyal_gte5.total_sales,
+              value: data.clients.categories.loyal_gte5.total_sales,
               name: "عملاء أوفياء (≥5)",
             },
           ],
         },
       ],
     }),
-    [data.clients],
+    [data.clients.categories],
   );
 
   const clientCountsBar: echarts.EChartsOption = useMemo(
@@ -308,14 +375,14 @@ const DetailedAnalyticsTab = () => {
           name: "عدد العملاء",
           type: "bar",
           data: [
-            data.clients.new.count,
-            data.clients.returning_lt5.count,
-            data.clients.loyal_gte5.count,
+            data.clients.categories.new.count,
+            data.clients.categories.returning_lt5.count,
+            data.clients.categories.loyal_gte5.count,
           ],
         },
       ],
     }),
-    [data.clients],
+    [data.clients.categories],
   );
 
   return (
@@ -563,6 +630,91 @@ const DetailedAnalyticsTab = () => {
         </Grid2>
       </Grid2>
 
+      {/* Top Clients Table */}
+      <Grid2 size={12}>
+        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            ترتيب العملاء حسب المشتريات
+          </Typography>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>#</TableCell>
+                  <TableCell>اسم العميل</TableCell>
+                  <TableCell>رقم الهاتف</TableCell>
+                  <TableCell align="right">إجمالي المشتريات</TableCell>
+                  <TableCell align="right">عدد الفواتير</TableCell>
+                  <TableCell>الفئة</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.clients.all_clients
+                  .slice(
+                    clientsPage * clientsRowsPerPage,
+                    clientsPage * clientsRowsPerPage + clientsRowsPerPage,
+                  )
+                  .map((client, index) => (
+                    <TableRow key={client.party_id} hover>
+                      <TableCell>
+                        {clientsPage * clientsRowsPerPage + index + 1}
+                      </TableCell>
+                      <TableCell>{client.name}</TableCell>
+                      <TableCell dir="ltr">{client.phone || "-"}</TableCell>
+                      <TableCell align="right">
+                        {formatCurrency(client.total)}
+                      </TableCell>
+                      <TableCell align="right">{client.bills_count}</TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={
+                            client.category === "new"
+                              ? "جديد"
+                              : client.category === "returning_lt5"
+                                ? "عائد"
+                                : "وفي"
+                          }
+                          color={
+                            client.category === "new"
+                              ? "info"
+                              : client.category === "returning_lt5"
+                                ? "warning"
+                                : "success"
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                {data.clients.all_clients.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center">
+                      لا يوجد عملاء في هذه الفترة
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            rowsPerPageOptions={[10, 25, 50]}
+            component="div"
+            count={data.clients.all_clients.length}
+            rowsPerPage={clientsRowsPerPage}
+            page={clientsPage}
+            onPageChange={(_e, newPage) => setClientsPage(newPage)}
+            onRowsPerPageChange={(e) => {
+              setClientsRowsPerPage(parseInt(e.target.value, 10));
+              setClientsPage(0);
+            }}
+            labelRowsPerPage="عدد الصفوف:"
+            labelDisplayedRows={({ from, to, count }) =>
+              `${from}-${to} من ${count !== -1 ? count : `أكثر من ${to}`}`
+            }
+          />
+        </Card>
+      </Grid2>
+
       {/* Cash flow daily */}
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 2, mb: 3 }}>
@@ -581,10 +733,27 @@ const DetailedAnalyticsTab = () => {
       {/* Inventory net value trend */}
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            قيمة المخزون الصافية (آخر 3 أشهر تقريبًا)
-          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 2,
+            }}
+          >
+            <Typography variant="h6">قيمة المخزون الصافية</Typography>
+            <ToggleButtonGroup
+              value={inventoryViewMode}
+              exclusive
+              onChange={(_e, value) => value && setInventoryViewMode(value)}
+              size="small"
+            >
+              <ToggleButton value="daily">يومي</ToggleButton>
+              <ToggleButton value="shift">حسب الشيفتات</ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
           <EChartsReact
+            key={`inventory-${inventoryViewMode}`}
             option={inventoryValueOptions}
             style={{ height: 400 }}
             theme={mode}

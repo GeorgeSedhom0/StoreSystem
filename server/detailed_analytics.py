@@ -368,41 +368,58 @@ async def get_detailed_analytics(
         return total_profit_fifo, profit_series, top
 
     def fetch_clients_analytics() -> Dict:
+        """
+        Fetch client analytics: categorize clients by their purchase history
+        and get top clients by total purchases in the period.
+        """
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get clients with their period totals and prior purchase count
+            # Only count sell/return bills (not buy bills) and exclude store-type parties
             cur.execute(
                 """
                 SELECT b.party_id,
+                       ap.name AS party_name,
+                       ap.phone AS party_phone,
                        COALESCE(SUM(b.total), 0) AS period_total,
+                       COUNT(*) AS period_bills_count,
                        COALESCE((
                            SELECT COUNT(*) FROM bills b2
                            WHERE b2.store_id = b.store_id
                              AND b2.party_id = b.party_id
-                             AND b2.type = 'sell'
+                             AND b2.type IN ('sell', 'return')
                              AND b2.time < %s
                        ), 0) AS prior_count
                 FROM bills b
-                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+                JOIN assosiated_parties ap ON b.party_id = ap.id
                 WHERE b.store_id = %s
-                  AND b.type = 'sell'
+                  AND b.type IN ('sell', 'return')
                   AND b.time >= %s AND b.time < %s
                   AND b.party_id IS NOT NULL
-                  AND (b.party_id IS NULL OR ap.type != 'store')
-                GROUP BY b.party_id, b.store_id
+                  AND ap.type != 'store'
+                GROUP BY b.party_id, b.store_id, ap.name, ap.phone
                 """,
                 (start_dt, store_id, start_dt, end_dt_next),
             )
             rows = cur.fetchall()
+
         categories = {
             "new": {"count": 0, "total_sales": 0.0},
             "returning_lt5": {"count": 0, "total_sales": 0.0},
             "loyal_gte5": {"count": 0, "total_sales": 0.0},
         }
+
+        # Build list of all clients with their totals for the top clients table
+        all_clients = []
+
         for r in rows:
             party_id = r["party_id"]
             if party_id is None:
                 continue
             total = float(r["period_total"] or 0)
             prior = int(r["prior_count"] or 0)
+            bills_count = int(r["period_bills_count"] or 0)
+
+            # Categorize by prior purchase history
             if prior == 0:
                 cat = "new"
             elif prior < 5:
@@ -411,7 +428,25 @@ async def get_detailed_analytics(
                 cat = "loyal_gte5"
             categories[cat]["count"] += 1
             categories[cat]["total_sales"] += total
-        return categories
+
+            # Add to all clients list
+            all_clients.append({
+                "party_id": party_id,
+                "name": r["party_name"] or "غير معروف",
+                "phone": r["party_phone"] or "",
+                "total": total,
+                "bills_count": bills_count,
+                "prior_count": prior,
+                "category": cat,
+            })
+
+        # Sort by total descending to get top clients
+        all_clients.sort(key=lambda x: x["total"], reverse=True)
+
+        return {
+            "categories": categories,
+            "all_clients": all_clients,
+        }
 
     def fetch_cashflow_in_vs_out() -> List[List]:
         with Database(HOST, DATABASE, USER, PASS) as cur:
@@ -499,8 +534,20 @@ async def get_detailed_analytics(
                 "non_bill_out": float(row["non_bill_out"] or 0),
             }
 
-    def compute_inventory_net_value_trend() -> List[List]:
+    def compute_inventory_net_value_trend(by_shift: bool = False) -> List[List]:
+        """
+        Compute inventory net value trend using historical prices.
+
+        We go FORWARD through time:
+        - Start from the beginning with initial stock (current stock minus all movements)
+        - Move forward, applying stock changes
+        - When we hit a 'buy' bill, update the price for that product from that point onward
+
+        Args:
+            by_shift: If True, return data points at shift end times instead of daily.
+        """
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Get current stock and prices
             cur.execute(
                 """
                 SELECT pi.product_id, pi.stock, p.wholesale_price
@@ -514,63 +561,137 @@ async def get_detailed_analytics(
             current_stock = {
                 int(r["product_id"]): float(r["stock"] or 0) for r in inv_rows
             }
-            price_basis = {
+            current_prices = {
                 int(r["product_id"]): float(r["wholesale_price"] or 0) for r in inv_rows
             }
 
+            # Get all products_flow records with bill type and wholesale_price
+            # Sorted by time ASCENDING for forward processing
             cur.execute(
                 """
-                SELECT pf.product_id, COALESCE(SUM(pf.amount), 0) AS net_after_start
+                SELECT pf.product_id, pf.amount, pf.wholesale_price AS pf_wholesale_price,
+                       b.time, b.type AS bill_type
                 FROM products_flow pf
-                JOIN bills b ON pf.bill_id = b.id
-                WHERE pf.store_id = %s AND b.time > %s AND b.id > 0
+                JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
+                WHERE pf.store_id = %s AND b.id > 0
+                ORDER BY b.time ASC
+                """,
+                (store_id,),
+            )
+            all_flow_rows = cur.fetchall()
+
+            # Get the total net movement for each product (to calculate starting stock)
+            cur.execute(
+                """
+                SELECT pf.product_id, COALESCE(SUM(pf.amount), 0) AS total_movement
+                FROM products_flow pf
+                JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
+                WHERE pf.store_id = %s AND b.id > 0
                 GROUP BY pf.product_id
                 """,
-                (store_id, start_dt),
+                (store_id,),
             )
-            after_rows = cur.fetchall()
-            net_after_start = {
-                int(r["product_id"]): float(r["net_after_start"] or 0)
-                for r in after_rows
+            movement_rows = cur.fetchall()
+            total_movements = {
+                int(r["product_id"]): float(r["total_movement"] or 0) for r in movement_rows
             }
 
-            cur.execute(
-                """
-                SELECT pf.product_id, DATE_TRUNC('day', b.time)::date AS day, SUM(pf.amount) AS net_amount
-                FROM products_flow pf
-                JOIN bills b ON pf.bill_id = b.id
-                WHERE pf.store_id = %s AND b.time >= %s AND b.time < %s AND b.id > 0
-                GROUP BY pf.product_id, DATE_TRUNC('day', b.time)::date
-                ORDER BY pf.product_id, day
-                """,
-                (store_id, start_dt, end_dt_next),
-            )
-            flow_rows = cur.fetchall()
+            # Get shifts if needed
+            shifts_data = []
+            if by_shift:
+                cur.execute(
+                    """
+                    SELECT end_date_time
+                    FROM shifts
+                    WHERE store_id = %s
+                      AND end_date_time IS NOT NULL
+                      AND end_date_time >= %s
+                      AND end_date_time < %s
+                    ORDER BY end_date_time ASC
+                    """,
+                    (store_id, start_dt, end_dt_next),
+                )
+                shifts_data = cur.fetchall()
 
-        all_pids = set(current_stock.keys()) | set(net_after_start.keys())
+        # Build flow events list sorted by time ascending
+        flow_events = []
+        for r in all_flow_rows:
+            flow_events.append({
+                "time": r["time"],
+                "product_id": int(r["product_id"]),
+                "amount": float(r["amount"] or 0),
+                "pf_wholesale_price": float(r["pf_wholesale_price"] or 0),
+                "bill_type": r["bill_type"],
+            })
+
+        # Determine time points for the series
+        if by_shift:
+            time_points = [r["end_date_time"] for r in shifts_data]
+        else:
+            days = list(pd.date_range(start=start_dt.date(), end=end_dt.date(), freq="D"))
+            time_points = [
+                datetime.combine(d.date(), datetime.max.time().replace(microsecond=0))
+                for d in days
+            ]
+
+        if not time_points:
+            return []
+
+        # Calculate initial stock (current stock - all movements = stock at the very beginning)
+        all_pids = set(current_stock.keys()) | set(total_movements.keys())
         stock_state = {
-            pid: current_stock.get(pid, 0.0) - net_after_start.get(pid, 0.0)
+            pid: current_stock.get(pid, 0.0) - total_movements.get(pid, 0.0)
             for pid in all_pids
         }
 
-        flows_by_prod_day: Dict[int, Dict[str, float]] = {}
-        for r in flow_rows:
-            pid = int(r["product_id"])
-            d = r["day"].strftime("%Y-%m-%d")
-            flows_by_prod_day.setdefault(pid, {})[d] = float(r["net_amount"] or 0)
+        # For initial prices, we need to find the first buy bill for each product
+        # or use current price if no buy bills exist
+        # We'll build this as we go forward - start with zeros and update on first buy
+        price_state: Dict[int, float] = {}
 
-        days = list(pd.date_range(start=start_dt.date(), end=end_dt.date(), freq="D"))
+        # Pre-scan to find the first buy price for each product
+        first_buy_price: Dict[int, float] = {}
+        for evt in flow_events:
+            pid = evt["product_id"]
+            if evt["bill_type"] == "buy" and pid not in first_buy_price and evt["pf_wholesale_price"] > 0:
+                first_buy_price[pid] = evt["pf_wholesale_price"]
+
+        # Initialize prices: use first buy price if available, otherwise current price
+        for pid in all_pids:
+            if pid in first_buy_price:
+                price_state[pid] = first_buy_price[pid]
+            else:
+                price_state[pid] = current_prices.get(pid, 0.0)
+
+        # Process forward through time
         series: List[List] = []
-        for d in days:
-            d_str = d.strftime("%Y-%m-%d")
-            for pid in set(stock_state.keys()) | set(flows_by_prod_day.keys()):
-                flow = flows_by_prod_day.get(pid, {}).get(d_str, 0.0)
-                if abs(flow) > 1e-9:
-                    stock_state[pid] = stock_state.get(pid, 0.0) + flow
+        flow_idx = 0
+
+        for tp in time_points:
+            # Apply all flow events up to and including this time point
+            while flow_idx < len(flow_events) and flow_events[flow_idx]["time"] <= tp:
+                evt = flow_events[flow_idx]
+                pid = evt["product_id"]
+
+                # If this is a buy bill, update the price BEFORE applying the stock change
+                # This way the new stock from this buy uses the new price
+                if evt["bill_type"] == "buy" and evt["pf_wholesale_price"] > 0:
+                    price_state[pid] = evt["pf_wholesale_price"]
+
+                # Apply stock change
+                stock_state[pid] = stock_state.get(pid, 0.0) + evt["amount"]
+                flow_idx += 1
+
+            # Calculate total value at this time point
             total_value = 0.0
             for pid, qty in stock_state.items():
-                total_value += qty * price_basis.get(pid, 0.0)
-            series.append([d_str, float(total_value)])
+                total_value += qty * price_state.get(pid, 0.0)
+
+            if by_shift:
+                series.append([tp.isoformat(), float(total_value)])
+            else:
+                series.append([tp.strftime("%Y-%m-%d"), float(total_value)])
+
         return series
 
     # Build response
@@ -582,7 +703,8 @@ async def get_detailed_analytics(
     cash_flow_daily = fetch_cashflow_in_vs_out()
     cash_in_series = fetch_cash_in_series_only()
     non_bill_cash = fetch_non_bill_cash_totals()
-    inventory_net_value_3m = compute_inventory_net_value_trend()
+    inventory_net_value_3m = compute_inventory_net_value_trend(by_shift=False)
+    inventory_net_value_by_shift = compute_inventory_net_value_trend(by_shift=True)
 
     response = {
         "period": {"start_date": start_date, "end_date": end_date},
@@ -606,6 +728,7 @@ async def get_detailed_analytics(
         "clients": clients,
         "cash_flow_daily": cash_flow_daily,
         "inventory_net_value_3m": inventory_net_value_3m,
+        "inventory_net_value_by_shift": inventory_net_value_by_shift,
     }
 
     return JSONResponse(content=response)

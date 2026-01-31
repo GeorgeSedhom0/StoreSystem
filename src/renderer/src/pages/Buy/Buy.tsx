@@ -64,6 +64,8 @@ const Buy = () => {
 
   // Ref for the cart container to enable auto-scroll
   const cartTableRef = useRef<HTMLDivElement>(null);
+  // Track previous cart length to detect new product additions
+  const prevCartLengthRef = useRef<number>(0);
 
   const { parties, addPartyMutationAsync } = useParties(setMsg);
 
@@ -99,11 +101,12 @@ const Buy = () => {
   useBarcodeDetection(products, addToCart, setMsg);
   useQuickHandle(shoppingCart, setShoppingCart);
 
-  // Auto-scroll cart to bottom when new products are added
+  // Auto-scroll cart to bottom only when a NEW product is added (not on quantity changes)
   useEffect(() => {
-    if (cartTableRef.current) {
+    if (cartTableRef.current && shoppingCart.length > prevCartLengthRef.current) {
       cartTableRef.current.scrollTop = cartTableRef.current.scrollHeight;
     }
+    prevCartLengthRef.current = shoppingCart.length;
   }, [shoppingCart]);
 
   const submitBill = useCallback(
