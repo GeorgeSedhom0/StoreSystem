@@ -234,6 +234,70 @@ export const printBill = async (
   }
 };
 
+// Dynamic delay calculation based on job size for batch printing
+function calculatePrintDelay(
+  totalProducts: number,
+  currentProductCopies: number,
+): number {
+  let baseDelay: number;
+  if (totalProducts <= 5) baseDelay = 300;
+  else if (totalProducts <= 15) baseDelay = 600;
+  else if (totalProducts <= 30) baseDelay = 1000;
+  else baseDelay = 1500;
+
+  // Add extra delay for high-copy products (100ms per 10 copies)
+  const copyDelay = Math.floor(currentProductCopies / 10) * 100;
+  return baseDelay + copyDelay;
+}
+
+// Utility delay function
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Batch print barcodes with progress tracking and cancellation support
+export const printBatchBarcodes = async (
+  products: Array<{
+    barCode?: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>,
+  onProgress: (current: number, total: number, productName: string) => void,
+  shouldCancel: () => boolean,
+): Promise<{ completed: number; cancelled: boolean }> => {
+  const productsWithBarcode = products.filter((p) => p.barCode);
+  const total = productsWithBarcode.length;
+  let completed = 0;
+
+  for (let i = 0; i < productsWithBarcode.length; i++) {
+    if (shouldCancel()) {
+      return { completed, cancelled: true };
+    }
+
+    const product = productsWithBarcode[i];
+    onProgress(i + 1, total, product.name);
+
+    const priceText =
+      product.price > 0 ? product.price.toString() + " " + "جنية " : "";
+
+    await printCode(
+      product.barCode || "",
+      product.name,
+      priceText,
+      product.quantity,
+    );
+
+    completed++;
+
+    // Add dynamic delay between products (not after the last one)
+    if (i < productsWithBarcode.length - 1) {
+      const delayMs = calculatePrintDelay(total, product.quantity);
+      await delay(delayMs);
+    }
+  }
+
+  return { completed, cancelled: false };
+};
+
 export const printCode = async (
   code: string,
   productName: string,

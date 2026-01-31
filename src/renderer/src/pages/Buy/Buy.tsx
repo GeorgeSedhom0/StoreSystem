@@ -15,6 +15,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Checkbox,
+  Box,
 } from "@mui/material";
 import { useCallback, useState, useContext, useRef, useEffect } from "react";
 import { Party, Product, SCProduct } from "../utils/types";
@@ -29,6 +31,8 @@ import useParties from "../Shared/hooks/useParties";
 import useProducts from "../Shared/hooks/useProducts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
+import BatchPrintDialog from "./Components/BatchPrintDialog";
+import BulkEditDialog from "./Components/BulkEditDialog";
 
 const Buy = () => {
   const {
@@ -66,6 +70,14 @@ const Buy = () => {
   const cartTableRef = useRef<HTMLDivElement>(null);
   // Track previous cart length to detect new product additions
   const prevCartLengthRef = useRef<number>(0);
+
+  // Selection state for bulk operations
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<number>>(
+    new Set(),
+  );
+  // Modal states for quick actions
+  const [batchPrintOpen, setBatchPrintOpen] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
 
   const { parties, addPartyMutationAsync } = useParties(setMsg);
 
@@ -108,6 +120,46 @@ const Buy = () => {
     }
     prevCartLengthRef.current = shoppingCart.length;
   }, [shoppingCart]);
+
+  // Cleanup selection when products are removed from cart
+  useEffect(() => {
+    const currentIds = new Set(shoppingCart.map((p) => p.id));
+    setSelectedProductIds((prev) => {
+      const next = new Set([...prev].filter((id) => currentIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [shoppingCart]);
+
+  // Selection handlers
+  const allSelected =
+    shoppingCart.length > 0 && selectedProductIds.size === shoppingCart.length;
+  const someSelected =
+    selectedProductIds.size > 0 && selectedProductIds.size < shoppingCart.length;
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedProductIds(new Set());
+    } else {
+      setSelectedProductIds(new Set(shoppingCart.map((p) => p.id)));
+    }
+  };
+
+  const handleSelectProduct = (productId: number, selected: boolean) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(productId);
+      } else {
+        next.delete(productId);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkEditApply = (updatedProducts: SCProduct[]) => {
+    setShoppingCart(updatedProducts);
+    setSelectedProductIds(new Set());
+  };
 
   const submitBill = useCallback(
     async (shoppingCart: SCProduct[], discount: number) => {
@@ -347,6 +399,38 @@ const Buy = () => {
       </Grid2>{" "}
       <Grid2 size={12}>
         <Card elevation={3}>
+          {/* Quick Actions Toolbar */}
+          <Box
+            sx={{
+              p: 2,
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              borderBottom: 1,
+              borderColor: "divider",
+            }}
+          >
+            <Button
+              variant="contained"
+              onClick={() => setBatchPrintOpen(true)}
+              disabled={shoppingCart.length === 0}
+            >
+              طباعة الكل
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => setBulkEditOpen(true)}
+              disabled={selectedProductIds.size === 0}
+            >
+              تعديل المحدد ({selectedProductIds.size})
+            </Button>
+            {shoppingCart.length > 0 && (
+              <Typography variant="body2" color="text.secondary">
+                {shoppingCart.length} منتج في السلة
+              </Typography>
+            )}
+          </Box>
+
           <TableContainer
             ref={cartTableRef}
             sx={{
@@ -364,6 +448,14 @@ const Buy = () => {
             >
               <TableHead>
                 <TableRow>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={handleSelectAll}
+                      disabled={shoppingCart.length === 0}
+                    />
+                  </TableCell>
                   <TableCell>المنتج</TableCell>
                   <TableCell>الكمية</TableCell>
                   <TableCell>سعر الشراء</TableCell>
@@ -381,6 +473,10 @@ const Buy = () => {
                     product={product}
                     setShoppingCart={setShoppingCart}
                     type="buy"
+                    isSelected={selectedProductIds.has(product.id)}
+                    onSelectionChange={(selected) =>
+                      handleSelectProduct(product.id, selected)
+                    }
                   />
                 ))}
               </TableBody>
@@ -388,6 +484,22 @@ const Buy = () => {
           </TableContainer>
         </Card>
       </Grid2>
+
+      {/* Batch Print Dialog */}
+      <BatchPrintDialog
+        open={batchPrintOpen}
+        onClose={() => setBatchPrintOpen(false)}
+        products={shoppingCart}
+      />
+
+      {/* Bulk Edit Dialog */}
+      <BulkEditDialog
+        open={bulkEditOpen}
+        onClose={() => setBulkEditOpen(false)}
+        products={shoppingCart}
+        selectedProductIds={selectedProductIds}
+        onApply={handleBulkEditApply}
+      />
     </Grid2>
   );
 };

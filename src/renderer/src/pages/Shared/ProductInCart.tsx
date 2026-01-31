@@ -5,6 +5,7 @@ import {
   TableCell,
   Tooltip,
   Chip,
+  Checkbox,
 } from "@mui/material";
 import { SCProduct, BatchInfo } from "../utils/types";
 import {
@@ -20,6 +21,23 @@ import BatchSelectionModal from "./BatchSelectionModal";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import axios from "axios";
 import { StoreContext } from "@renderer/StoreDataProvider";
+
+const CheckboxColumn = ({
+  isSelected,
+  onSelectionChange,
+}: {
+  isSelected: boolean;
+  onSelectionChange: (selected: boolean) => void;
+}) => {
+  return (
+    <TableCell padding="checkbox">
+      <Checkbox
+        checked={isSelected}
+        onChange={(e) => onSelectionChange(e.target.checked)}
+      />
+    </TableCell>
+  );
+};
 
 const NameColumn = ({ name }: { name: string }) => {
   return <TableCell>{name}</TableCell>;
@@ -421,6 +439,7 @@ const ExpirationInfoColumn = ({
 };
 
 type availableColumns =
+  | "checkbox"
   | "name"
   | "quantity"
   | "price"
@@ -440,6 +459,7 @@ const typeToColumns: {
   transfer: availableColumns[];
 } = {
   buy: [
+    "checkbox",
     "name",
     "quantity",
     "wholesalePrice",
@@ -489,6 +509,8 @@ const Column = ({
   isBatchModalOpen,
   setIsBatchModalOpen,
   storeId,
+  isSelected,
+  onSelectionChange,
 }: {
   column: availableColumns;
   product: SCProduct;
@@ -501,8 +523,17 @@ const Column = ({
   isBatchModalOpen: boolean;
   setIsBatchModalOpen: Dispatch<SetStateAction<boolean>>;
   storeId: number | null;
+  isSelected?: boolean;
+  onSelectionChange?: (selected: boolean) => void;
 }) => {
-  if (column === "name") {
+  if (column === "checkbox") {
+    return (
+      <CheckboxColumn
+        isSelected={isSelected || false}
+        onSelectionChange={onSelectionChange || (() => {})}
+      />
+    );
+  } else if (column === "name") {
     return <NameColumn name={product.name} />;
   } else if (column === "quantity") {
     return (
@@ -576,10 +607,14 @@ const ProductInCart = ({
   product,
   setShoppingCart,
   type,
+  isSelected,
+  onSelectionChange,
 }: {
   product: SCProduct;
   setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
   type: "buy" | "sell" | "sell-admin" | "transfer";
+  isSelected?: boolean;
+  onSelectionChange?: (selected: boolean) => void;
 }) => {
   const [isPrintingCode, setIsPrintingCode] = useState(false);
   const [isExpirationModalOpen, setIsExpirationModalOpen] = useState(false);
@@ -602,6 +637,8 @@ const ProductInCart = ({
           isBatchModalOpen={isBatchModalOpen}
           setIsBatchModalOpen={setIsBatchModalOpen}
           storeId={storeId}
+          isSelected={isSelected}
+          onSelectionChange={onSelectionChange}
         />
       ))}
     </TableRow>
