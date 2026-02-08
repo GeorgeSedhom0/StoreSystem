@@ -22,16 +22,17 @@ from parties import router as party_router
 from installment import router as installment_router
 from analytics import router as analytics_router
 from employee import router as employee_router
-from whatsapp import router as whatsapp_router
+from telegram import router as telegram_router
 from detailed_analytics import router as detailed_analytics_router
 from notifications import router as notifications_router
 from batches import router as batches_router
 from auth_middleware import get_current_user, get_store_info
-from whatsapp_utils import (
-    send_whatsapp_notification_background,
+from telegram_utils import (
+    send_telegram_notification_background,
     format_excessive_discount_message,
     check_and_send_low_stock_notification,
     format_store_transfer_message,
+    get_store_telegram_chat_id,
 )
 from expiration_scheduler import start_expiration_scheduler
 from batches import consume_batches_fefo, add_to_batch, adjust_batches_for_stock_change
@@ -55,7 +56,7 @@ app.include_router(party_router)
 app.include_router(installment_router)
 app.include_router(analytics_router)
 app.include_router(employee_router)
-app.include_router(whatsapp_router)
+app.include_router(telegram_router)
 app.include_router(detailed_analytics_router)
 app.include_router(notifications_router)
 app.include_router(batches_router)
@@ -1003,7 +1004,7 @@ def add_bill(
     except HTTPException:
         store_info = None
 
-    # Store data for potential WhatsApp notification
+    # Store data for potential Telegram notification
     should_notify = False
     notification_data = {}
 
@@ -1083,14 +1084,14 @@ def add_bill(
                 raise HTTPException(status_code=400, detail="Insert into bills failed")
             bill_id = result["id"]
 
-            # Schedule WhatsApp notification as background task if needed
+            # Schedule Telegram notification as background task if needed
             if should_notify:
                 notification_data["bill_id"] = bill_id
                 notification_str = format_excessive_discount_message(
                     **notification_data
                 )
                 background_tasks.add_task(
-                    send_whatsapp_notification_background, store_id, notification_str
+                    send_telegram_notification_background, store_id, notification_str
                 )
 
             # Create a list of tuples
@@ -1258,7 +1259,7 @@ def move_products(
     Move products from one store to another by
     1. Adding a new "sell" bill to the source store with destination store as party
     2. Adding a new "buy" bill to the destination store with source store as party
-    3. Sending WhatsApp notifications to both stores
+    3. Sending Telegram notifications to both stores
 
     Args:
         bill (Bill): The bill to move products
@@ -1367,7 +1368,7 @@ def move_products(
                     "quantity": product_flow.quantity,
                     "wholesale_price": product_flow.wholesale_price,
                 }
-            )  # Send WhatsApp notifications to both stores
+            )  # Send Telegram notifications to both stores
         user_name = current_user.get("username", "غير معروف")
 
         # Format transfer notification message
@@ -1379,38 +1380,36 @@ def move_products(
             user_name=user_name,
         )
 
-        # Check if both stores have the same WhatsApp number to avoid duplicate notifications
-        from whatsapp_utils import get_store_whatsapp_number
-
-        source_whatsapp = get_store_whatsapp_number(source_store_id)
-        destination_whatsapp = get_store_whatsapp_number(destination_store_id)
+        # Check if both stores have the same Telegram chat ID to avoid duplicate notifications
+        source_chat_id = get_store_telegram_chat_id(source_store_id)
+        destination_chat_id = get_store_telegram_chat_id(destination_store_id)
 
         if (
-            source_whatsapp
-            and destination_whatsapp
-            and source_whatsapp == destination_whatsapp
+            source_chat_id
+            and destination_chat_id
+            and source_chat_id == destination_chat_id
         ):
-            # Both stores have the same WhatsApp number - send one combined notification
-            combined_message = f"🔄 *نقل منتجات بين المتاجر*\n\n{transfer_message}"
+            # Both stores have the same chat ID - send one combined notification
+            combined_message = f"🔄 <b>نقل منتجات بين المتاجر</b>\n\n{transfer_message}"
             background_tasks.add_task(
-                send_whatsapp_notification_background,
-                source_store_id,  # Use either store_id since they have the same number
+                send_telegram_notification_background,
+                source_store_id,  # Use either store_id since they have the same chat
                 combined_message,
             )
         else:
-            # Different WhatsApp numbers or one/both don't have numbers - send separate notifications
-            if source_whatsapp:
+            # Different chat IDs or one/both don't have IDs - send separate notifications
+            if source_chat_id:
                 background_tasks.add_task(
-                    send_whatsapp_notification_background,
+                    send_telegram_notification_background,
                     source_store_id,
-                    f"📤 *منتجات مرسلة*\n\n{transfer_message}",
+                    f"📤 <b>منتجات مرسلة</b>\n\n{transfer_message}",
                 )
 
-            if destination_whatsapp:
+            if destination_chat_id:
                 background_tasks.add_task(
-                    send_whatsapp_notification_background,
+                    send_telegram_notification_background,
                     destination_store_id,
-                    f"📥 *منتجات مستلمة*\n\n{transfer_message}",
+                    f"📥 <b>منتجات مستلمة</b>\n\n{transfer_message}",
                 )
 
         return {"message": "Products moved successfully"}

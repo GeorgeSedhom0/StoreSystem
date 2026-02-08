@@ -3,6 +3,7 @@ import logging
 from os import getenv
 import requests
 import json
+import html
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
@@ -13,8 +14,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# WhatsApp Service URL
-WHATSAPP_SERVICE_URL = getenv("WHATSAPP_SERVICE_URL", "http://localhost:3001")
+# Telegram Bot API configuration
+TELEGRAM_BOT_TOKEN = getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_API_BASE = "https://api.telegram.org/bot"
 
 # Database connection details
 HOST = getenv("HOST")
@@ -23,8 +25,8 @@ USER = getenv("USER")
 PASS = getenv("PASS")
 
 
-def get_store_whatsapp_number(store_id: int):
-    """Get WhatsApp notification number for a specific store"""
+def get_store_telegram_chat_id(store_id: int):
+    """Get Telegram chat ID for a specific store"""
     try:
         conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -37,15 +39,15 @@ def get_store_whatsapp_number(store_id: int):
 
         if result and result["extra_info"]:
             extra_info = result["extra_info"]
-            return extra_info.get("whatsapp_number")
+            return extra_info.get("telegram_chat_id")
         return None
     except Exception as e:
-        logger.error(f"Error getting store WhatsApp number: {e}")
+        logger.error(f"Error getting store Telegram chat ID: {e}")
         return None
 
 
-def save_store_whatsapp_number(store_id: int, phone_number: str):
-    """Save WhatsApp notification number for a specific store"""
+def save_store_telegram_chat_id(store_id: int, chat_id: str):
+    """Save Telegram chat ID for a specific store"""
     try:
         conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -54,7 +56,7 @@ def save_store_whatsapp_number(store_id: int, phone_number: str):
         result = cur.fetchone()
 
         extra_info = result["extra_info"] if result and result["extra_info"] else {}
-        extra_info["whatsapp_number"] = phone_number
+        extra_info["telegram_chat_id"] = chat_id
 
         cur.execute(
             "UPDATE store_data SET extra_info = %s WHERE id = %s",
@@ -67,106 +69,177 @@ def save_store_whatsapp_number(store_id: int, phone_number: str):
 
         return True
     except Exception as e:
-        logger.error(f"Error saving store WhatsApp number: {e}")
+        logger.error(f"Error saving store Telegram chat ID: {e}")
         return False
 
 
-def get_whatsapp_status():
-    """Get current WhatsApp status directly from the WhatsApp service"""
-    result = call_whatsapp_service("status", timeout=10)
-
-    # Convert to the expected format
-    if result.get("success"):
-        status = result.get("status", {})
-        if isinstance(status, dict):
-            return {
-                "connected": status.get("connected", False),
-                "phone_number": status.get("phone_number"),
-            }
-        else:
-            logger.warning(f"Unexpected status format: {status}")
-            return {
-                "connected": False,
-                "phone_number": None,
-            }
-    else:
-        logger.error(f"Failed to get WhatsApp status: {result.get('message')}")
-        return {
-            "connected": False,
-            "phone_number": None,
-        }
-
-
-def format_phone_number(phone_number):
-    """Format phone number for WhatsApp"""
-    phone = (
-        phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-    )
-
-    if not phone.startswith("+"):
-        # Assume Egypt number if no country code and starts with 01
-        if phone.startswith("01") and len(phone) == 11:
-            phone = "+2" + phone
-        else:
-            phone = "+" + phone
-
-    return phone
-
-
-def call_whatsapp_service(endpoint, method="GET", data=None, timeout=30):
-    """Call the WhatsApp service API"""
+def call_telegram_api(method: str, data: dict = None, timeout: int = 30) -> dict:
+    """Call the Telegram Bot API directly"""
     try:
-        url = f"{WHATSAPP_SERVICE_URL}/{endpoint}"
+        if not TELEGRAM_BOT_TOKEN:
+            return {"success": False, "message": "Telegram bot token not configured"}
 
-        if method == "GET":
-            response = requests.get(url, timeout=timeout)
-        elif method == "POST":
-            response = requests.post(url, json=data, timeout=timeout)
+        url = f"{TELEGRAM_API_BASE}{TELEGRAM_BOT_TOKEN}/{method}"
+        response = requests.post(url, json=data, timeout=timeout)
+        result = response.json()
+
+        if result.get("ok"):
+            return {"success": True, "result": result.get("result")}
         else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
-
-        response.raise_for_status()
-        return response.json()
-
+            return {
+                "success": False,
+                "message": result.get("description", "Unknown error"),
+            }
     except requests.exceptions.ConnectionError:
-        logger.error("Cannot connect to WhatsApp service. Is it running?")
-        return {"success": False, "message": "WhatsApp service unavailable"}
+        logger.error("Cannot connect to Telegram API")
+        return {"success": False, "message": "Cannot connect to Telegram API"}
     except requests.exceptions.Timeout:
-        logger.error(f"Timeout calling WhatsApp service: {endpoint}")
-        return {"success": False, "message": "Request timeout"}
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error calling WhatsApp service: {e}")
-        return {"success": False, "message": str(e)}
+        logger.error(f"Timeout calling Telegram API: {method}")
+        return {"success": False, "message": "Telegram API request timeout"}
     except Exception as e:
-        logger.error(f"Unexpected error calling WhatsApp service: {e}")
+        logger.error(f"Unexpected error calling Telegram API: {e}")
         return {"success": False, "message": str(e)}
 
 
-def send_notification_to_store(store_id: int, message: str):
-    """Send WhatsApp notification to a specific store's configured number"""
+def validate_bot_token(token: str = None) -> dict:
+    """Validate a Telegram bot token by calling getMe"""
     try:
-        # Get fresh status
-        status = get_whatsapp_status()
-        if not status.get("connected"):
-            logger.warning("WhatsApp not connected, cannot send notification")
-            return False
+        use_token = token or TELEGRAM_BOT_TOKEN
+        if not use_token:
+            return {"success": False, "message": "No bot token provided"}
 
-        phone_number = get_store_whatsapp_number(store_id)
-        if not phone_number:
-            logger.warning(f"No WhatsApp number configured for store {store_id}")
-            return False
+        url = f"{TELEGRAM_API_BASE}{use_token}/getMe"
+        response = requests.get(url, timeout=10)
+        result = response.json()
 
-        # Format phone number
-        phone = format_phone_number(phone_number)
+        if result.get("ok"):
+            bot_info = result.get("result", {})
+            return {
+                "success": True,
+                "bot_username": bot_info.get("username"),
+                "bot_name": bot_info.get("first_name"),
+            }
+        else:
+            return {
+                "success": False,
+                "message": result.get("description", "Invalid bot token"),
+            }
+    except Exception as e:
+        logger.error(f"Error validating bot token: {e}")
+        return {"success": False, "message": str(e)}
 
-        # Send message using WhatsApp service
-        logger.info(f"Sending notification to store {store_id} at {phone}")
-        result = call_whatsapp_service(
-            "send",
-            method="POST",
-            data={"phone_number": phone, "message": message},
-            timeout=45,
+
+def get_telegram_status() -> dict:
+    """Get current Telegram bot status by validating the token"""
+    if not TELEGRAM_BOT_TOKEN:
+        return {"connected": False, "bot_username": None}
+
+    result = validate_bot_token()
+    if result.get("success"):
+        return {
+            "connected": True,
+            "bot_username": result.get("bot_username"),
+        }
+    else:
+        return {"connected": False, "bot_username": None}
+
+
+def get_telegram_updates(token: str = None) -> list:
+    """Fetch recent messages sent to the bot to detect chat_ids from /start commands"""
+    try:
+        use_token = token or TELEGRAM_BOT_TOKEN
+        if not use_token:
+            return []
+
+        url = f"{TELEGRAM_API_BASE}{use_token}/getUpdates"
+        response = requests.get(url, timeout=10)
+        result = response.json()
+
+        if not result.get("ok"):
+            return []
+
+        updates = result.get("result", [])
+        seen_chats = {}
+
+        for update in updates:
+            message = update.get("message", {})
+            chat = message.get("chat", {})
+            chat_id = str(chat.get("id", ""))
+
+            if chat_id and chat_id not in seen_chats:
+                seen_chats[chat_id] = {
+                    "chat_id": chat_id,
+                    "username": chat.get("username"),
+                    "first_name": chat.get("first_name", ""),
+                    "last_name": chat.get("last_name", ""),
+                    "type": chat.get("type", "private"),
+                    "title": chat.get("title"),  # For groups
+                }
+
+        return list(seen_chats.values())
+    except Exception as e:
+        logger.error(f"Error getting Telegram updates: {e}")
+        return []
+
+
+def split_message(message: str, max_length: int = 4096) -> list:
+    """Split a long message into multiple messages at newline boundaries"""
+    if len(message) <= max_length:
+        return [message]
+
+    messages = []
+    current = ""
+
+    for line in message.split("\n"):
+        if len(current) + len(line) + 1 > max_length:
+            if current:
+                messages.append(current.rstrip("\n"))
+            current = line + "\n"
+        else:
+            current += line + "\n"
+
+    if current.strip():
+        messages.append(current.rstrip("\n"))
+
+    return messages
+
+
+def send_telegram_message(chat_id: str, message: str, parse_mode: str = "HTML") -> dict:
+    """Send a message via Telegram Bot API"""
+    messages = split_message(message)
+    last_result = None
+
+    for msg in messages:
+        result = call_telegram_api(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": msg,
+                "parse_mode": parse_mode,
+            },
         )
+        last_result = result
+        if not result.get("success"):
+            return result
+        if len(messages) > 1:
+            time.sleep(0.5)
+
+    return last_result
+
+
+def send_notification_to_store(store_id: int, message: str) -> bool:
+    """Send Telegram notification to a specific store's configured chat"""
+    try:
+        if not TELEGRAM_BOT_TOKEN:
+            logger.warning("Telegram bot token not configured")
+            return False
+
+        chat_id = get_store_telegram_chat_id(store_id)
+        if not chat_id:
+            logger.warning(f"No Telegram chat_id configured for store {store_id}")
+            return False
+
+        result = send_telegram_message(chat_id, message)
 
         if result.get("success"):
             logger.info(f"Notification sent to store {store_id}")
@@ -182,23 +255,30 @@ def send_notification_to_store(store_id: int, message: str):
         return False
 
 
-def send_whatsapp_notification_background(store_id: int, message: str):
-    """Background task to send WhatsApp notification"""
+def send_telegram_notification_background(store_id: int, message: str):
+    """Background task to send Telegram notification"""
     try:
         success = send_notification_to_store(store_id, message)
 
         if success:
             logging.info(
-                "WhatsApp notification %s was sent",
+                "Telegram notification %s was sent",
                 message[:50] + "..." if len(message) > 50 else message,
             )
         else:
             logging.warning(
-                "Failed to send WhatsApp notification %s",
+                "Failed to send Telegram notification %s",
                 message[:50] + "..." if len(message) > 50 else message,
             )
     except Exception as e:
-        logging.error("Error in background task sending WhatsApp notification: %s", e)
+        logging.error("Error in background task sending Telegram notification: %s", e)
+
+
+def _e(text) -> str:
+    """HTML-escape dynamic text for Telegram HTML parse mode"""
+    if text is None:
+        return ""
+    return html.escape(str(text))
 
 
 def format_excessive_discount_message(
@@ -214,7 +294,7 @@ def format_excessive_discount_message(
     user_name: str = None,
 ) -> str:
     """
-    Format WhatsApp message for excessive discount notification in Arabic
+    Format Telegram message for excessive discount notification in Arabic
 
     Args:
         bill_id: The bill ID
@@ -256,13 +336,13 @@ def format_excessive_discount_message(
         formatted_date = bill_time
 
     # Format store and user information
-    store_display = store_name if store_name else "غير محدد"
-    user_display = user_name if user_name else "غير محدد"
+    store_display = _e(store_name) if store_name else "غير محدد"
+    user_display = _e(user_name) if user_name else "غير محدد"
 
     # Create products list - simple and clean format
     products_text = ""
     for i, product in enumerate(product_details, 1):
-        name = product["name"]
+        name = _e(product["name"])
         qty = product["quantity"]
         price = product["sale_price"]
         total_item = qty * price
@@ -276,35 +356,35 @@ def format_excessive_discount_message(
         if i < len(product_details):
             products_text += "\n"
 
-    message = f"""🚨 *تنبيه عاجل: فاتورة بخصم مفرط* 🚨
+    message = f"""🚨 <b>تنبيه عاجل: فاتورة بخصم مفرط</b> 🚨
 
-🆔 *رقم الفاتورة:* {bill_id}
-🏪 *المتجر:* {store_display}
-👨‍💼 *الموظف:* {user_display}
-📝 *نوع العملية:* {arabic_type}
-👤 *العميل:* {party_name}
-📅 *التاريخ:* {formatted_date}
-
-━━━━━━━━━━━━━━━━━━━━
-
-💰 *الملخص المالي:*
-
-🏷️ *إجمالي سعر الشراء:* {wholesale_sum:.2f} ج.م
-💵 *قيمة الفاتورة قبل الخصم:* {expected_total:.2f} ج.م
-🎯 *قيمة الخصم المطبق:* {actual_discount:.2f} ج.م
-💳 *إجمالي الفاتورة النهائي:* {bill_total:.2f} ج.م
-
-⚠️ *مقدار الخسارة:* {loss_amount:.2f} ج.م ({loss_percentage:.1f}%)
+🆔 <b>رقم الفاتورة:</b> {bill_id}
+🏪 <b>المتجر:</b> {store_display}
+👨‍💼 <b>الموظف:</b> {user_display}
+📝 <b>نوع العملية:</b> {arabic_type}
+👤 <b>العميل:</b> {_e(party_name)}
+📅 <b>التاريخ:</b> {formatted_date}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-🛍️ *تفاصيل المنتجات:*
+💰 <b>الملخص المالي:</b>
+
+🏷️ <b>إجمالي سعر الشراء:</b> {wholesale_sum:.2f} ج.م
+💵 <b>قيمة الفاتورة قبل الخصم:</b> {expected_total:.2f} ج.م
+🎯 <b>قيمة الخصم المطبق:</b> {actual_discount:.2f} ج.م
+💳 <b>إجمالي الفاتورة النهائي:</b> {bill_total:.2f} ج.م
+
+⚠️ <b>مقدار الخسارة:</b> {loss_amount:.2f} ج.م ({loss_percentage:.1f}%)
+
+━━━━━━━━━━━━━━━━━━━━
+
+🛍️ <b>تفاصيل المنتجات:</b>
 
 {products_text}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-🔴 *تحذير مهم:*
+🔴 <b>تحذير مهم:</b>
 ⚠️ إجمالي الفاتورة أقل من سعر الشراء
 💸 هذا يعني خسارة مالية في هذه الصفقة
 📞 يرجى المراجعة الفورية والتأكد من صحة الخصم
@@ -319,7 +399,7 @@ def format_low_stock_message(
     user_name: str = None,
 ) -> str:
     """
-    Format WhatsApp message for low/negative stock notification in Arabic
+    Format Telegram message for low/negative stock notification in Arabic
 
     Args:
         products_below_zero: List of products with stock below 0
@@ -334,13 +414,13 @@ def format_low_stock_message(
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # Format store and user information
-    store_display = store_name if store_name else "غير محدد"
-    user_display = user_name if user_name else "غير محدد"
+    store_display = _e(store_name) if store_name else "غير محدد"
+    user_display = _e(user_name) if user_name else "غير محدد"
 
     # Create products list
     products_text = ""
     for i, product in enumerate(products_below_zero, 1):
-        name = product["name"]
+        name = _e(product["name"])
         current_stock = product["stock"]
         quantity_sold = product.get("quantity_sold", "غير متاح")
 
@@ -351,15 +431,15 @@ def format_low_stock_message(
         if i < len(products_below_zero):
             products_text += "\n"
 
-    message = f"""⚠️ *تنبيه مخزون سالب* ⚠️
+    message = f"""⚠️ <b>تنبيه مخزون سالب</b> ⚠️
 
-🏪 *المتجر:* {store_display}
-👨‍💼 *الموظف:* {user_display}
-📅 *التاريخ:* {current_time}
+🏪 <b>المتجر:</b> {store_display}
+👨‍💼 <b>الموظف:</b> {user_display}
+📅 <b>التاريخ:</b> {current_time}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📦 *منتجات بمخزون سالب:*
+📦 <b>منتجات بمخزون سالب:</b>
 
 {products_text}"""
 
@@ -446,7 +526,7 @@ def send_low_stock_notification_background(
     store_name: str = None,
     user_name: str = None,
 ):
-    """Background task to send low stock WhatsApp notification and create in-app notification"""
+    """Background task to send low stock Telegram notification and create in-app notification"""
     try:
         if not products_below_zero:
             return
@@ -466,17 +546,17 @@ def send_low_stock_notification_background(
 
         if success:
             logging.info(
-                "Low stock WhatsApp notification sent for %d products",
+                "Low stock Telegram notification sent for %d products",
                 len(products_below_zero),
             )
         else:
             logging.warning(
-                "Failed to send low stock WhatsApp notification for %d products",
+                "Failed to send low stock Telegram notification for %d products",
                 len(products_below_zero),
             )
     except Exception as e:
         logging.error(
-            "Error in background task sending low stock WhatsApp notification: %s", e
+            "Error in background task sending low stock Telegram notification: %s", e
         )
 
 
@@ -513,13 +593,12 @@ def format_store_transfer_message(
     user_name: str = None,
 ) -> str:
     """
-    Format WhatsApp message for store transfer notification in Arabic
+    Format Telegram message for store transfer notification in Arabic
 
     Args:
         source_store_name: Name of the source store
         destination_store_name: Name of the destination store
         products: List of transferred products with details
-        total_value: Total value of transferred products
         transfer_time: Transfer timestamp
         user_name: Username who performed the transfer
 
@@ -527,31 +606,31 @@ def format_store_transfer_message(
         Formatted Arabic message string
     """
     # Format user information
-    user_display = user_name if user_name else "غير محدد"
+    user_display = _e(user_name) if user_name else "غير محدد"
 
     # Create products list
     products_text = ""
     for i, product in enumerate(products, 1):
-        name = product.get("name", "منتج غير محدد")
+        name = _e(product.get("name", "منتج غير محدد"))
         quantity = product.get("quantity", 0)
 
         products_text += f"{i}. {name}\n"
         products_text += f"   📦 الكمية: {quantity} قطعة\n"
 
-    message = f"""🔄 *تنبيه نقل منتجات بين المتاجر*
+    message = f"""🔄 <b>تنبيه نقل منتجات بين المتاجر</b>
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📅 *تاريخ النقل:* {transfer_time}
-👤 *المستخدم:* {user_display}
+📅 <b>تاريخ النقل:</b> {_e(transfer_time)}
+👤 <b>المستخدم:</b> {user_display}
 
-🏪 *من المتجر:* {source_store_name}
-🏬 *إلى المتجر:* {destination_store_name}
+🏪 <b>من المتجر:</b> {_e(source_store_name)}
+🏬 <b>إلى المتجر:</b> {_e(destination_store_name)}
 
 
 ━━━━━━━━━━━━━━━━━━━━
 
-🛍️ *تفاصيل المنتجات المنقولة:*
+🛍️ <b>تفاصيل المنتجات المنقولة:</b>
 
 {products_text}━━━━━━━━━━━━━━━━━━━━
 """
@@ -617,12 +696,12 @@ def check_due_installments(store_id: int):
             GROUP BY i.id, i.paid, i.installments_count, i.installment_interval, i.bill_id, ap.name, ap.phone
         ),
         due_installments AS (
-            SELECT 
+            SELECT
                 *,
                 -- Calculate total paid (deposit + flow payments)
                 paid + COALESCE((
-                    SELECT SUM(amount) 
-                    FROM installments_flow 
+                    SELECT SUM(amount)
+                    FROM installments_flow
                     WHERE installment_id = id
                 ), 0) as total_paid,
                 -- Calculate next due date
@@ -631,7 +710,7 @@ def check_due_installments(store_id: int):
         )
         SELECT *
         FROM due_installments
-        WHERE 
+        WHERE
             -- Not fully paid
             total_paid < total
             -- Due today or overdue
@@ -658,7 +737,7 @@ def format_due_installments_message(
     user_name: str = None,
 ) -> str:
     """
-    Format WhatsApp message for due installments notification in Arabic
+    Format Telegram message for due installments notification in Arabic
 
     Args:
         due_installments: List of due installments with full details
@@ -673,23 +752,23 @@ def format_due_installments_message(
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # Format store and user information
-    store_display = store_name if store_name else "غير محدد"
-    user_display = user_name if user_name else "غير محدد"
+    store_display = _e(store_name) if store_name else "غير محدد"
+    user_display = _e(user_name) if user_name else "غير محدد"
 
     if not due_installments:
-        return f"""✅ *تم فتح شيفت جديد*
+        return f"""✅ <b>تم فتح شيفت جديد</b>
 
-🏪 *المتجر:* {store_display}
-👨‍💼 *المستخدم:* {user_display}
-📅 *الوقت:* {current_time}
+🏪 <b>المتجر:</b> {store_display}
+👨‍💼 <b>المستخدم:</b> {user_display}
+📅 <b>الوقت:</b> {current_time}
 """
 
     # Create installments list
     installments_text = ""
 
     for i, installment in enumerate(due_installments, 1):
-        party_name = installment.get("party_name", "عميل غير معروف")
-        party_phone = installment.get("party_phone", "غير متاح")
+        party_name = _e(installment.get("party_name", "عميل غير معروف"))
+        party_phone = _e(installment.get("party_phone", "غير متاح"))
         installment_id = installment.get("id")
         total = installment.get("total", 0)
         total_paid = installment.get("total_paid", 0)
@@ -714,20 +793,20 @@ def format_due_installments_message(
             formatted_due_date = str(next_due_date)
             due_status = "مستحق اليوم 📅"
 
-        installments_text += f"🔸 *القسط رقم {installment_id}*\n"
-        installments_text += f"👤 *العميل:* {party_name}\n"
-        installments_text += f"📞 *الهاتف:* {party_phone}\n"
-        installments_text += f"📅 *تاريخ الاستحقاق:* {formatted_due_date}\n"
-        installments_text += f"⏰ *الحالة:* {due_status}\n"
-        installments_text += f"💰 *إجمالي الفاتورة:* {total:.2f} ج.م\n"
-        installments_text += f"✅ *المدفوع:* {total_paid:.2f} ج.م\n"
-        installments_text += f"💳 *المتبقي:* {remaining:.2f} ج.م\n\n"
+        installments_text += f"🔸 <b>القسط رقم {installment_id}</b>\n"
+        installments_text += f"👤 <b>العميل:</b> {party_name}\n"
+        installments_text += f"📞 <b>الهاتف:</b> {party_phone}\n"
+        installments_text += f"📅 <b>تاريخ الاستحقاق:</b> {formatted_due_date}\n"
+        installments_text += f"⏰ <b>الحالة:</b> {due_status}\n"
+        installments_text += f"💰 <b>إجمالي الفاتورة:</b> {total:.2f} ج.م\n"
+        installments_text += f"✅ <b>المدفوع:</b> {total_paid:.2f} ج.م\n"
+        installments_text += f"💳 <b>المتبقي:</b> {remaining:.2f} ج.م\n\n"
 
         # Add products details
         if products:
-            installments_text += "🛍️ *منتجات القسط:*\n"
+            installments_text += "🛍️ <b>منتجات القسط:</b>\n"
             for j, product in enumerate(products, 1):
-                name = product.get("name", "منتج غير محدد")
+                name = _e(product.get("name", "منتج غير محدد"))
                 amount = product.get("amount", 0)
                 price = product.get("price", 0)
                 product_total = product.get("total", 0)
@@ -740,7 +819,7 @@ def format_due_installments_message(
 
         # Add payment history if exists
         if flow:
-            installments_text += "💰 *سجل المدفوعات:*\n"
+            installments_text += "💰 <b>سجل المدفوعات:</b>\n"
             for payment in flow:
                 amount = payment.get("amount", 0)
                 payment_time = payment.get("time", "")
@@ -761,15 +840,15 @@ def format_due_installments_message(
         if i < len(due_installments):
             installments_text += "\n━━━━━━━━━━━━━━━━━━━━\n\n"
 
-        message = f"""✅ *تم فتح شيفت جديد*
+        message = f"""✅ <b>تم فتح شيفت جديد</b>
 
-🏪 *المتجر:* {store_display}
-👨‍💼 *المستخدم:* {user_display}
-📅 *الوقت:* {current_time}
+🏪 <b>المتجر:</b> {store_display}
+👨‍💼 <b>المستخدم:</b> {user_display}
+📅 <b>الوقت:</b> {current_time}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📊 *عدد الأقساط المستحقة:* {len(due_installments)}
+📊 <b>عدد الأقساط المستحقة:</b> {len(due_installments)}
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -777,7 +856,7 @@ def format_due_installments_message(
 
 ━━━━━━━━━━━━━━━━━━━━
 
-⚠️ *يرجى متابعة العملاء لتحصيل المبالغ المستحقة*"""
+⚠️ <b>يرجى متابعة العملاء لتحصيل المبالغ المستحقة</b>"""
 
     return message
 
@@ -788,7 +867,7 @@ def send_due_installments_notification_background(
     user_name: str = None,
 ):
     """
-    Background task to check for due installments and send WhatsApp notification
+    Background task to check for due installments and send Telegram notification
     Also creates in-app notifications for each due installment
     """
     try:
@@ -813,15 +892,15 @@ def send_due_installments_notification_background(
         if success:
             count = len(due_installments)
             logging.info(
-                f"Due installments WhatsApp notification sent for store {store_id}: {count} installments due"
+                f"Due installments Telegram notification sent for store {store_id}: {count} installments due"
             )
         else:
             logging.warning(
-                f"Failed to send due installments WhatsApp notification for store {store_id}"
+                f"Failed to send due installments Telegram notification for store {store_id}"
             )
     except Exception as e:
         logging.error(
-            f"Error in background task sending due installments WhatsApp notification: {e}"
+            f"Error in background task sending due installments Telegram notification: {e}"
         )
 
 
@@ -845,7 +924,7 @@ def check_products_depleted_during_shift(store_id: int, shift_start_time: str):
         query = """
         WITH shift_product_movements AS (
             -- Get all product movements during this shift
-            SELECT 
+            SELECT
                 pf.product_id,
                 SUM(pf.amount) as total_shift_movement,
                 p.name as product_name
@@ -859,7 +938,7 @@ def check_products_depleted_during_shift(store_id: int, shift_start_time: str):
             HAVING SUM(pf.amount) < 0  -- Only products that had net negative movement (were sold)
         ),
         current_and_pre_shift_stock AS (
-            SELECT 
+            SELECT
                 spm.product_id,
                 spm.product_name,
                 spm.total_shift_movement,
@@ -867,11 +946,11 @@ def check_products_depleted_during_shift(store_id: int, shift_start_time: str):
                 -- Calculate stock before shift started
                 pi.stock - spm.total_shift_movement as stock_before_shift
             FROM shift_product_movements spm
-            JOIN product_inventory pi ON spm.product_id = pi.product_id 
+            JOIN product_inventory pi ON spm.product_id = pi.product_id
                 AND pi.store_id = %s
             WHERE pi.is_deleted = FALSE
         )
-        SELECT 
+        SELECT
             product_id,
             product_name,
             current_stock,
@@ -903,7 +982,7 @@ def format_shift_closure_message(
     shift_start_time: str = None,
 ) -> str:
     """
-    Format WhatsApp message for shift closure notification in Arabic (without depleted products)
+    Format Telegram message for shift closure notification in Arabic (without depleted products)
 
     Args:
         shift_data: Dictionary containing shift financial summary
@@ -919,8 +998,8 @@ def format_shift_closure_message(
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # Format store and user information
-    store_display = store_name if store_name else "غير محدد"
-    user_display = user_name if user_name else "غير محدد"
+    store_display = _e(store_name) if store_name else "غير محدد"
+    user_display = _e(user_name) if user_name else "غير محدد"
 
     # Format shift duration
     shift_duration = "غير محدد"
@@ -958,42 +1037,42 @@ def format_shift_closure_message(
     # Get daily inventory summary
     inventory_summary = get_daily_inventory_summary(shift_data.get("store_id"))
 
-    message = f"""🔐 *تم إغلاق الشيفت* 🔐
+    message = f"""🔐 <b>تم إغلاق الشيفت</b> 🔐
 
-🏪 *المتجر:* {store_display}
-👨‍💼 *المستخدم:* {user_display}
-🕐 *وقت الإغلاق:* {current_time}
-⏱️ *مدة الشيفت:* {shift_duration}
-🚀 *بداية الشيفت:* {formatted_start_time}
-
-━━━━━━━━━━━━━━━━━━━━
-
-💰 *الملخص المالي:*
-
-💵 *إجمالي المبيعات:* {sell_total:.2f} ج.م
-🔄 *المرتجعات:* {return_total:.2f} ج.م
-📈 *صافي المبيعات:* {gross_revenue:.2f} ج.م
-🏦 *الأقساط المحصلة:* {installment_total:.2f} ج.م
-
-💳 *الحركة النقدية:*
-📈 *إجمالي الدخول:* {cash_in:.2f} ج.م
-📉 *إجمالي الخروج:* {cash_out:.2f} ج.م
-💰 *صافي الحركة النقدية:* {net_cash_flow:.2f} ج.م
+🏪 <b>المتجر:</b> {store_display}
+👨‍💼 <b>المستخدم:</b> {user_display}
+🕐 <b>وقت الإغلاق:</b> {current_time}
+⏱️ <b>مدة الشيفت:</b> {shift_duration}
+🚀 <b>بداية الشيفت:</b> {formatted_start_time}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📊 *إحصائيات الشيفت:*
+💰 <b>الملخص المالي:</b>
 
-🧾 *عدد المعاملات:* {transaction_count}
-💸 *متوسط قيمة المعاملة:* {avg_transaction:.2f} ج.م
+💵 <b>إجمالي المبيعات:</b> {sell_total:.2f} ج.م
+🔄 <b>المرتجعات:</b> {return_total:.2f} ج.م
+📈 <b>صافي المبيعات:</b> {gross_revenue:.2f} ج.م
+🏦 <b>الأقساط المحصلة:</b> {installment_total:.2f} ج.م
+
+💳 <b>الحركة النقدية:</b>
+📈 <b>إجمالي الدخول:</b> {cash_in:.2f} ج.م
+📉 <b>إجمالي الخروج:</b> {cash_out:.2f} ج.م
+💰 <b>صافي الحركة النقدية:</b> {net_cash_flow:.2f} ج.م
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📋 *الجرد اليومي:*
+📊 <b>إحصائيات الشيفت:</b>
 
-🏷️ *قيمة المخزون (سعر الشراء):* {inventory_summary["wholesale_value"]:.2f} ج.م
-💰 *قيمة المخزون (سعر البيع):* {inventory_summary["retail_value"]:.2f} ج.م
-📦 *عدد الأصناف في المخزون:* {inventory_summary["total_products"]}
+🧾 <b>عدد المعاملات:</b> {transaction_count}
+💸 <b>متوسط قيمة المعاملة:</b> {avg_transaction:.2f} ج.م
+
+━━━━━━━━━━━━━━━━━━━━
+
+📋 <b>الجرد اليومي:</b>
+
+🏷️ <b>قيمة المخزون (سعر الشراء):</b> {inventory_summary["wholesale_value"]:.2f} ج.م
+💰 <b>قيمة المخزون (سعر البيع):</b> {inventory_summary["retail_value"]:.2f} ج.م
+📦 <b>عدد الأصناف في المخزون:</b> {inventory_summary["total_products"]}
 
 ━━━━━━━━━━━━━━━━━━━━"""
 
@@ -1016,7 +1095,7 @@ def get_daily_inventory_summary(store_id: int) -> Dict[str, float]:
 
         # Get inventory summary with current stock values
         query = """
-        SELECT 
+        SELECT
             COALESCE(SUM(pi.stock * p.wholesale_price), 0) as wholesale_value,
             COALESCE(SUM(pi.stock * p.price), 0) as retail_value,
             COUNT(CASE WHEN pi.stock > 0 THEN 1 END) as total_products
@@ -1053,7 +1132,7 @@ def format_depleted_products_message(
     user_name: str = None,
 ) -> str:
     """
-    Format WhatsApp message for depleted products notification in Arabic
+    Format Telegram message for depleted products notification in Arabic
 
     Args:
         depleted_products: List of products that reached zero during shift
@@ -1068,13 +1147,13 @@ def format_depleted_products_message(
         return None
 
     # Format store and user information
-    store_display = store_name if store_name else "غير محدد"
-    user_display = user_name if user_name else "غير محدد"
+    store_display = _e(store_name) if store_name else "غير محدد"
+    user_display = _e(user_name) if user_name else "غير محدد"
 
     # Create depleted products list
     products_text = ""
     for i, product in enumerate(depleted_products, 1):
-        name = product.get("product_name", "منتج غير محدد")
+        name = _e(product.get("product_name", "منتج غير محدد"))
         consumed = product.get("consumed_amount", 0)
 
         products_text += f"{i}. {name}\n"
@@ -1086,21 +1165,21 @@ def format_depleted_products_message(
         if i < len(depleted_products):
             products_text += "\n"
 
-    message = f"""📦 *تنبيه: منتجات نفدت خلال الشيفت* 📦
+    message = f"""📦 <b>تنبيه: منتجات نفدت خلال الشيفت</b> 📦
 
-🏪 *المتجر:* {store_display}
-👨‍💼 *المستخدم:* {user_display}
+🏪 <b>المتجر:</b> {store_display}
+👨‍💼 <b>المستخدم:</b> {user_display}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-⚠️ *منتجات نفدت خلال الشيفت:*
+⚠️ <b>منتجات نفدت خلال الشيفت:</b>
 
 {products_text}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📋 *إجمالي المنتجات المنتهية: {len(depleted_products)} منتج*
-🚚 *يرجى تجهيز هذه المنتجات للتوريد غداً*
+📋 <b>إجمالي المنتجات المنتهية: {len(depleted_products)} منتج</b>
+🚚 <b>يرجى تجهيز هذه المنتجات للتوريد غداً</b>
 
 ━━━━━━━━━━━━━━━━━━━━"""
 
@@ -1115,7 +1194,7 @@ def send_shift_closure_notification_background(
     shift_start_time: str = None,
 ):
     """
-    Background task to send shift closure WhatsApp notifications (split into two messages)
+    Background task to send shift closure Telegram notifications (split into two messages)
     """
     try:
         # Add store_id to shift_data for inventory calculation
@@ -1140,11 +1219,11 @@ def send_shift_closure_notification_background(
 
         if success_closure:
             logging.info(
-                f"Shift closure summary WhatsApp notification sent for store {store_id}"
+                f"Shift closure summary Telegram notification sent for store {store_id}"
             )
         else:
             logging.warning(
-                f"Failed to send shift closure summary WhatsApp notification for store {store_id}"
+                f"Failed to send shift closure summary Telegram notification for store {store_id}"
             )
 
         # Format and send the depleted products message (if any products depleted)
@@ -1156,24 +1235,22 @@ def send_shift_closure_notification_background(
 
         if depleted_message:  # Only send if there are depleted products
             # Add a small delay between messages
-            import time
-
             time.sleep(2)
 
             success_depleted = send_notification_to_store(store_id, depleted_message)
 
             if success_depleted:
                 logging.info(
-                    f"Depleted products WhatsApp notification sent for store {store_id}: {len(depleted_products)} products"
+                    f"Depleted products Telegram notification sent for store {store_id}: {len(depleted_products)} products"
                 )
             else:
                 logging.warning(
-                    f"Failed to send depleted products WhatsApp notification for store {store_id}"
+                    f"Failed to send depleted products Telegram notification for store {store_id}"
                 )
         else:
             logging.info(f"No depleted products to notify for store {store_id}")
 
     except Exception as e:
         logging.error(
-            f"Error in background task sending shift closure WhatsApp notification: {e}"
+            f"Error in background task sending shift closure Telegram notification: {e}"
         )

@@ -1,18 +1,4 @@
 services:
-  whatsapp:
-    build:
-      context: .
-      dockerfile: Dockerfile.whatsapp
-    ports:
-      - '3001:3001'
-    restart: unless-stopped
-    environment:
-      - TZ=Africa/Cairo
-    volumes:
-      - whatsapp_data:/app/whatsapp_data
-    networks:
-      - app-network
-
   db:
     environment:
       - POSTGRES_PASSWORD=f121220
@@ -27,13 +13,12 @@ services:
       - postgres_data:/var/lib/postgresql/data/
     networks:
       - app-network
-  
+
   web:
     build: .
     command: uvicorn main_wrapper:app --host 0.0.0.0 --port 8000 --ssl-keyfile=/app/ssl/key.pem --ssl-certfile=/app/ssl/cert.pem --reload
     depends_on:
       - db
-      - whatsapp
     environment:
       - HOST=db
       - USER=postgres
@@ -42,7 +27,7 @@ services:
       - SECRET=jshfjksdhf
       - ALGORITHM=HS256
       - TZ=Africa/Cairo
-      - WHATSAPP_SERVICE_URL=http://whatsapp:3001
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
     ports:
       - '8000:8000'
     restart: unless-stopped
@@ -60,4 +45,3 @@ volumes:
   postgres_data: null
   ssl_certs:
     driver: local
-  whatsapp_data:
