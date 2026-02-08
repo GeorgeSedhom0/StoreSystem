@@ -11,7 +11,7 @@ from os import getenv
 import jwt
 from fastapi import APIRouter
 from auth_middleware import get_current_user, get_store_info
-from whatsapp_utils import (
+from telegram_utils import (
     send_due_installments_notification_background,
     send_shift_closure_notification_background,
 )

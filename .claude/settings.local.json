@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git fetch:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(npx tsc:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(npm:*)",
+      "Bash(cmd.exe /c \"npm --version\")",
+      "Bash(cmd.exe /c \"npx tsc --noEmit --project src\\\\renderer\\\\tsconfig.json 2>&1\")",
+      "Bash(cmd.exe /c \"npx tsc --noEmit --project src\\\\renderer\\\\tsconfig.json\")",
+      "Bash(cmd.exe /c \"npx tsc --noEmit --project src\\\\renderer\\\\tsconfig.json && echo BUILD_SUCCESS || echo BUILD_FAILED\")"
     ]
   }
 }

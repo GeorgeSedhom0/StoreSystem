@@ -5,8 +5,7 @@ import time
 os.environ["TZ"] = "Africa/Cairo"
 time.tzset()
 
-# Note: WhatsApp service is now running as a separate Docker container
-# No initialization needed here - communication happens via HTTP API
+# Note: Telegram notifications are sent directly via Bot API - no separate service needed
 
 # Now import and run your actual app
 from main import app

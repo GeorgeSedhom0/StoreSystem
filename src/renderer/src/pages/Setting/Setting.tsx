@@ -8,7 +8,7 @@ import autoAnimate from "@formkit/auto-animate";
 import Users from "./Components/Users";
 import Themes from "./Components/Themes";
 import PrinterSettings from "./Components/PrinterSettings";
-import WhatsApp from "./Components/WhatsApp";
+import Telegram from "./Components/Telegram";
 import {
   Settings as SettingsIcon,
   People as PeopleIcon,
@@ -16,7 +16,7 @@ import {
   Groups as GroupsIcon,
   Palette as PaletteIcon,
   Print as PrintIcon,
-  WhatsApp as WhatsAppIcon,
+  Telegram as TelegramIcon,
 } from "@mui/icons-material";
 
 const Settings = () => {
@@ -145,9 +145,9 @@ const Settings = () => {
             value="6"
           />
           <Tab
-            icon={<WhatsAppIcon />}
+            icon={<TelegramIcon />}
             iconPosition="start"
-            label="واتساب"
+            label="تليجرام"
             value="7"
           />
         </TabList>
@@ -174,7 +174,7 @@ const Settings = () => {
             <PrinterSettings />
           </TabPanel>
           <TabPanel value="7" sx={{ p: 0 }}>
-            <WhatsApp />
+            <Telegram />
           </TabPanel>
         </Box>
       </TabContext>
