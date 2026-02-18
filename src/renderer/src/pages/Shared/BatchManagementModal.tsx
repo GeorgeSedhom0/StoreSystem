@@ -116,11 +116,7 @@ const BatchManagementModal = ({
   const { data, isLoading } = useQuery({
     queryKey: ["productBatches", productId, storeId],
     queryFn: () => getProductBatches(productId, storeId as number),
-    enabled:
-      open &&
-      !!productId &&
-      storeId !== null &&
-      storeId !== undefined,
+    enabled: open && !!productId && storeId !== null && storeId !== undefined,
   });
 
   const { mutate: saveBatches, isPending: isSaving } = useMutation({

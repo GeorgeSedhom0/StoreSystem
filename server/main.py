@@ -1422,7 +1422,10 @@ def move_products(
                             else expiration_date
                         )
 
-                    for expiration_date, requested_qty in requested_by_expiration.items():
+                    for (
+                        expiration_date,
+                        requested_qty,
+                    ) in requested_by_expiration.items():
                         cur.execute(
                             """
                             SELECT COALESCE(SUM(quantity), 0) AS quantity
@@ -2044,6 +2047,7 @@ async def backup(current_user: dict = Depends(get_current_user)):
     Backs up everything in the database as a save point to restore later
     """
     import tempfile
+
     try:
         # Create a .sql file in a writable temp directory
         backup_path = os.path.join(tempfile.gettempdir(), "openstore_backup.sql")
@@ -2073,6 +2077,7 @@ async def restore(
     Restores the database to a previous save point
     """
     import tempfile
+
     try:
         reset_db()
         fileBytes = await file.read()
