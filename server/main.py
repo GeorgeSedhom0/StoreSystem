@@ -1829,9 +1829,11 @@ async def backup(current_user: dict = Depends(get_current_user)):
     """
     Backs up everything in the database as a save point to restore later
     """
+    import tempfile
     try:
-        # Create a .sql file to store the backup
-        with open("./backup.sql", "wb") as f:
+        # Create a .sql file in a writable temp directory
+        backup_path = os.path.join(tempfile.gettempdir(), "openstore_backup.sql")
+        with open(backup_path, "wb") as f:
             os.environ["PGPASSWORD"] = PASS
             subprocess.run(
                 ["pg_dump", "-h", HOST, "-U", USER, "-d", DATABASE], stdout=f
@@ -1839,7 +1841,7 @@ async def backup(current_user: dict = Depends(get_current_user)):
 
         # Return the file
         return StreamingResponse(
-            open("backup.sql", "rb"),
+            open(backup_path, "rb"),
             media_type="application/octet-stream",
             headers={"Content-Disposition": "attachment;filename=backup.sql"},
         )
@@ -1856,10 +1858,12 @@ async def restore(
     """
     Restores the database to a previous save point
     """
+    import tempfile
     try:
         reset_db()
         fileBytes = await file.read()
-        with open("restore.sql", "wb") as f:
+        restore_path = os.path.join(tempfile.gettempdir(), "openstore_restore.sql")
+        with open(restore_path, "wb") as f:
             f.write(fileBytes)
 
         assert PASS, "No password provided"
@@ -1869,7 +1873,7 @@ async def restore(
 
         # Restore the database
         os.environ["PGPASSWORD"] = PASS
-        with open("restore.sql", "r") as f:
+        with open(restore_path, "r") as f:
             subprocess.run(["psql", "-h", HOST, "-U", USER, "-d", DATABASE], stdin=f)
 
         return {"message": "Database restored successfully"}

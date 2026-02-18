@@ -3,6 +3,11 @@ import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
 import { settingsManager } from "./settings_manager";
+import { ServiceManager } from "./service-manager";
+
+// Service manager for standalone mode (manages PostgreSQL + Backend)
+let serviceManager: ServiceManager | null = null;
+let isShuttingDown = false;
 
 // Track window IDs
 const windowRegistry = new Map<number, BrowserWindow>();
@@ -175,7 +180,7 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId("com.electron");
 
@@ -185,6 +190,31 @@ app.whenReady().then(() => {
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
+
+  const mode = settingsManager.getSetting("mode"); // "standalone" | "remote" | undefined
+
+  // If standalone mode, start embedded services before creating windows
+  if (mode === "standalone") {
+    serviceManager = new ServiceManager();
+
+    // Forward status changes to all renderer windows
+    serviceManager.onStatusChange((status, message) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("service-status", { status, message });
+      }
+    });
+
+    try {
+      await serviceManager.start();
+      // Auto-set baseUrl for standalone mode
+      settingsManager.setSetting("baseUrl", "https://127.0.0.1:8000");
+    } catch (e) {
+      dialog.showErrorBox(
+        "خطأ في التشغيل",
+        `فشل تشغيل الخدمات: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
 
   createWindow();
 
@@ -213,8 +243,18 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", async (event) => {
   console.log("Before quit");
+  if (serviceManager && !isShuttingDown) {
+    isShuttingDown = true;
+    event.preventDefault();
+    try {
+      await serviceManager.shutdown();
+    } catch (e) {
+      console.error("Error during service shutdown:", e);
+    }
+    app.quit();
+  }
 });
 
 // In this file you can include the rest of your app"s specific main process
@@ -355,4 +395,46 @@ ipcMain.handle("get-window-id", (event) => {
 // For debugging: get all active window IDs
 ipcMain.handle("get-active-window-ids", () => {
   return Array.from(windowRegistry.keys());
+});
+
+// ─── Mode & Service IPC Handlers ─────────────────────────
+
+// Get current service status (for splash screen)
+ipcMain.handle("get-service-status", () => {
+  if (!serviceManager) return { status: "ready", message: "" };
+  return { status: serviceManager.status, message: serviceManager.statusMessage };
+});
+
+// Set app mode (called from first-run wizard)
+ipcMain.handle("set-mode", async (_event, mode: "standalone" | "remote") => {
+  settingsManager.setSetting("mode", mode);
+
+  if (mode === "standalone") {
+    // Start services immediately after mode is set
+    serviceManager = new ServiceManager();
+
+    serviceManager.onStatusChange((status, message) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("service-status", { status, message });
+      }
+    });
+
+    try {
+      await serviceManager.start();
+      settingsManager.setSetting("baseUrl", "https://127.0.0.1:8000");
+      return { success: true };
+    } catch (e) {
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+
+  return { success: true };
+});
+
+// Get current mode
+ipcMain.handle("get-mode", () => {
+  return settingsManager.getSetting("mode") || null;
 });

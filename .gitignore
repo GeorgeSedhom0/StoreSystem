@@ -16,3 +16,6 @@ out
 /settings
 /server/whatsapp_data
 server/whatsapp_utils/.wwebjs_cache
+backend-dist
+backend-downloads
+openstore-data

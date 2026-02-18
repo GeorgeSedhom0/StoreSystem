@@ -30,6 +30,7 @@ import MoveProducts from "./pages/MoveProducts/MoveProducts";
 import PartiesBills from "./pages/PartiesBills/PartiesBills";
 import AdminSell from "./pages/AdminSell/AdminSell";
 import Notifications from "./pages/Notifications/Notifications";
+import Setup from "./pages/Setup/Setup";
 
 axios.defaults.withCredentials = true;
 
@@ -45,6 +46,7 @@ const queryClient = new QueryClient({
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isBaseURLSet, setIsBaseURLSet] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const [theme, setTheme] = useState(createTheme({}));
 
   useEffect(() => {
@@ -143,7 +145,18 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    const setBaseUrl = async () => {
+    const initialize = async () => {
+      // Check if mode has been configured (first-run wizard)
+      const mode = await window.electron.ipcRenderer.invoke("get-mode");
+
+      if (!mode) {
+        // No mode set — show first-run wizard
+        setNeedsSetup(true);
+        setIsLoading(false);
+        return;
+      }
+
+      // Mode is set, proceed with baseUrl connection
       const baseUrl = await window.electron.ipcRenderer.invoke(
         "get",
         "baseUrl",
@@ -160,30 +173,40 @@ const App = () => {
       while (true) {
         try {
           const { data } = await axios.get(baseUrl + "/test", {
-            timeout: 5000, // Add a timeout to prevent hanging indefinitely
+            timeout: 5000,
           });
           if (data === "Hello, World!") {
             axios.defaults.baseURL = baseUrl;
             setIsBaseURLSet(true);
             setIsLoading(false);
             console.log("Base URL set successfully:", baseUrl);
-            break; // Exit the loop on success
+            break;
           } else {
             console.log("Received unexpected data from /test endpoint:", data);
           }
         } catch (e) {
           console.error("Failed to connect to server, retrying...");
         }
-        // Wait for 2 seconds before retrying
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     };
 
-    setBaseUrl();
+    initialize();
   }, []);
 
   if (isLoading || !theme) {
     return <LoadingScreen loading={true} />;
+  }
+
+  if (needsSetup) {
+    return (
+      <Setup
+        onComplete={() => {
+          // Reload the app to go through the normal flow
+          window.location.reload();
+        }}
+      />
+    );
   }
 
   return (

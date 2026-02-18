@@ -72,7 +72,7 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
+    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
     """)
     cur.execute("""
     INSERT INTO scopes (name, pages)
@@ -204,8 +204,16 @@ def create_all_tables(cur):
         phone VARCHAR,
         address VARCHAR,
         type VARCHAR, -- 'customer' or 'supplier'
-        extra_info JSONB
+        extra_info JSONB,
+        bar_code VARCHAR(20) UNIQUE
     )
+    """)
+
+    # Create index for fast barcode lookups
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_parties_barcode
+        ON assosiated_parties(bar_code)
+        WHERE bar_code IS NOT NULL
     """)
 
     # Create the bills table
