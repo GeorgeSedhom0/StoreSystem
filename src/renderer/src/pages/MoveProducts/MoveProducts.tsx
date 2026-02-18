@@ -142,7 +142,7 @@ const MoveProducts = () => {
         return;
       }
 
-      if (!destinationStoreId) {
+      if (destinationStoreId === null || destinationStoreId === undefined) {
         setMsg({
           type: "error",
           text: "يرجى اختيار المتجر الوجهة",
@@ -165,6 +165,8 @@ const MoveProducts = () => {
             quantity: item.quantity,
             price: item.price,
             wholesale_price: item.wholesale_price,
+            batches: item.batches,
+            batch_id: item.batch_id,
           })),
         };
 
@@ -335,7 +337,7 @@ const MoveProducts = () => {
                 <InputLabel size="small">المتجر الوجهة</InputLabel>
                 <Select
                   size="small"
-                  value={destinationStoreId || ""}
+                  value={destinationStoreId ?? ""}
                   label="المتجر الوجهة"
                   onChange={(e) =>
                     setDestinationStoreId(Number(e.target.value))
@@ -368,7 +370,8 @@ const MoveProducts = () => {
                 onClick={() => submitBill(shoppingCart)}
                 disabled={
                   shoppingCart.length === 0 ||
-                  !destinationStoreId ||
+                  destinationStoreId === null ||
+                  destinationStoreId === undefined ||
                   isSubmitting
                 }
                 fullWidth
@@ -424,6 +427,7 @@ const MoveProducts = () => {
                   <TableCell>الاجمالي</TableCell>
                   <TableCell></TableCell>
                   <TableCell>الكمية المتاحة</TableCell>
+                  <TableCell>الصلاحية</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>

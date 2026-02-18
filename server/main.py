@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
-from typing import Literal, Any
+from typing import Literal, Any, Dict, List
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -1327,22 +1327,234 @@ def move_products(
             source_party = cur.fetchone()
             source_party_id = source_party["id"] if source_party else None
 
+            # Build exact transfer allocations per product.
+            # If batches are provided from frontend, validate and use them.
+            # Otherwise, auto-build FEFO allocation from tracked batches.
+            transfer_allocations: Dict[int, List[BatchInfo]] = {}
+
+            for product_flow in bill.products_flow:
+                if product_flow.quantity <= 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid quantity for product {product_flow.id}",
+                    )
+
+                requested_batches = product_flow.batches or []
+                allocations: List[BatchInfo] = []
+
+                if requested_batches:
+                    requested_total = sum(batch.quantity for batch in requested_batches)
+                    if requested_total != product_flow.quantity:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Batch quantities for product {product_flow.id} "
+                                f"must equal requested quantity ({product_flow.quantity})"
+                            ),
+                        )
+
+                    requested_by_batch_id: Dict[int, int] = {}
+                    requested_by_expiration: Dict[str, int] = {}
+
+                    for batch in requested_batches:
+                        if batch.quantity <= 0:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Invalid batch quantity for product {product_flow.id}",
+                            )
+
+                        if batch.batch_id:
+                            requested_by_batch_id[batch.batch_id] = (
+                                requested_by_batch_id.get(batch.batch_id, 0)
+                                + batch.quantity
+                            )
+                        else:
+                            if not batch.expiration_date:
+                                raise HTTPException(
+                                    status_code=400,
+                                    detail=(
+                                        f"Each transfer batch for product {product_flow.id} "
+                                        "must include batch_id or expiration_date"
+                                    ),
+                                )
+                            requested_by_expiration[batch.expiration_date] = (
+                                requested_by_expiration.get(batch.expiration_date, 0)
+                                + batch.quantity
+                            )
+
+                    batch_expiration_map: Dict[int, Optional[str]] = {}
+
+                    for batch_id, requested_qty in requested_by_batch_id.items():
+                        cur.execute(
+                            """
+                            SELECT id, quantity, expiration_date
+                            FROM product_batches
+                            WHERE id = %s
+                            AND store_id = %s
+                            AND product_id = %s
+                            AND quantity > 0
+                            """,
+                            (batch_id, source_store_id, product_flow.id),
+                        )
+                        source_batch = cur.fetchone()
+                        if not source_batch:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=(
+                                    f"Batch {batch_id} for product "
+                                    f"{product_flow.id} not found in source store"
+                                ),
+                            )
+
+                        if source_batch["quantity"] < requested_qty:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=(
+                                    f"Insufficient quantity in batch {batch_id} "
+                                    f"for product {product_flow.id}"
+                                ),
+                            )
+
+                        expiration_date = source_batch.get("expiration_date")
+                        batch_expiration_map[batch_id] = (
+                            expiration_date.isoformat()
+                            if expiration_date and hasattr(expiration_date, "isoformat")
+                            else expiration_date
+                        )
+
+                    for expiration_date, requested_qty in requested_by_expiration.items():
+                        cur.execute(
+                            """
+                            SELECT COALESCE(SUM(quantity), 0) AS quantity
+                            FROM product_batches
+                            WHERE store_id = %s
+                            AND product_id = %s
+                            AND expiration_date = %s
+                            AND quantity > 0
+                            """,
+                            (source_store_id, product_flow.id, expiration_date),
+                        )
+                        available_for_exp = cur.fetchone()
+                        available_qty = (
+                            available_for_exp["quantity"] if available_for_exp else 0
+                        )
+
+                        if available_qty < requested_qty:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=(
+                                    f"Insufficient tracked quantity for expiration "
+                                    f"{expiration_date} in product {product_flow.id}"
+                                ),
+                            )
+
+                    for batch in requested_batches:
+                        if batch.batch_id:
+                            allocations.append(
+                                BatchInfo(
+                                    quantity=batch.quantity,
+                                    expiration_date=batch_expiration_map.get(
+                                        batch.batch_id
+                                    ),
+                                    batch_id=batch.batch_id,
+                                )
+                            )
+                        else:
+                            allocations.append(
+                                BatchInfo(
+                                    quantity=batch.quantity,
+                                    expiration_date=batch.expiration_date,
+                                    batch_id=None,
+                                )
+                            )
+                else:
+                    remaining = product_flow.quantity
+                    cur.execute(
+                        """
+                        SELECT id, quantity, expiration_date
+                        FROM product_batches
+                        WHERE store_id = %s
+                        AND product_id = %s
+                        AND quantity > 0
+                        ORDER BY expiration_date ASC NULLS LAST
+                        """,
+                        (source_store_id, product_flow.id),
+                    )
+                    source_batches = cur.fetchall()
+
+                    for source_batch in source_batches:
+                        if remaining <= 0:
+                            break
+
+                        take_qty = min(remaining, source_batch["quantity"])
+                        expiration_date = source_batch.get("expiration_date")
+                        allocations.append(
+                            BatchInfo(
+                                quantity=take_qty,
+                                expiration_date=(
+                                    expiration_date.isoformat()
+                                    if expiration_date
+                                    and hasattr(expiration_date, "isoformat")
+                                    else expiration_date
+                                ),
+                                batch_id=source_batch["id"],
+                            )
+                        )
+                        remaining -= take_qty
+
+                    if remaining > 0:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Product {product_flow.id} does not have enough tracked "
+                                f"batches in source store to transfer {product_flow.quantity}"
+                            ),
+                        )
+
+                transfer_allocations[product_flow.id] = allocations
+
+        source_transfer_bill = Bill(
+            time=bill.time,
+            discount=bill.discount,
+            total=bill.total,
+            products_flow=[
+                ProductFlow(
+                    id=product_flow.id,
+                    quantity=product_flow.quantity,
+                    price=product_flow.wholesale_price,
+                    wholesale_price=product_flow.wholesale_price,
+                    batches=transfer_allocations.get(product_flow.id),
+                )
+                for product_flow in bill.products_flow
+            ],
+        )
+
+        destination_transfer_bill = Bill(
+            time=bill.time,
+            discount=bill.discount,
+            total=bill.total,
+            products_flow=[
+                ProductFlow(
+                    id=product_flow.id,
+                    quantity=product_flow.quantity,
+                    price=product_flow.price,
+                    wholesale_price=product_flow.wholesale_price,
+                    batches=[
+                        BatchInfo(
+                            quantity=batch.quantity,
+                            expiration_date=batch.expiration_date,
+                            batch_id=None,
+                        )
+                        for batch in transfer_allocations.get(product_flow.id, [])
+                    ],
+                )
+                for product_flow in bill.products_flow
+            ],
+        )
+
         # Add sell bill to source store (with destination store as party)
         add_bill(
-            Bill(
-                time=bill.time,
-                discount=bill.discount,
-                total=bill.total,
-                products_flow=[
-                    ProductFlow(
-                        id=product_flow.id,
-                        quantity=product_flow.quantity,
-                        price=product_flow.wholesale_price,
-                        wholesale_price=product_flow.wholesale_price,
-                    )
-                    for product_flow in bill.products_flow
-                ],
-            ),
+            source_transfer_bill,
             "sell",
             source_store_id,
             destination_party_id,  # Use destination store's associated party ID
@@ -1351,7 +1563,7 @@ def move_products(
 
         # Add buy bill to destination store (with source store as party)
         add_bill(
-            bill,
+            destination_transfer_bill,
             "buy",
             destination_store_id,
             source_party_id,  # Use source store's associated party ID
@@ -1413,6 +1625,8 @@ def move_products(
                 )
 
         return {"message": "Products moved successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e

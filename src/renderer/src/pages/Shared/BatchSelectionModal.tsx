@@ -76,7 +76,8 @@ const BatchSelectionModal = ({
   // Load available batches
   useEffect(() => {
     const loadBatches = async () => {
-      if (!open || !product.id || !storeId) return;
+      if (!open || !product.id || storeId === null || storeId === undefined)
+        return;
 
       setLoading(true);
       setError("");

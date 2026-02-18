@@ -318,7 +318,7 @@ const ExpirationInfoColumn = ({
 
   useEffect(() => {
     const loadBatchInfo = async () => {
-      if (!product.id || !storeId) {
+      if (!product.id || storeId === null || storeId === undefined) {
         setLoading(false);
         return;
       }
@@ -494,6 +494,7 @@ const typeToColumns: {
     "totalPrice",
     "delete",
     "stock",
+    "expirationInfo",
   ],
 };
 

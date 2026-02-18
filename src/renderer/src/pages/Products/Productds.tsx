@@ -79,7 +79,7 @@ const Products = () => {
 
   // Load batch expiration info for all products in one request
   const loadBatchExpirationInfo = useCallback(async () => {
-    if (!storeId) return;
+    if (storeId === null || storeId === undefined) return;
 
     try {
       const response = await axios.get(`/batches/expiration-info`, {
@@ -110,7 +110,7 @@ const Products = () => {
   }, [storeId]);
 
   useEffect(() => {
-    if (storeId) {
+    if (storeId !== null && storeId !== undefined) {
       loadBatchExpirationInfo();
     }
   }, [storeId, loadBatchExpirationInfo]);

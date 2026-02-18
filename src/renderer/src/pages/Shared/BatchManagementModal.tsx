@@ -115,14 +115,18 @@ const BatchManagementModal = ({
 
   const { data, isLoading } = useQuery({
     queryKey: ["productBatches", productId, storeId],
-    queryFn: () => getProductBatches(productId, storeId),
-    enabled: open && !!productId && !!storeId,
+    queryFn: () => getProductBatches(productId, storeId as number),
+    enabled:
+      open &&
+      !!productId &&
+      storeId !== null &&
+      storeId !== undefined,
   });
 
   const { mutate: saveBatches, isPending: isSaving } = useMutation({
     mutationFn: (
       batches: { quantity: number; expiration_date: string | null }[],
-    ) => updateProductBatches(productId, storeId, batches),
+    ) => updateProductBatches(productId, storeId as number, batches),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["productBatches"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
