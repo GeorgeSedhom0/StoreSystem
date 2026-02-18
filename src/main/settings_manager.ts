@@ -12,10 +12,12 @@ export class SettingsManager {
     if (is.dev) {
       userDataPath = process.cwd();
     } else {
-      userDataPath = app.getPath("appData");
+      // Use Local AppData — not Roaming — to avoid roaming profile sync
+      // issues that can wipe settings (e.g. theme resets)
+      userDataPath = process.env.LOCALAPPDATA || app.getPath("appData");
     }
 
-    const settingsDir = join(userDataPath, "settings");
+    const settingsDir = join(userDataPath, "OpenStore", "settings");
 
     // Ensure settings directory exists
     if (!existsSync(settingsDir)) {

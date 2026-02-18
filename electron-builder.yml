@@ -1,5 +1,6 @@
 appId: com.electron.app
 productName: OpenStore
+electronVersion: "33.2.0"
 directories:
   buildResources: build
 files:
@@ -12,6 +13,19 @@ files:
   - "build/installer.nsh"
   - "out/**/*"
   - "print-template.html"
+extraResources:
+  - from: "backend-dist/python"
+    to: "backend/python"
+    filter:
+      - "**/*"
+  - from: "backend-dist/pgsql"
+    to: "backend/pgsql"
+    filter:
+      - "**/*"
+  - from: "backend-dist/server"
+    to: "backend/server"
+    filter:
+      - "**/*"
 asarUnpack:
   - "resources/**"
 win:
@@ -24,6 +38,7 @@ nsis:
   oneClick: false
   perMachine: true
   installerIcon: build/icon.ico
+  include: build/installer.nsh
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
