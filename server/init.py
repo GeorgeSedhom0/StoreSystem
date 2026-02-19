@@ -225,6 +225,7 @@ def create_all_tables(cur):
       discount FLOAT,
       total FLOAT,
       type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL' or 'reserve' or 'installment'
+      note TEXT,
       party_id BIGINT REFERENCES assosiated_parties(id),
       PRIMARY KEY (id, store_id)
     )

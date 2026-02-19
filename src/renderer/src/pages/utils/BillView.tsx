@@ -30,9 +30,10 @@ const BillView = forwardRef(
           height: "100vh",
           padding: "1rem",
           display: open ? "flex" : "none",
+          flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          flexWrap: "wrap",
+          flexWrap: "nowrap",
           backgroundColor: "rgba(0, 0, 0, 0.5)",
           zIndex: 9999999999999,
         }}
@@ -392,6 +393,41 @@ const BillView = forwardRef(
             </DialogActions>
           )}
         </div>
+
+        {bill.note && bill.note.trim() && (
+          <div
+            style={{
+              width: "120mm",
+              marginTop: "0.75rem",
+              backgroundColor: "#fff",
+              color: "#000",
+              borderRadius: "6px",
+              padding: "0.75rem 1rem",
+              direction: "rtl",
+            }}
+          >
+            <h6
+              style={{
+                margin: "0 0 0.35rem 0",
+                fontSize: "0.95rem",
+                textAlign: "right",
+              }}
+            >
+              ملاحظة الفاتورة
+            </h6>
+            <p
+              style={{
+                margin: 0,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                textAlign: "right",
+                fontSize: "0.9rem",
+              }}
+            >
+              {bill.note}
+            </p>
+          </div>
+        )}
       </div>
     );
   },

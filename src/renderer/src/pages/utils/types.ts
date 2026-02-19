@@ -54,6 +54,7 @@ export interface Bill {
   discount: number;
   total: number;
   type: string;
+  note?: string | null;
   party_name: string | null;
   products: {
     id: number;

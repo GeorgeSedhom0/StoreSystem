@@ -91,6 +91,8 @@ const Sell = () => {
     useState<boolean>(false);
   const [pendingPrintAfterSubmit, setPendingPrintAfterSubmit] =
     useState<boolean>(false);
+  const [noteDialogOpen, setNoteDialogOpen] = useState<boolean>(false);
+  const [billNote, setBillNote] = useState<string>("");
 
   // Ref for the cart container to enable auto-scroll
   const cartTableRef = useRef<HTMLDivElement>(null);
@@ -218,6 +220,7 @@ const Sell = () => {
               (acc, item) => acc + item.price * item.quantity,
               0,
             ) - discount,
+          note: billNote.trim() ? billNote.trim() : null,
           products_flow: shoppingCart,
         };
 
@@ -250,6 +253,7 @@ const Sell = () => {
         setLastBill(data.bill);
         setShoppingCart([]);
         setDiscount(0);
+        setBillNote("");
         setBillPayment("sell");
         setPartyId(null);
         setAddingParty(false);
@@ -298,6 +302,7 @@ const Sell = () => {
       paid,
       storeId,
       discount,
+      billNote,
       shoppingCart,
       addPartyMutationAsync,
       createBill,
@@ -464,6 +469,32 @@ const Sell = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      <Dialog
+        open={noteDialogOpen}
+        onClose={() => setNoteDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>ملاحظة الفاتورة</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={5}
+            maxRows={10}
+            placeholder="اكتب ملاحظة لهذه الفاتورة..."
+            value={billNote}
+            onChange={(e) => setBillNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBillNote("")}>مسح</Button>
+          <Button onClick={() => setNoteDialogOpen(false)} variant="contained">
+            تم
+          </Button>
+        </DialogActions>
+      </Dialog>
       <ShiftDialog
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
@@ -490,7 +521,7 @@ const Sell = () => {
               />
             </Grid2>
 
-            <Grid2 size={3}>
+            <Grid2 size={2}>
               <FormControl fullWidth>
                 <InputLabel>نوع الفاتورة</InputLabel>
                 <Select
@@ -510,7 +541,7 @@ const Sell = () => {
               </FormControl>
             </Grid2>
 
-            <Grid2 size={3}>
+            <Grid2 size={2}>
               <TextField
                 label="الخصم"
                 type="number"
@@ -523,7 +554,18 @@ const Sell = () => {
               />
             </Grid2>
 
-            <Grid2 size={3}>
+            <Grid2 size={2}>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={() => setNoteDialogOpen(true)}
+                sx={{ height: 40 }}
+              >
+                {billNote.trim() ? "تعديل الملاحظة" : "إضافة ملاحظة"}
+              </Button>
+            </Grid2>
+
+            <Grid2 size={4}>
               <ButtonGroup fullWidth>
                 <Button
                   variant="contained"
@@ -542,7 +584,7 @@ const Sell = () => {
               </ButtonGroup>
             </Grid2>
 
-            <Grid2 size={3}>
+            <Grid2 size={2}>
               <Typography variant="h6" align="center">
                 الاجمالي{": "}
                 {shoppingCart.reduce(

@@ -91,6 +91,8 @@ const AdminSell = () => {
     useState<boolean>(false);
   const [pendingPrintAfterSubmit, setPendingPrintAfterSubmit] =
     useState<boolean>(false);
+  const [noteDialogOpen, setNoteDialogOpen] = useState<boolean>(false);
+  const [billNote, setBillNote] = useState<string>("");
 
   // Ref for the cart container to enable auto-scroll
   const cartTableRef = useRef<HTMLDivElement>(null);
@@ -142,7 +144,10 @@ const AdminSell = () => {
 
   // Auto-scroll cart to bottom only when a NEW product is added (not on quantity changes)
   useEffect(() => {
-    if (cartTableRef.current && shoppingCart.length > prevCartLengthRef.current) {
+    if (
+      cartTableRef.current &&
+      shoppingCart.length > prevCartLengthRef.current
+    ) {
       cartTableRef.current.scrollTop = cartTableRef.current.scrollHeight;
     }
     prevCartLengthRef.current = shoppingCart.length;
@@ -196,7 +201,12 @@ const AdminSell = () => {
   );
 
   // Client barcode detection - only enabled when third parties section is visible
-  useClientBarcodeDetection(parties, handleClientFound, setMsg, usingThirdParties);
+  useClientBarcodeDetection(
+    parties,
+    handleClientFound,
+    setMsg,
+    usingThirdParties,
+  );
 
   // Core bill submission logic (without discount validation)
   const executeBillSubmission = useCallback(
@@ -210,6 +220,7 @@ const AdminSell = () => {
               (acc, item) => acc + item.price * item.quantity,
               0,
             ) - discount,
+          note: billNote.trim() ? billNote.trim() : null,
           products_flow: shoppingCart,
         };
 
@@ -242,6 +253,7 @@ const AdminSell = () => {
         setLastBill(data.bill);
         setShoppingCart([]);
         setDiscount(0);
+        setBillNote("");
         setBillPayment("sell");
         setPartyId(null);
         setAddingParty(false);
@@ -290,6 +302,7 @@ const AdminSell = () => {
       paid,
       storeId,
       discount,
+      billNote,
       shoppingCart,
       addPartyMutationAsync,
       createBill,
@@ -450,6 +463,32 @@ const AdminSell = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      <Dialog
+        open={noteDialogOpen}
+        onClose={() => setNoteDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>ملاحظة الفاتورة</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={5}
+            maxRows={10}
+            placeholder="اكتب ملاحظة لهذه الفاتورة..."
+            value={billNote}
+            onChange={(e) => setBillNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBillNote("")}>مسح</Button>
+          <Button onClick={() => setNoteDialogOpen(false)} variant="contained">
+            تم
+          </Button>
+        </DialogActions>
+      </Dialog>
       <ShiftDialog
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
@@ -510,6 +549,17 @@ const AdminSell = () => {
             </Grid2>
 
             <Grid2 size={3}>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={() => setNoteDialogOpen(true)}
+                sx={{ height: 40 }}
+              >
+                {billNote.trim() ? "تعديل الملاحظة" : "إضافة ملاحظة"}
+              </Button>
+            </Grid2>
+
+            <Grid2 size={9}>
               <ButtonGroup fullWidth>
                 <Button
                   variant="contained"

@@ -200,6 +200,7 @@ class Bill(BaseModel):
     time: str
     discount: float
     total: float
+    note: Optional[str] = None
     products_flow: list[ProductFlow]
 
     def dict(self, *args, **kwargs):
@@ -234,6 +235,7 @@ class dbBill(BaseModel):
     discount: float
     total: float
     type: str
+    note: Optional[str] = None
     products: list[dbProduct]
 
     def dict(self, *args, **kwargs):
@@ -718,6 +720,7 @@ def get_bills(
                     bills.discount,
                     bills.total,
                     bills.type,
+                    bills.note,
                     assosiated_parties.name AS party_name,
                     json_agg(
                         json_build_object(
@@ -738,7 +741,7 @@ def get_bills(
                 {extra_condition}
                 AND bills.store_id = %s
                 GROUP BY bills.id, bills.time, bills.discount,
-                    bills.total, bills.type, bills.party_id, assosiated_parties.name
+                    bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name
                 ORDER BY bills.time DESC
                     """,
                 params,
@@ -1132,8 +1135,8 @@ def add_bill(
 
             cur.execute(
                 """
-                INSERT INTO bills (store_id, time, discount, total, type, party_id)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO bills (store_id, time, discount, total, type, note, party_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -1142,6 +1145,7 @@ def add_bill(
                     bill.discount,
                     bill_total,
                     move_type,
+                    bill.note,
                     party_id,
                 ),
             )
@@ -1283,6 +1287,7 @@ def add_bill(
                     bills.discount,
                     bills.total,
                     bills.type,
+                    bills.note,
                     assosiated_parties.name AS party_name,
                     json_agg(
                         json_build_object(
@@ -1300,7 +1305,7 @@ def add_bill(
                 LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
                 WHERE bills.id = %s
                 GROUP BY bills.id, bills.time, bills.discount,
-                    bills.total, bills.type, bills.party_id, assosiated_parties.name
+                    bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name
                 """,
                 (bill_id,),
             )

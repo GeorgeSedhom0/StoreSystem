@@ -67,6 +67,22 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
                 {Math.abs(bill.total).toFixed(2)}
               </TableCell>
             </TableRow>
+            {bill.note && bill.note.trim() && (
+              <TableRow>
+                <TableCell sx={{ borderBottom: "none" }} colSpan={4}>
+                  <strong>ملاحظة الفاتورة:</strong>
+                  <div
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    {bill.note}
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>

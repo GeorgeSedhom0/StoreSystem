@@ -523,6 +523,8 @@ print("SSL certificates generated")
       `Running migrations from version ${currentVersion} to ${highestAvailable}...`,
     );
 
+    await this.waitForPostgres(); // Ensure DB is up before running migrations
+
     const pythonEnv = this.buildPythonEnv();
 
     // Collect and sort migration files that need to run
