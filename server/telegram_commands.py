@@ -64,7 +64,13 @@ HELP_MESSAGE = """📚 <b>الأوامر المتاحة</b>
     نظرة مالية متجر &lt;رقم&gt;
     تحليل تفصيلي متجر &lt;رقم&gt;
 
-6) <b>مساعدة</b>
+6) <b>بحث الأطراف (بالاسم أو الهاتف)</b>
+    بحث اطراف &lt;نص&gt;
+
+7) <b>إضافة حركة نقدية</b>
+    اضف حركة نقدية متجر &lt;رقم&gt; (داخل|خارج) &lt;مبلغ&gt; طرف &lt;id/phone/barcode&gt; [وصف &lt;نص&gt;]
+
+8) <b>مساعدة</b>
    مساعدة"""
 
 
@@ -344,6 +350,140 @@ def _get_low_stock_products(store_id: int, threshold: int = 10, limit: int = 20)
     return rows
 
 
+def _search_parties_by_name_or_phone(
+    query: str, limit: int = 10
+) -> List[Dict[str, Any]]:
+    safe_query = (query or "").strip()
+    if not safe_query:
+        return []
+
+    safe_limit = min(max(limit, 1), 25)
+    like_value = f"%{safe_query}%"
+
+    conn = _db_connect()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        SELECT id, name, phone, bar_code
+        FROM assosiated_parties
+        WHERE LOWER(name) LIKE LOWER(%s)
+           OR COALESCE(phone, '') LIKE %s
+        ORDER BY
+            CASE
+                WHEN LOWER(name) = LOWER(%s) OR COALESCE(phone, '') = %s THEN 0
+                WHEN LOWER(name) LIKE LOWER(%s) OR COALESCE(phone, '') LIKE %s THEN 1
+                ELSE 2
+            END,
+            name ASC,
+            id ASC
+        LIMIT %s
+        """,
+        (
+            like_value,
+            like_value,
+            safe_query,
+            safe_query,
+            f"{safe_query}%",
+            f"{safe_query}%",
+            safe_limit,
+        ),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
+
+
+def _resolve_party_identifier(identifier: str) -> Optional[Dict[str, Any]]:
+    token = (identifier or "").strip()
+    if not token:
+        return None
+
+    lowered = token.lower()
+    conn = _db_connect()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    def _fetch_one(sql: str, params: Tuple[Any, ...]) -> Optional[Dict[str, Any]]:
+        cur.execute(sql, params)
+        return cur.fetchone()
+
+    row: Optional[Dict[str, Any]] = None
+
+    if lowered.startswith("id:"):
+        value = token[3:].strip()
+        if value.isdigit():
+            row = _fetch_one(
+                "SELECT id, name, phone, bar_code FROM assosiated_parties WHERE id = %s LIMIT 1",
+                (int(value),),
+            )
+    elif lowered.startswith("phone:") or lowered.startswith("هاتف:"):
+        value = token.split(":", 1)[1].strip()
+        row = _fetch_one(
+            "SELECT id, name, phone, bar_code FROM assosiated_parties WHERE COALESCE(phone, '') = %s LIMIT 1",
+            (value,),
+        )
+    elif lowered.startswith("barcode:") or lowered.startswith("باركود:"):
+        value = token.split(":", 1)[1].strip()
+        row = _fetch_one(
+            "SELECT id, name, phone, bar_code FROM assosiated_parties WHERE bar_code = %s LIMIT 1",
+            (value,),
+        )
+    else:
+        if token.isdigit():
+            row = _fetch_one(
+                "SELECT id, name, phone, bar_code FROM assosiated_parties WHERE id = %s LIMIT 1",
+                (int(token),),
+            )
+            if not row:
+                row = _fetch_one(
+                    "SELECT id, name, phone, bar_code FROM assosiated_parties WHERE COALESCE(phone, '') = %s LIMIT 1",
+                    (token,),
+                )
+        elif re.match(r"^[A-Za-z]{2}[A-Za-z0-9_-]*$", token):
+            row = _fetch_one(
+                "SELECT id, name, phone, bar_code FROM assosiated_parties WHERE bar_code = %s LIMIT 1",
+                (token,),
+            )
+        else:
+            row = _fetch_one(
+                "SELECT id, name, phone, bar_code FROM assosiated_parties WHERE COALESCE(phone, '') = %s LIMIT 1",
+                (token,),
+            )
+
+    cur.close()
+    conn.close()
+    return row
+
+
+def _insert_cash_flow_entry(
+    store_id: int,
+    amount: float,
+    move_type: str,
+    description: str,
+    party_id: Optional[int],
+) -> None:
+    signed_amount = amount if move_type == "in" else -amount
+    conn = _db_connect()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        """
+        INSERT INTO cash_flow (store_id, time, amount, type, description, party_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            store_id,
+            datetime.now().isoformat(),
+            signed_amount,
+            move_type,
+            description,
+            party_id,
+        ),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
 def _get_cash_flow_range(
     store_id: int, start_dt: datetime, end_dt: datetime
 ) -> Dict[str, float]:
@@ -601,6 +741,26 @@ def _parse_command(message_text: str) -> Tuple[str, Dict[str, Any]]:
     if detailed_match:
         return ("detailed_overview", {"store_id": int(detailed_match.group(1))})
 
+    parties_match = re.match(r"^(?:بحث\s+)?(?:اطراف|الاطراف|parties)\s+(.+)$", text)
+    if parties_match:
+        return ("parties_search", {"query": parties_match.group(1).strip()})
+
+    cash_create_match = re.match(
+        r"^(?:اضف\s+)?(?:حركة\s+نقدية|كاش\s*فلو)\s+متجر\s+(\d+)\s+(داخل|خارج|in|out)\s+([0-9]+(?:\.[0-9]+)?)\s+طرف\s+(.+?)(?:\s+وصف\s+(.+))?$",
+        text,
+    )
+    if cash_create_match:
+        return (
+            "cash_flow_create",
+            {
+                "store_id": int(cash_create_match.group(1)),
+                "move_type": cash_create_match.group(2),
+                "amount": float(cash_create_match.group(3)),
+                "party_identifier": cash_create_match.group(4).strip(),
+                "description": (cash_create_match.group(5) or "").strip(),
+            },
+        )
+
     return "unknown", {}
 
 
@@ -822,6 +982,79 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
             lines.append("لا يوجد بيانات مبيعات كافية للفترة.")
 
         return "\n".join(lines)
+
+    if command == "parties_search":
+        query = str(args.get("query") or "").strip()
+        if not query:
+            return "اكتب نص البحث بعد الأمر. مثال: بحث اطراف احمد"
+
+        rows = _search_parties_by_name_or_phone(query)
+        if not rows:
+            return f"لا توجد أطراف مطابقة للبحث: {html.escape(query)}"
+
+        lines = [f"👥 <b>نتائج الأطراف ({len(rows)})</b>"]
+        for row in rows:
+            pid = row.get("id")
+            name = html.escape(str(row.get("name") or "-"))
+            phone = html.escape(str(row.get("phone") or "-"))
+            barcode = html.escape(str(row.get("bar_code") or "-"))
+            lines.append(
+                f"• {name}\n  ID: {pid} | هاتف: {phone} | باركود: {barcode}"
+            )
+        return "\n".join(lines)
+
+    if command == "cash_flow_create":
+        store_id = int(args["store_id"])
+        if not _is_chat_authorized_for_store(chat_id, store_id):
+            return _deny_message(store_id)
+
+        move_token = str(args.get("move_type") or "").strip().lower()
+        move_type = "in" if move_token in {"داخل", "in"} else "out"
+        amount = float(args.get("amount") or 0)
+        if amount <= 0:
+            return "المبلغ يجب أن يكون أكبر من صفر."
+
+        party_identifier = str(args.get("party_identifier") or "").strip()
+        party = _resolve_party_identifier(party_identifier)
+        if not party:
+            return (
+                "تعذر تحديد الطرف. استخدم ID أو الهاتف أو الباركود.\n"
+                "مثال: طرف 15\n"
+                "أو: طرف 01001234567\n"
+                "أو: طرف CL0000000123"
+            )
+
+        description = str(args.get("description") or "").strip()
+        if not description:
+            description = "حركة مالية من تيليجرام"
+
+        try:
+            _insert_cash_flow_entry(
+                store_id=store_id,
+                amount=amount,
+                move_type=move_type,
+                description=description,
+                party_id=int(party["id"]),
+            )
+        except Exception as e:
+            logger.error(f"Error creating cash flow from Telegram: {e}")
+            return "حدث خطأ أثناء إضافة الحركة المالية. حاول مرة أخرى."
+
+        store_name = html.escape(_get_store_name(store_id))
+        party_name = html.escape(str(party.get("name") or "-"))
+        party_phone = html.escape(str(party.get("phone") or "-"))
+        party_barcode = html.escape(str(party.get("bar_code") or "-"))
+        move_label = "داخل" if move_type == "in" else "خارج"
+
+        return (
+            f"✅ <b>تمت إضافة الحركة المالية</b>\n"
+            f"المتجر: {store_name}\n"
+            f"النوع: {move_label}\n"
+            f"المبلغ: {_format_currency(amount)}\n"
+            f"الطرف: {party_name}\n"
+            f"ID: {party['id']} | هاتف: {party_phone} | باركود: {party_barcode}\n"
+            f"الوصف: {html.escape(description)}"
+        )
 
     return "❓ الأمر غير معروف.\nاكتب: مساعدة\nلرؤية كل الأوامر المتاحة."
 
