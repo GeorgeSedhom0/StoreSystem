@@ -17,11 +17,13 @@ if (-not $SkipBackend) {
     Write-Host "`n--- Step 1: Building backend runtimes ---" -ForegroundColor Yellow
     try {
         & "$PSScriptRoot\build-backend.ps1"
-    } catch {
+    }
+    catch {
         Write-Error "Backend build failed: $($_.Exception.Message)"
         exit 1
     }
-} else {
+}
+else {
     Write-Host "`n--- Step 1: Skipping backend build (--SkipBackend) ---" -ForegroundColor Yellow
 }
 
@@ -35,10 +37,12 @@ if (-not $SkipElectron) {
             Write-Error "Electron build failed"
             exit 1
         }
-    } finally {
+    }
+    finally {
         Pop-Location
     }
-} else {
+}
+else {
     Write-Host "`n--- Step 2: Skipping Electron build (--SkipElectron) ---" -ForegroundColor Yellow
 }
 
@@ -51,7 +55,8 @@ try {
         Write-Error "Installer build failed"
         exit 1
     }
-} finally {
+}
+finally {
     Pop-Location
 }
 
