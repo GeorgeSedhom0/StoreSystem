@@ -344,7 +344,9 @@ def _get_low_stock_products(store_id: int, threshold: int = 10, limit: int = 20)
     return rows
 
 
-def _get_cash_flow_range(store_id: int, start_dt: datetime, end_dt: datetime) -> Dict[str, float]:
+def _get_cash_flow_range(
+    store_id: int, start_dt: datetime, end_dt: datetime
+) -> Dict[str, float]:
     end_exclusive = _end_exclusive(end_dt)
     conn = _db_connect()
     cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -358,7 +360,7 @@ def _get_cash_flow_range(store_id: int, start_dt: datetime, end_dt: datetime) ->
                     AND time >= %s
                 AND time < %s
         """,
-            (store_id, start_dt, end_exclusive),
+        (store_id, start_dt, end_exclusive),
     )
     row = cur.fetchone() or {"cash_in": 0, "cash_out": 0}
     cur.close()
@@ -373,7 +375,9 @@ def _get_cash_flow_range(store_id: int, start_dt: datetime, end_dt: datetime) ->
     }
 
 
-def _get_shift_summary(store_id: int, start_dt: datetime, end_dt: datetime) -> Dict[str, float]:
+def _get_shift_summary(
+    store_id: int, start_dt: datetime, end_dt: datetime
+) -> Dict[str, float]:
     end_exclusive = _end_exclusive(end_dt)
     conn = _db_connect()
     cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -393,7 +397,7 @@ def _get_shift_summary(store_id: int, start_dt: datetime, end_dt: datetime) -> D
       AND b.time >= %s
       AND b.time < %s
         """,
-    (store_id, start_dt, end_exclusive),
+        (store_id, start_dt, end_exclusive),
     )
     bill_row = cur.fetchone() or {}
     cur.close()
@@ -415,14 +419,18 @@ def _get_shift_summary(store_id: int, start_dt: datetime, end_dt: datetime) -> D
         "buy_total": buy_total,
         "installment_total": installment_total,
         "bills_count": bills_count,
-        "internal_sell_bills_count": int(bill_row.get("internal_sell_bills_count") or 0),
+        "internal_sell_bills_count": int(
+            bill_row.get("internal_sell_bills_count") or 0
+        ),
         "cash_in": cash["cash_in"],
         "cash_out": cash["cash_out"],
         "cash_net": cash["net"],
     }
 
 
-def _get_financial_overview(store_id: int, start_dt: datetime, end_dt: datetime) -> Dict[str, float]:
+def _get_financial_overview(
+    store_id: int, start_dt: datetime, end_dt: datetime
+) -> Dict[str, float]:
     end_exclusive = _end_exclusive(end_dt)
     cash = _get_cash_flow_range(store_id, start_dt, end_dt)
 
@@ -442,7 +450,7 @@ def _get_financial_overview(store_id: int, start_dt: datetime, end_dt: datetime)
                     AND b.time >= %s AND b.time < %s
           AND (b.party_id IS NULL OR ap.type != 'store')
         """,
-                (store_id, start_dt, end_exclusive),
+        (store_id, start_dt, end_exclusive),
     )
     cards = cur.fetchone() or {"bills_count": 0, "total_sales": 0, "avg_discount": 0}
 
@@ -459,7 +467,7 @@ def _get_financial_overview(store_id: int, start_dt: datetime, end_dt: datetime)
                     AND b.time >= %s AND b.time < %s
           AND (b.party_id IS NULL OR ap.type != 'store')
         """,
-                (store_id, start_dt, end_exclusive),
+        (store_id, start_dt, end_exclusive),
     )
     profit_row = cur.fetchone() or {"profit": 0}
 
@@ -474,7 +482,7 @@ def _get_financial_overview(store_id: int, start_dt: datetime, end_dt: datetime)
           AND bill_id IS NULL
                     AND time >= %s AND time < %s
         """,
-                (store_id, start_dt, end_exclusive),
+        (store_id, start_dt, end_exclusive),
     )
     non_bill = cur.fetchone() or {"non_bill_in": 0, "non_bill_out": 0}
 
@@ -532,7 +540,7 @@ def _get_top_products_overview(
         ORDER BY total_sales_value DESC
         LIMIT %s
         """,
-                (store_id, start_dt, end_exclusive, limit),
+        (store_id, start_dt, end_exclusive, limit),
     )
     rows = cur.fetchall()
     cur.close()
@@ -617,7 +625,9 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
             return "لا توجد متاجر مرتبطة بهذه المحادثة حالياً."
         lines = ["🏪 <b>المتاجر المرتبطة:</b>"]
         for store in stores:
-            store_name = html.escape(str(store.get("name") or f"متجر {store.get('id')}"))
+            store_name = html.escape(
+                str(store.get("name") or f"متجر {store.get('id')}")
+            )
             lines.append(f"- متجر {store['id']}: {store_name}")
         return "\n".join(lines)
 
@@ -702,7 +712,9 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
             return _deny_message(store_id)
 
         shift_window = _get_shift_window(store_id)
-        cash = _get_cash_flow_range(store_id, shift_window["start"], shift_window["end"])
+        cash = _get_cash_flow_range(
+            store_id, shift_window["start"], shift_window["end"]
+        )
         store_name = html.escape(_get_store_name(store_id))
         return (
             f"💳 <b>حركة النقد - {store_name}</b>\n"
@@ -720,7 +732,9 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
             return _deny_message(store_id)
 
         shift_window = _get_shift_window(store_id)
-        summary = _get_shift_summary(store_id, shift_window["start"], shift_window["end"])
+        summary = _get_shift_summary(
+            store_id, shift_window["start"], shift_window["end"]
+        )
         store_name = html.escape(_get_store_name(store_id))
         sell_total_all = summary["sell_total"] + summary["sell_total_internal"]
         net_sales = summary["sell_total"] - summary["return_total"]
@@ -748,7 +762,9 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
             return _deny_message(store_id)
 
         shift_window = _get_shift_window(store_id)
-        overview = _get_financial_overview(store_id, shift_window["start"], shift_window["end"])
+        overview = _get_financial_overview(
+            store_id, shift_window["start"], shift_window["end"]
+        )
         store_name = html.escape(_get_store_name(store_id))
 
         return (
@@ -770,8 +786,12 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
             return _deny_message(store_id)
 
         shift_window = _get_shift_window(store_id)
-        overview = _get_financial_overview(store_id, shift_window["start"], shift_window["end"])
-        top_products = _get_top_products_overview(store_id, shift_window["start"], shift_window["end"], limit=3)
+        overview = _get_financial_overview(
+            store_id, shift_window["start"], shift_window["end"]
+        )
+        top_products = _get_top_products_overview(
+            store_id, shift_window["start"], shift_window["end"], limit=3
+        )
         store_name = html.escape(_get_store_name(store_id))
 
         lines = [
@@ -803,11 +823,7 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
 
         return "\n".join(lines)
 
-    return (
-        "❓ الأمر غير معروف.\n"
-        "اكتب: مساعدة\n"
-        "لرؤية كل الأوامر المتاحة."
-    )
+    return "❓ الأمر غير معروف.\nاكتب: مساعدة\nلرؤية كل الأوامر المتاحة."
 
 
 def _process_single_update(update: Dict[str, Any]) -> None:

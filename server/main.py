@@ -105,7 +105,9 @@ async def startup_event():
     _install_windows_asyncio_exception_filter()
     start_expiration_scheduler()
     if telegram_command_worker_task is None or telegram_command_worker_task.done():
-        telegram_command_worker_task = asyncio.create_task(telegram_command_worker_loop())
+        telegram_command_worker_task = asyncio.create_task(
+            telegram_command_worker_loop()
+        )
 
 
 @app.on_event("shutdown")

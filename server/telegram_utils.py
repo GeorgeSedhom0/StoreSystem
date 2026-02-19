@@ -1202,8 +1202,12 @@ def get_daily_inventory_summary(store_id: int) -> Dict[str, float]:
             "wholesale_value": result["wholesale_value"] if result else 0,
             "retail_value": result["retail_value"] if result else 0,
             "total_products": result["total_products"] if result else 0,
-            "positive_stock_products": result["positive_stock_products"] if result else 0,
-            "non_positive_stock_products": result["non_positive_stock_products"] if result else 0,
+            "positive_stock_products": result["positive_stock_products"]
+            if result
+            else 0,
+            "non_positive_stock_products": result["non_positive_stock_products"]
+            if result
+            else 0,
         }
 
     except Exception as e:
