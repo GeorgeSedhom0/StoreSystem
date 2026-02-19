@@ -15,6 +15,7 @@ out
 *.log*
 /settings
 /server/whatsapp_data
+/server/venv
 server/whatsapp_utils/.wwebjs_cache
 backend-dist
 backend-downloads

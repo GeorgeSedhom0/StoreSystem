@@ -2,18 +2,17 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import logging
 from dotenv import load_dotenv
-from os import getenv
 from telegram_utils import (
-    call_telegram_api,
     validate_bot_token,
     get_telegram_status,
     get_telegram_updates,
     send_telegram_message,
     get_store_telegram_chat_id,
     save_store_telegram_chat_id,
-    TELEGRAM_BOT_TOKEN,
+    save_telegram_bot_token,
 )
 from auth_middleware import get_current_user
+from telegram_commands import get_telegram_command_worker_health
 
 # Load environment variables
 load_dotenv()
@@ -64,6 +63,7 @@ async def configure_telegram(
             import telegram_utils
 
             telegram_utils.TELEGRAM_BOT_TOKEN = request.bot_token
+            save_telegram_bot_token(request.bot_token)
 
             return {
                 "success": True,
@@ -170,10 +170,12 @@ async def get_service_health(current_user: dict = Depends(get_current_user)):
     """Get Telegram bot health status for debugging"""
     try:
         status = get_telegram_status()
+        worker_health = get_telegram_command_worker_health()
         return {
             "success": True,
             "service_healthy": status.get("connected", False),
             "bot_username": status.get("bot_username"),
+            "command_worker": worker_health,
         }
     except Exception as e:
         logger.error(f"Error checking service health: {e}")

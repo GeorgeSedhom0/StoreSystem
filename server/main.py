@@ -3,6 +3,8 @@ from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
 from typing import Literal, Any, Dict, List
+import asyncio
+import platform
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -36,6 +38,7 @@ from telegram_utils import (
 )
 from expiration_scheduler import start_expiration_scheduler
 from batches import consume_batches_fefo, add_to_batch, adjust_batches_for_stock_change
+from telegram_commands import telegram_command_worker_loop
 
 load_dotenv()
 
@@ -62,11 +65,60 @@ app.include_router(notifications_router)
 app.include_router(batches_router)
 
 
+telegram_command_worker_task: Optional[asyncio.Task] = None
+
+
+def _install_windows_asyncio_exception_filter() -> None:
+    """Suppress benign WinError 10054 callback noise from asyncio Proactor transport."""
+    if platform.system() != "Windows":
+        return
+
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+
+    def _exception_handler(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]):
+        exc = context.get("exception")
+        message = str(context.get("message") or "")
+
+        is_benign_reset = (
+            isinstance(exc, ConnectionResetError)
+            and getattr(exc, "winerror", None) == 10054
+            and "_ProactorBasePipeTransport._call_connection_lost" in message
+        )
+
+        if is_benign_reset:
+            return
+
+        if previous_handler is not None:
+            previous_handler(loop, context)
+        else:
+            loop.default_exception_handler(context)
+
+    loop.set_exception_handler(_exception_handler)
+
+
 # Startup event to initialize the expiration scheduler
 @app.on_event("startup")
 async def startup_event():
     """Initialize background tasks on startup"""
+    global telegram_command_worker_task
+    _install_windows_asyncio_exception_filter()
     start_expiration_scheduler()
+    if telegram_command_worker_task is None or telegram_command_worker_task.done():
+        telegram_command_worker_task = asyncio.create_task(telegram_command_worker_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop background tasks on shutdown"""
+    global telegram_command_worker_task
+    if telegram_command_worker_task is not None:
+        telegram_command_worker_task.cancel()
+        try:
+            await telegram_command_worker_task
+        except asyncio.CancelledError:
+            pass
+        telegram_command_worker_task = None
 
 
 origins = [

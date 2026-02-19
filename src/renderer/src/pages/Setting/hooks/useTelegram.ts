@@ -106,11 +106,11 @@ const useTelegram = (
   const { data: storeChatIdData, refetch: refetchStoreChatId } = useQuery({
     queryKey: ["telegram", "store-chat-id", store_id],
     queryFn: () =>
-      store_id
+      store_id !== undefined && store_id !== null
         ? getStoreChatId(store_id)
         : Promise.resolve({ success: false, chat_id: null }),
     retry: 1,
-    enabled: !!store_id,
+    enabled: store_id !== undefined && store_id !== null,
     initialData: { success: false, chat_id: null },
   });
 

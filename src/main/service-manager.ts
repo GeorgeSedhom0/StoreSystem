@@ -57,8 +57,7 @@ export class ServiceManager {
     if (is.dev) {
       this.dataDir = join(process.cwd(), "openstore-data");
     } else {
-      const localAppData =
-        process.env.LOCALAPPDATA || app.getPath("appData");
+      const localAppData = process.env.LOCALAPPDATA || app.getPath("appData");
       this.dataDir = join(localAppData, "OpenStore");
     }
 
@@ -183,11 +182,11 @@ export class ServiceManager {
     // Stop PostgreSQL gracefully using pg_ctl stop (sends proper shutdown signal)
     try {
       const pgCtl = join(this.pgBinDir, "pg_ctl.exe");
-      execFileSync(
-        pgCtl,
-        ["stop", "-D", this.pgDataDir, "-m", "fast"],
-        { timeout: 10000, windowsHide: true, stdio: "pipe" },
-      );
+      execFileSync(pgCtl, ["stop", "-D", this.pgDataDir, "-m", "fast"], {
+        timeout: 10000,
+        windowsHide: true,
+        stdio: "pipe",
+      });
     } catch (e) {
       // If pg_ctl stop fails, kill the process directly
       if (this.pgProcess && !this.pgProcess.killed) {
@@ -254,9 +253,7 @@ export class ServiceManager {
   setEnvVar(key: string, value: string): void {
     this.envVars[key] = value;
     // Write back to file
-    const lines = Object.entries(this.envVars).map(
-      ([k, v]) => `${k}=${v}`,
-    );
+    const lines = Object.entries(this.envVars).map(([k, v]) => `${k}=${v}`);
     writeFileSync(this.envFilePath, lines.join("\n"), "utf-8");
   }
 
@@ -402,14 +399,10 @@ print("SSL certificates generated")
     // Spawn postgres.exe directly instead of pg_ctl — this lets Node control
     // window creation via windowsHide, preventing the visible CMD window that
     // users would close and break the app.
-    this.pgProcess = spawn(
-      postgresExe,
-      ["-D", this.pgDataDir],
-      {
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-      },
-    );
+    this.pgProcess = spawn(postgresExe, ["-D", this.pgDataDir], {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
 
     this.pgProcess.stdout?.pipe(pgLogStream);
     this.pgProcess.stderr?.pipe(pgLogStream);
@@ -428,7 +421,9 @@ print("SSL certificates generated")
     for (let i = 0; i < retries; i++) {
       const isUp = await this.checkPort(this.pgPort);
       if (isUp) {
-        console.log(`PostgreSQL is accepting connections on port ${this.pgPort}`);
+        console.log(
+          `PostgreSQL is accepting connections on port ${this.pgPort}`,
+        );
         return;
       }
       await this.sleep(intervalMs);
@@ -565,12 +560,9 @@ print("SSL certificates generated")
           `Migration ${migration.file} completed. DB version: ${migration.num}`,
         );
       } catch (e) {
-        const msg =
-          e instanceof Error ? e.message : String(e);
+        const msg = e instanceof Error ? e.message : String(e);
         console.error(`Migration ${migration.file} failed: ${msg}`);
-        throw new Error(
-          `Database migration ${migration.file} failed: ${msg}`,
-        );
+        throw new Error(`Database migration ${migration.file} failed: ${msg}`);
       }
     }
 
@@ -632,10 +624,7 @@ print("SSL certificates generated")
     });
   }
 
-  private async waitForBackend(
-    retries = 60,
-    intervalMs = 1000,
-  ): Promise<void> {
+  private async waitForBackend(retries = 60, intervalMs = 1000): Promise<void> {
     // Create an HTTPS agent that ignores self-signed cert errors
     const agent = new https.Agent({ rejectUnauthorized: false });
 

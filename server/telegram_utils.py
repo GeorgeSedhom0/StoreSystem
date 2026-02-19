@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 from os import getenv
 import requests
@@ -23,6 +23,86 @@ HOST = getenv("HOST")
 DATABASE = getenv("DATABASE")
 USER = getenv("USER")
 PASS = getenv("PASS")
+
+
+def _get_preferred_store_id_for_settings(cur) -> Optional[int]:
+    """Use store 0 as global settings holder when available, otherwise first store."""
+    cur.execute(
+        """
+        SELECT id
+        FROM store_data
+        ORDER BY CASE WHEN id = 0 THEN 0 ELSE 1 END, id
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    return row["id"] if row else None
+
+
+def save_telegram_bot_token(token: str) -> bool:
+    """Persist Telegram bot token in store_data.extra_info so it survives restarts."""
+    try:
+        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        store_id = _get_preferred_store_id_for_settings(cur)
+        if store_id is None:
+            cur.close()
+            conn.close()
+            return False
+
+        cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
+        result = cur.fetchone()
+
+        extra_info = result["extra_info"] if result and result["extra_info"] else {}
+        extra_info["telegram_bot_token"] = token
+
+        cur.execute(
+            "UPDATE store_data SET extra_info = %s WHERE id = %s",
+            (json.dumps(extra_info), store_id),
+        )
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Error saving Telegram bot token: {e}")
+        return False
+
+
+def load_telegram_bot_token() -> str:
+    """Load Telegram bot token from DB into memory when not already set."""
+    global TELEGRAM_BOT_TOKEN
+
+    if TELEGRAM_BOT_TOKEN:
+        return TELEGRAM_BOT_TOKEN
+
+    try:
+        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        store_id = _get_preferred_store_id_for_settings(cur)
+        if store_id is None:
+            cur.close()
+            conn.close()
+            return ""
+
+        cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
+        result = cur.fetchone()
+
+        cur.close()
+        conn.close()
+
+        if result and result.get("extra_info"):
+            token = result["extra_info"].get("telegram_bot_token")
+            if token:
+                TELEGRAM_BOT_TOKEN = token
+                return TELEGRAM_BOT_TOKEN
+    except Exception as e:
+        logger.error(f"Error loading Telegram bot token: {e}")
+
+    return ""
 
 
 def get_store_telegram_chat_id(store_id: int):
@@ -76,10 +156,11 @@ def save_store_telegram_chat_id(store_id: int, chat_id: str):
 def call_telegram_api(method: str, data: dict = None, timeout: int = 30) -> dict:
     """Call the Telegram Bot API directly"""
     try:
-        if not TELEGRAM_BOT_TOKEN:
+        token = TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
+        if not token:
             return {"success": False, "message": "Telegram bot token not configured"}
 
-        url = f"{TELEGRAM_API_BASE}{TELEGRAM_BOT_TOKEN}/{method}"
+        url = f"{TELEGRAM_API_BASE}{token}/{method}"
         response = requests.post(url, json=data, timeout=timeout)
         result = response.json()
 
@@ -104,7 +185,7 @@ def call_telegram_api(method: str, data: dict = None, timeout: int = 30) -> dict
 def validate_bot_token(token: str = None) -> dict:
     """Validate a Telegram bot token by calling getMe"""
     try:
-        use_token = token or TELEGRAM_BOT_TOKEN
+        use_token = token or TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
         if not use_token:
             return {"success": False, "message": "No bot token provided"}
 
@@ -131,10 +212,11 @@ def validate_bot_token(token: str = None) -> dict:
 
 def get_telegram_status() -> dict:
     """Get current Telegram bot status by validating the token"""
-    if not TELEGRAM_BOT_TOKEN:
+    token = TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
+    if not token:
         return {"connected": False, "bot_username": None}
 
-    result = validate_bot_token()
+    result = validate_bot_token(token)
     if result.get("success"):
         return {
             "connected": True,
@@ -147,7 +229,7 @@ def get_telegram_status() -> dict:
 def get_telegram_updates(token: str = None) -> list:
     """Fetch recent messages sent to the bot to detect chat_ids from /start commands"""
     try:
-        use_token = token or TELEGRAM_BOT_TOKEN
+        use_token = token or TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
         if not use_token:
             return []
 
@@ -230,7 +312,8 @@ def send_telegram_message(chat_id: str, message: str, parse_mode: str = "HTML") 
 def send_notification_to_store(store_id: int, message: str) -> bool:
     """Send Telegram notification to a specific store's configured chat"""
     try:
-        if not TELEGRAM_BOT_TOKEN:
+        token = TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
+        if not token:
             logger.warning("Telegram bot token not configured")
             return False
 
@@ -1072,7 +1155,9 @@ def format_shift_closure_message(
 
 🏷️ <b>قيمة المخزون (سعر الشراء):</b> {inventory_summary["wholesale_value"]:.2f} ج.م
 💰 <b>قيمة المخزون (سعر البيع):</b> {inventory_summary["retail_value"]:.2f} ج.م
-📦 <b>عدد الأصناف في المخزون:</b> {inventory_summary["total_products"]}
+📦 <b>عدد الأصناف (الكل):</b> {inventory_summary["total_products"]}
+✅ <b>أصناف بمخزون موجب:</b> {inventory_summary["positive_stock_products"]}
+⚠️ <b>أصناف بصفر/سالب:</b> {inventory_summary["non_positive_stock_products"]}
 
 ━━━━━━━━━━━━━━━━━━━━"""
 
@@ -1098,7 +1183,9 @@ def get_daily_inventory_summary(store_id: int) -> Dict[str, float]:
         SELECT
             COALESCE(SUM(pi.stock * p.wholesale_price), 0) as wholesale_value,
             COALESCE(SUM(pi.stock * p.price), 0) as retail_value,
-            COUNT(CASE WHEN pi.stock > 0 THEN 1 END) as total_products
+            COUNT(*) as total_products,
+            COUNT(CASE WHEN pi.stock > 0 THEN 1 END) as positive_stock_products,
+            COUNT(CASE WHEN pi.stock <= 0 THEN 1 END) as non_positive_stock_products
         FROM product_inventory pi
         JOIN products p ON pi.product_id = p.id
         WHERE pi.store_id = %s
@@ -1115,6 +1202,8 @@ def get_daily_inventory_summary(store_id: int) -> Dict[str, float]:
             "wholesale_value": result["wholesale_value"] if result else 0,
             "retail_value": result["retail_value"] if result else 0,
             "total_products": result["total_products"] if result else 0,
+            "positive_stock_products": result["positive_stock_products"] if result else 0,
+            "non_positive_stock_products": result["non_positive_stock_products"] if result else 0,
         }
 
     except Exception as e:
@@ -1123,6 +1212,8 @@ def get_daily_inventory_summary(store_id: int) -> Dict[str, float]:
             "wholesale_value": 0,
             "retail_value": 0,
             "total_products": 0,
+            "positive_stock_products": 0,
+            "non_positive_stock_products": 0,
         }
 
 
