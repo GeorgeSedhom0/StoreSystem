@@ -998,9 +998,7 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
             name = html.escape(str(row.get("name") or "-"))
             phone = html.escape(str(row.get("phone") or "-"))
             barcode = html.escape(str(row.get("bar_code") or "-"))
-            lines.append(
-                f"• {name}\n  ID: {pid} | هاتف: {phone} | باركود: {barcode}"
-            )
+            lines.append(f"• {name}\n  ID: {pid} | هاتف: {phone} | باركود: {barcode}")
         return "\n".join(lines)
 
     if command == "cash_flow_create":
