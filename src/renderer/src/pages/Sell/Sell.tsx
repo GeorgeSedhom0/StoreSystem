@@ -142,7 +142,10 @@ const Sell = () => {
 
   // Auto-scroll cart to bottom only when a NEW product is added (not on quantity changes)
   useEffect(() => {
-    if (cartTableRef.current && shoppingCart.length > prevCartLengthRef.current) {
+    if (
+      cartTableRef.current &&
+      shoppingCart.length > prevCartLengthRef.current
+    ) {
       cartTableRef.current.scrollTop = cartTableRef.current.scrollHeight;
     }
     prevCartLengthRef.current = shoppingCart.length;
@@ -196,7 +199,12 @@ const Sell = () => {
   );
 
   // Client barcode detection - only enabled when third parties section is visible
-  useClientBarcodeDetection(parties, handleClientFound, setMsg, usingThirdParties);
+  useClientBarcodeDetection(
+    parties,
+    handleClientFound,
+    setMsg,
+    usingThirdParties,
+  );
 
   // Core bill submission logic (without discount validation)
   const executeBillSubmission = useCallback(
@@ -341,15 +349,21 @@ const Sell = () => {
         return;
       }
 
-      // Check if bill total is below wholesale cost (only for sell transactions, not returns)
-      if (!bypassDiscountCheck && billPayment !== "return") {
+      // Warn only when DISCOUNT itself pushes a normal sell bill below wholesale cost.
+      // If prices are already below cost before discount, do not warn here.
+      if (!bypassDiscountCheck && billPayment === "sell") {
         const wholesaleTotal = shoppingCart.reduce(
           (acc, item) => acc + item.wholesale_price * item.quantity,
           0,
         );
+        const totalBeforeDiscount = cartTotal;
         const billTotal = cartTotal - discount;
+        const discountCausedBelowCost =
+          discount > 0 &&
+          totalBeforeDiscount >= wholesaleTotal &&
+          billTotal < wholesaleTotal;
 
-        if (billTotal < wholesaleTotal) {
+        if (discountCausedBelowCost) {
           // Show confirmation dialog instead of blocking
           setPendingPrintAfterSubmit(shouldPrint);
           setHighDiscountDialogOpen(true);

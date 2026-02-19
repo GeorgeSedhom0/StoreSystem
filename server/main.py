@@ -1010,16 +1010,28 @@ def add_bill(
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            # Check for excessive discount in sell transactions
-            if move_type in ["sell", "installment"]:
+            # Check for excessive discount in normal sell transactions only.
+            # Alert only when discount itself pushes total below wholesale cost.
+            if move_type == "sell":
                 # Calculate wholesale sum
                 wholesale_sum = sum(
                     product_flow.quantity * product_flow.wholesale_price
                     for product_flow in bill.products_flow
                 )
 
-                # Check if bill total (after discount) is less than wholesale sum
-                if bill.total < wholesale_sum:
+                # Calculate pre-discount total based on selling prices
+                pre_discount_total = sum(
+                    product_flow.quantity * product_flow.price
+                    for product_flow in bill.products_flow
+                )
+
+                discount_caused_below_cost = (
+                    bill.discount > 0
+                    and pre_discount_total >= wholesale_sum
+                    and bill.total < wholesale_sum
+                )
+
+                if discount_caused_below_cost:
                     should_notify = True
 
                     # Get party name if exists

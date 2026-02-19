@@ -19,3 +19,5 @@ server/whatsapp_utils/.wwebjs_cache
 backend-dist
 backend-downloads
 openstore-data
+printer_settings.json
+settings.json
