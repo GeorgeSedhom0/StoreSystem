@@ -15,9 +15,10 @@ Write-Host "Root: $RootDir" -ForegroundColor Gray
 # Step 1: Build backend runtimes (Python + PostgreSQL)
 if (-not $SkipBackend) {
     Write-Host "`n--- Step 1: Building backend runtimes ---" -ForegroundColor Yellow
-    & "$PSScriptRoot\build-backend.ps1"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Backend build failed"
+    try {
+        & "$PSScriptRoot\build-backend.ps1"
+    } catch {
+        Write-Error "Backend build failed: $($_.Exception.Message)"
         exit 1
     }
 } else {
