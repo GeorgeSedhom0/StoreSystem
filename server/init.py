@@ -905,10 +905,25 @@ def create_all_triggers(cur):
     BEGIN
         -- Delete the corresponding cash flow entry
         DELETE FROM cash_flow
-        WHERE store_id = (SELECT store_id FROM installments WHERE id = OLD.installment_id)
-        AND bill_id = (SELECT bill_id FROM installments WHERE id = OLD.installment_id)
-        AND amount = OLD.amount
-        AND time = OLD.time;
+        WHERE id = (
+            SELECT cf.id
+            FROM cash_flow cf
+            WHERE cf.store_id = (SELECT store_id FROM installments WHERE id = OLD.installment_id)
+            AND cf.bill_id = (SELECT bill_id FROM installments WHERE id = OLD.installment_id)
+            AND cf.type = 'in'
+            AND cf.description = 'قسط'
+            AND cf.party_id IS NOT DISTINCT FROM (
+                SELECT b.party_id
+                FROM bills b
+                WHERE b.id = (SELECT bill_id FROM installments WHERE id = OLD.installment_id)
+                AND b.store_id = (SELECT store_id FROM installments WHERE id = OLD.installment_id)
+                LIMIT 1
+            )
+            AND cf.time = OLD.time
+            AND ROUND(COALESCE(cf.amount, 0)::numeric, 2) = ROUND(COALESCE(OLD.amount, 0)::numeric, 2)
+            ORDER BY cf.id DESC
+            LIMIT 1
+        );
         
         RETURN OLD;
     END;
@@ -928,10 +943,24 @@ def create_all_triggers(cur):
     BEGIN
         -- Delete the corresponding cash flow entry for the deposit (مقدم)
         DELETE FROM cash_flow
-        WHERE store_id = OLD.store_id
-        AND bill_id = OLD.bill_id
-        AND amount = OLD.paid
-        AND description = 'مقدم';
+        WHERE id = (
+            SELECT cf.id
+            FROM cash_flow cf
+            WHERE cf.store_id = OLD.store_id
+            AND cf.bill_id = OLD.bill_id
+            AND cf.type = 'in'
+            AND cf.description = 'مقدم'
+            AND cf.party_id IS NOT DISTINCT FROM (
+                SELECT b.party_id
+                FROM bills b
+                WHERE b.id = OLD.bill_id
+                AND b.store_id = OLD.store_id
+                LIMIT 1
+            )
+            AND ROUND(COALESCE(cf.amount, 0)::numeric, 2) = ROUND(COALESCE(OLD.paid, 0)::numeric, 2)
+            ORDER BY cf.id DESC
+            LIMIT 1
+        );
         
         RETURN OLD;
     END;

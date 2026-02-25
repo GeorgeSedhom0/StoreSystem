@@ -62,7 +62,7 @@ def get_installments(
     SELECT
         i.id,
         i.bill_id,  -- Add this line
-        i.paid,
+        i.paid::double precision AS paid,
         i.installments_count,
         i.installment_interval,
         -- Party Name (potentially from any bill linked to the installment)
@@ -85,7 +85,7 @@ def get_installments(
             Json_agg(
                 Json_build_object(
                     'id', id,
-                    'amount', amount,
+                    'amount', amount::double precision,
                     'time', time::text -- Cast time to text for JSON compatibility
                 ) ORDER BY time
             ) AS flow

@@ -813,117 +813,190 @@ def update_bill(
                     abs(product.price * product.amount) for product in bill.products
                 )
 
-                # Handle installment flow adjustments if totals changed
-                if old_total != new_total:
-                    # Get installment ID and current payments
-                    cur.execute(
-                        """
-                        SELECT i.id as installment_id, i.paid,
-                               COALESCE(SUM(if.amount), 0) as total_flow_paid
-                        FROM installments i
-                        LEFT JOIN installments_flow if ON i.id = if.installment_id
-                        WHERE i.bill_id = %s AND i.store_id = %s
-                        GROUP BY i.id, i.paid
-                        """,
-                        (bill.id, store_id),
-                    )
-                    installment_data = cur.fetchone()
+                # Get installment ID and current payments
+                cur.execute(
+                    """
+                    SELECT i.id as installment_id, i.paid,
+                           COALESCE(SUM(if.amount), 0) as total_flow_paid
+                    FROM installments i
+                    LEFT JOIN installments_flow if ON i.id = if.installment_id
+                    WHERE i.bill_id = %s AND i.store_id = %s
+                    GROUP BY i.id, i.paid
+                    """,
+                    (bill.id, store_id),
+                )
+                installment_data = cur.fetchone()
 
-                    if installment_data:
-                        installment_id = installment_data["installment_id"]
-                        paid_deposit = installment_data["paid"] or 0
-                        total_flow_paid = installment_data["total_flow_paid"] or 0
-                        total_paid = paid_deposit + total_flow_paid
+                if installment_data:
+                    installment_id = installment_data["installment_id"]
+                    paid_deposit = installment_data["paid"] or 0
+                    total_flow_paid = installment_data["total_flow_paid"] or 0
+                    total_paid = paid_deposit + total_flow_paid
 
-                        # Case 1: New total is 0 - delete all flows and installment
-                        if new_total == 0:
-                            # Delete all installment flows (triggers will handle cash_flow cleanup)
+                    # Case 1: New total is 0 - always delete all installment data
+                    # This cleanup is unconditional for installment bills to avoid orphan records.
+                    if new_total == 0:
+                        # Explicitly remove installment-related cash flow rows first.
+                        # Bubble-fix trigger will recalculate running totals after each deletion.
+                        cur.execute(
+                            """
+                            DELETE FROM cash_flow
+                            WHERE bill_id = %s
+                            AND store_id = %s
+                            AND type = 'in'
+                            AND description IN ('قسط', 'مقدم')
+                            """,
+                            (bill.id, store_id),
+                        )
+
+                        # Delete all installment flows
+                        cur.execute(
+                            """
+                            DELETE FROM installments_flow
+                            WHERE installment_id = %s
+                            """,
+                            (installment_id,),
+                        )
+
+                        # Delete the installment record
+                        cur.execute(
+                            """
+                            DELETE FROM installments
+                            WHERE id = %s
+                            """,
+                            (installment_id,),
+                        )
+
+                    # Case 2: New total is less but > 0 - adjust flows
+                    elif (
+                        old_total != new_total
+                        and new_total < old_total
+                        and total_paid > new_total
+                    ):
+                        # Get installment flows ordered by time (latest first)
+                        cur.execute(
+                            """
+                            SELECT id, amount, time
+                            FROM installments_flow
+                            WHERE installment_id = %s
+                            ORDER BY time DESC, id DESC
+                            """,
+                            (installment_id,),
+                        )
+                        flows = cur.fetchall()
+
+                        # Calculate how much we need to reduce
+                        excess_amount = total_paid - new_total
+                        remaining_excess = excess_amount
+                        flows_to_delete = []
+
+                        # Delete flows from latest backward until total_paid <= new_total
+                        for flow in flows:
+                            if remaining_excess <= 0:
+                                break
+
+                            flow_amount = flow["amount"]
+                            if flow_amount <= remaining_excess:
+                                # Delete entire flow
+                                flows_to_delete.append(flow["id"])
+                                remaining_excess -= flow_amount
+                            else:
+                                # Partial deletion - reduce the flow amount
+                                new_flow_amount = flow_amount - remaining_excess
+                                cur.execute(
+                                    """
+                                    UPDATE installments_flow
+                                    SET amount = %s
+                                    WHERE id = %s
+                                    """,
+                                    (new_flow_amount, flow["id"]),
+                                )
+
+                                # Update corresponding cash_flow entry
+                                cur.execute(
+                                    """
+                                    UPDATE cash_flow
+                                    SET amount = %s
+                                    WHERE bill_id = %s
+                                    AND store_id = %s
+                                    AND time = %s
+                                    AND type = 'in'
+                                    AND description = 'قسط'
+                                    AND party_id IS NOT DISTINCT FROM (
+                                        SELECT b.party_id
+                                        FROM bills b
+                                        WHERE b.id = %s AND b.store_id = %s
+                                        LIMIT 1
+                                    )
+                                    AND ROUND(COALESCE(amount, 0)::numeric, 2) = ROUND(COALESCE(%s::numeric, 0), 2)
+                                    """,
+                                    (
+                                        new_flow_amount,
+                                        bill.id,
+                                        store_id,
+                                        flow["time"],
+                                        bill.id,
+                                        store_id,
+                                        flow_amount,
+                                    ),
+                                )
+                                remaining_excess = 0
+
+                        # Delete the flows marked for deletion
+                        if flows_to_delete:
                             cur.execute(
                                 """
                                 DELETE FROM installments_flow
-                                WHERE installment_id = %s
+                                WHERE id = ANY(%s)
                                 """,
-                                (installment_id,),
+                                (flows_to_delete,),
                             )
 
-                            # Delete the installment record
+                        # If excess still remains, reduce the initial deposit (paid)
+                        if remaining_excess > 0:
+                            new_paid_deposit = max(0, paid_deposit - remaining_excess)
+
                             cur.execute(
                                 """
-                                DELETE FROM installments
+                                UPDATE installments
+                                SET paid = %s
                                 WHERE id = %s
                                 """,
-                                (installment_id,),
+                                (new_paid_deposit, installment_id),
                             )
 
-                        # Case 2: New total is less but > 0 - adjust flows
-                        elif new_total < old_total and total_paid > new_total:
-                            # Get installment flows ordered by time (latest first)
+                            # Update corresponding deposit cash_flow row
                             cur.execute(
                                 """
-                                SELECT id, amount, time
-                                FROM installments_flow
-                                WHERE installment_id = %s
-                                ORDER BY time DESC, id DESC
-                                """,
-                                (installment_id,),
-                            )
-                            flows = cur.fetchall()
-
-                            # Calculate how much we need to reduce
-                            excess_amount = total_paid - new_total
-                            remaining_excess = excess_amount
-                            flows_to_delete = []
-
-                            # Delete flows from latest backward until total_paid <= new_total
-                            for flow in flows:
-                                if remaining_excess <= 0:
-                                    break
-
-                                flow_amount = flow["amount"]
-                                if flow_amount <= remaining_excess:
-                                    # Delete entire flow
-                                    flows_to_delete.append(flow["id"])
-                                    remaining_excess -= flow_amount
-                                else:
-                                    # Partial deletion - reduce the flow amount
-                                    new_flow_amount = flow_amount - remaining_excess
-                                    cur.execute(
-                                        """
-                                        UPDATE installments_flow
-                                        SET amount = %s
-                                        WHERE id = %s
-                                        """,
-                                        (new_flow_amount, flow["id"]),
+                                UPDATE cash_flow
+                                SET amount = %s
+                                WHERE id = (
+                                    SELECT cf.id
+                                    FROM cash_flow cf
+                                    WHERE cf.bill_id = %s
+                                    AND cf.store_id = %s
+                                    AND cf.type = 'in'
+                                    AND cf.description = 'مقدم'
+                                    AND cf.party_id IS NOT DISTINCT FROM (
+                                        SELECT b.party_id
+                                        FROM bills b
+                                        WHERE b.id = %s AND b.store_id = %s
+                                        LIMIT 1
                                     )
-
-                                    # Update corresponding cash_flow entry
-                                    cur.execute(
-                                        """
-                                        UPDATE cash_flow
-                                        SET amount = %s
-                                        WHERE bill_id = %s AND store_id = %s 
-                                        AND time = %s AND description = 'قسط'
-                                        AND amount = %s
-                                        """,
-                                        (
-                                            new_flow_amount,
-                                            bill.id,
-                                            store_id,
-                                            flow["time"],
-                                            flow_amount,
-                                        ),
-                                    )
-                                    remaining_excess = 0
-
-                            # Delete the flows marked for deletion
-                            if flows_to_delete:
-                                cur.execute(
-                                    """
-                                    DELETE FROM installments_flow
-                                    WHERE id = ANY(%s)
-                                    """,
-                                    (flows_to_delete,),
+                                    AND ROUND(COALESCE(cf.amount, 0)::numeric, 2) = ROUND(COALESCE(%s::numeric, 0), 2)
+                                    ORDER BY cf.id DESC
+                                    LIMIT 1
                                 )
+                                """,
+                                (
+                                    new_paid_deposit,
+                                    bill.id,
+                                    store_id,
+                                    bill.id,
+                                    store_id,
+                                    paid_deposit,
+                                ),
+                            )
 
             # Continue with normal bill update logic
             # Update the bill details

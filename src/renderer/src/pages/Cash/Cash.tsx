@@ -212,6 +212,7 @@ const Cash = () => {
   }, [filteredAndSortedCashFlow]);
 
   const loading = isShiftLoading || isCashFlowLoading;
+  const isInstallmentReservedDescription = description.trim() === "قسط";
 
   // Handler functions for enhanced functionality
   const handleSort = (property: keyof CashFlow) => {
@@ -275,6 +276,14 @@ const Cash = () => {
   );
 
   const addCashFlow = async () => {
+    if (isInstallmentReservedDescription) {
+      setMsg({
+        type: "error",
+        text: "الوصف (قسط) مخصص تلقائيًا للأقساط ولا يمكن إضافته يدويًا",
+      });
+      return;
+    }
+
     try {
       let newPartyId = selectedPartyId;
 
@@ -450,10 +459,16 @@ const Cash = () => {
                     label="الوصف"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
+                    error={isInstallmentReservedDescription}
+                    helperText={
+                      isInstallmentReservedDescription
+                        ? "القيمة (قسط) محجوزة لنظام الأقساط"
+                        : ""
+                    }
                   />
                   <Button
                     onClick={addCashFlow}
-                    disabled={loading}
+                    disabled={loading || isInstallmentReservedDescription}
                     variant="contained"
                     sx={{ minWidth: 120 }}
                   >
