@@ -1649,14 +1649,9 @@ def move_products(
                         )
                         remaining -= take_qty
 
-                    if remaining > 0:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=(
-                                f"Product {product_flow.id} does not have enough tracked "
-                                f"batches in source store to transfer {product_flow.quantity}"
-                            ),
-                        )
+                    # If tracked batches do not fully cover quantity, allow the remainder
+                    # to move as untracked stock (products without expiration tracking).
+                    # We only enforce strict full coverage when explicit batches are provided.
 
                 transfer_allocations[product_flow.id] = allocations
 
