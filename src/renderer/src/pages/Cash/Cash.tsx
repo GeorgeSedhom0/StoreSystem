@@ -310,6 +310,7 @@ const Cash = () => {
             description,
             store_id: storeId,
             party_id: newPartyId,
+            time: new Date().toLocaleString(),
           },
         },
       );

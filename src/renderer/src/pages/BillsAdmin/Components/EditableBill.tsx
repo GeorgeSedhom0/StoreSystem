@@ -49,6 +49,7 @@ const EditableBill = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [loading, setLoading] = useState(false);
+  const [isPairedBill, setIsPairedBill] = useState(false);
 
   const { storeId } = useContext(StoreContext);
 
@@ -71,6 +72,28 @@ const EditableBill = ({
     };
     getProds();
   }, [storeId]);
+
+  useEffect(() => {
+    const fetchPairStatus = async () => {
+      try {
+        const { data } = await axios.get<{ is_paired: boolean }>(
+          "/bill-pair-status",
+          {
+            params: {
+              bill_id: bill.id,
+              store_id: storeId,
+            },
+          },
+        );
+        setIsPairedBill(Boolean(data?.is_paired));
+      } catch (error) {
+        console.log(error);
+        setIsPairedBill(false);
+      }
+    };
+
+    fetchPairStatus();
+  }, [bill.id, storeId]);
 
   const totalEval = useCallback((bill: Bill) => {
     let total = 0;
@@ -97,11 +120,17 @@ const EditableBill = ({
         (prod) => prod.id === product.id,
       );
       if (productIndex === -1) {
+        const defaultWholesale = product.wholesale_price;
+        const defaultPrice =
+          isPairedBill && editedBill.type === "sell"
+            ? product.wholesale_price
+            : product.price;
+
         newBill.products.push({
           id: product.id,
           name: product.name,
-          price: product.price,
-          wholesale_price: product.wholesale_price,
+          price: defaultPrice,
+          wholesale_price: defaultWholesale,
           bar_code: product.bar_code,
           amount: 1,
         });
@@ -111,7 +140,7 @@ const EditableBill = ({
       newBill.total = totalEval(newBill);
       setEditedBill(newBill);
     },
-    [editedBill],
+    [editedBill, isPairedBill],
   );
 
   const submitBill = useCallback(async () => {
@@ -197,6 +226,7 @@ const EditableBill = ({
                     <TableCell>
                       <TextField
                         value={product.wholesale_price}
+                        disabled={isPairedBill}
                         onChange={(e) => {
                           const newBill = { ...editedBill };
                           const productIndex = newBill.products.findIndex(
@@ -213,6 +243,7 @@ const EditableBill = ({
                     <TableCell>
                       <TextField
                         value={product.price}
+                        disabled={isPairedBill}
                         onChange={(e) => {
                           const newBill = { ...editedBill };
                           const productIndex = newBill.products.findIndex(

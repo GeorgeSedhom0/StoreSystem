@@ -114,6 +114,10 @@ const AdminSell = () => {
   const { parties, addPartyMutationAsync, generateClientBarcode } =
     useParties(setMsg);
 
+  const selectableParties = parties.filter(
+    (party) => !party.extra_info?.store_id,
+  );
+
   const { createBill, isCreatingBill } = useBills();
 
   useEffect(() => {
@@ -202,7 +206,7 @@ const AdminSell = () => {
 
   // Client barcode detection - only enabled when third parties section is visible
   useClientBarcodeDetection(
-    parties,
+    selectableParties,
     handleClientFound,
     setMsg,
     usingThirdParties,
@@ -615,7 +619,7 @@ const AdminSell = () => {
                     [
                       { id: null, name: "بدون عميل", phone: "", address: "" },
                       { id: null, name: "عميل جديد", phone: "", address: "" },
-                      ...parties,
+                      ...selectableParties,
                     ] as Party[]
                   }
                   getOptionLabel={(option) =>
@@ -624,7 +628,10 @@ const AdminSell = () => {
                   isOptionEqualToValue={(option, value) =>
                     option.id === value.id && option.name === value.name
                   }
-                  value={parties.find((party) => party.id === partyId) || null}
+                  value={
+                    selectableParties.find((party) => party.id === partyId) ||
+                    null
+                  }
                   onChange={(_, value) => {
                     if (value && value.id) {
                       setPartyId(value.id);

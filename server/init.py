@@ -248,6 +248,37 @@ def create_all_tables(cur):
     )
     """)
 
+    # Create the bills_pairs table for linked transfer bills between stores
+    cur.execute("""
+    CREATE TABLE bills_pairs (
+        id BIGSERIAL PRIMARY KEY,
+        left_bill_id BIGINT NOT NULL,
+        left_store_id BIGINT NOT NULL,
+        right_bill_id BIGINT NOT NULL,
+        right_store_id BIGINT NOT NULL,
+        created_via VARCHAR,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT bills_pairs_left_fk
+            FOREIGN KEY (left_bill_id, left_store_id) REFERENCES bills(id, store_id),
+        CONSTRAINT bills_pairs_right_fk
+            FOREIGN KEY (right_bill_id, right_store_id) REFERENCES bills(id, store_id),
+        CONSTRAINT bills_pairs_distinct_pair
+            CHECK (left_bill_id <> right_bill_id OR left_store_id <> right_store_id),
+        CONSTRAINT bills_pairs_unique_pair
+            UNIQUE (left_bill_id, left_store_id, right_bill_id, right_store_id)
+    )
+    """)
+
+    cur.execute("""
+    CREATE INDEX IF NOT EXISTS idx_bills_pairs_left
+    ON bills_pairs (left_store_id, left_bill_id)
+    """)
+
+    cur.execute("""
+    CREATE INDEX IF NOT EXISTS idx_bills_pairs_right
+    ON bills_pairs (right_store_id, right_bill_id)
+    """)
+
     # Create the cash_flow table
     cur.execute("""
     CREATE TABLE cash_flow (

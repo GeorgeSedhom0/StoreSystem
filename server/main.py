@@ -276,6 +276,316 @@ class Database:
         self.conn.close()
 
 
+def _get_party_store_id(cur, party_id: Optional[int]) -> Optional[int]:
+    if not party_id:
+        return None
+
+    cur.execute(
+        """
+        SELECT (extra_info->>'store_id')::BIGINT AS store_id
+        FROM assosiated_parties
+        WHERE id = %s
+        """,
+        (party_id,),
+    )
+    result = cur.fetchone()
+    if not result:
+        return None
+    return result.get("store_id")
+
+
+def _get_store_party_id(cur, store_id: int) -> Optional[int]:
+    cur.execute(
+        """
+        SELECT id
+        FROM assosiated_parties
+        WHERE extra_info->>'store_id' = %s
+        LIMIT 1
+        """,
+        (str(store_id),),
+    )
+    result = cur.fetchone()
+    return result["id"] if result else None
+
+
+def _normalize_bill_pair_sides(
+    left_bill_id: int,
+    left_store_id: int,
+    right_bill_id: int,
+    right_store_id: int,
+) -> tuple[int, int, int, int]:
+    left_side = (left_store_id, left_bill_id)
+    right_side = (right_store_id, right_bill_id)
+    if left_side <= right_side:
+        return left_bill_id, left_store_id, right_bill_id, right_store_id
+    return right_bill_id, right_store_id, left_bill_id, left_store_id
+
+
+def _insert_bill_pair(
+    cur,
+    left_bill_id: int,
+    left_store_id: int,
+    right_bill_id: int,
+    right_store_id: int,
+    created_via: str,
+) -> None:
+    (
+        normalized_left_bill_id,
+        normalized_left_store_id,
+        normalized_right_bill_id,
+        normalized_right_store_id,
+    ) = _normalize_bill_pair_sides(
+        left_bill_id,
+        left_store_id,
+        right_bill_id,
+        right_store_id,
+    )
+
+    cur.execute(
+        """
+        INSERT INTO bills_pairs (
+            left_bill_id,
+            left_store_id,
+            right_bill_id,
+            right_store_id,
+            created_via
+        )
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (left_bill_id, left_store_id, right_bill_id, right_store_id)
+        DO NOTHING
+        """,
+        (
+            normalized_left_bill_id,
+            normalized_left_store_id,
+            normalized_right_bill_id,
+            normalized_right_store_id,
+            created_via,
+        ),
+    )
+
+
+def _find_bill_pair(cur, bill_id: int, store_id: int) -> Optional[Dict[str, int]]:
+    cur.execute(
+        """
+        SELECT
+            left_bill_id,
+            left_store_id,
+            right_bill_id,
+            right_store_id
+        FROM bills_pairs
+        WHERE
+            (left_bill_id = %s AND left_store_id = %s)
+            OR
+            (right_bill_id = %s AND right_store_id = %s)
+        LIMIT 1
+        """,
+        (bill_id, store_id, bill_id, store_id),
+    )
+    pair = cur.fetchone()
+    if not pair:
+        return None
+
+    if pair["left_bill_id"] == bill_id and pair["left_store_id"] == store_id:
+        return {
+            "bill_id": pair["right_bill_id"],
+            "store_id": pair["right_store_id"],
+        }
+
+    return {
+        "bill_id": pair["left_bill_id"],
+        "store_id": pair["left_store_id"],
+    }
+
+
+def _get_paired_bill_type(move_type: str) -> Optional[str]:
+    if move_type == "sell":
+        return "buy"
+    if move_type == "buy":
+        return "sell"
+    return None
+
+
+def _calculate_bill_total_for_type(
+    move_type: str,
+    products: List[dbProduct],
+    discount: float,
+) -> float:
+    if move_type in ["sell", "return"]:
+        total = sum(abs(product.amount) * product.price for product in products)
+    elif move_type in ["buy", "buy-return"]:
+        total = sum(
+            abs(product.amount) * product.wholesale_price for product in products
+        )
+    else:
+        total = 0
+    return max(total - discount, 0)
+
+
+def _lock_paired_bill_prices(
+    cur,
+    bill: dbBill,
+    store_id: int,
+) -> Optional[Dict[str, int]]:
+    if bill.type not in ["sell", "buy"]:
+        return None
+
+    pair = _find_bill_pair(cur, bill.id, store_id)
+    if not pair:
+        return None
+
+    cur.execute(
+        """
+        SELECT product_id, wholesale_price, price
+        FROM products_flow
+        WHERE bill_id = %s AND store_id = %s
+        """,
+        (bill.id, store_id),
+    )
+    existing_prices = {
+        row["product_id"]: {
+            "wholesale_price": row["wholesale_price"],
+            "price": row["price"],
+        }
+        for row in cur.fetchall()
+    }
+
+    locked_products: List[dbProduct] = []
+    for product in bill.products:
+        existing = existing_prices.get(product.id)
+
+        if existing:
+            wholesale_price = existing["wholesale_price"]
+            price = existing["price"]
+        else:
+            cur.execute(
+                """
+                SELECT name, bar_code, wholesale_price, price
+                FROM products
+                WHERE id = %s
+                """,
+                (product.id,),
+            )
+            product_row = cur.fetchone()
+            if not product_row:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Product {product.id} not found",
+                )
+
+            wholesale_price = product_row["wholesale_price"]
+            if bill.type == "sell":
+                price = wholesale_price
+            else:
+                price = product_row["price"]
+
+            if not product.name:
+                product.name = product_row["name"]
+            if not product.bar_code:
+                product.bar_code = product_row["bar_code"]
+
+        locked_products.append(
+            dbProduct(
+                id=product.id,
+                name=product.name,
+                bar_code=product.bar_code,
+                amount=abs(product.amount),
+                wholesale_price=wholesale_price,
+                price=price,
+            )
+        )
+
+    bill.products = locked_products
+    bill.total = _calculate_bill_total_for_type(bill.type, bill.products, bill.discount)
+    return pair
+
+
+def _build_paired_bill_for_update(
+    cur,
+    bill: dbBill,
+    pair: Dict[str, int],
+) -> Optional[dbBill]:
+    paired_type = _get_paired_bill_type(bill.type)
+    if not paired_type:
+        return None
+
+    cur.execute(
+        """
+        SELECT product_id, wholesale_price, price
+        FROM products_flow
+        WHERE bill_id = %s AND store_id = %s
+        """,
+        (pair["bill_id"], pair["store_id"]),
+    )
+    paired_existing_prices = {
+        row["product_id"]: {
+            "wholesale_price": row["wholesale_price"],
+            "price": row["price"],
+        }
+        for row in cur.fetchall()
+    }
+
+    paired_products: List[dbProduct] = []
+    for product in bill.products:
+        paired_existing = paired_existing_prices.get(product.id)
+
+        if paired_existing:
+            paired_wholesale_price = paired_existing["wholesale_price"]
+            paired_price = paired_existing["price"]
+        else:
+            cur.execute(
+                """
+                SELECT name, bar_code, wholesale_price, price
+                FROM products
+                WHERE id = %s
+                """,
+                (product.id,),
+            )
+            product_row = cur.fetchone()
+            if not product_row:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Product {product.id} not found",
+                )
+
+            paired_wholesale_price = product_row["wholesale_price"]
+            if paired_type == "sell":
+                paired_price = paired_wholesale_price
+            else:
+                paired_price = product_row["price"]
+
+            if not product.name:
+                product.name = product_row["name"]
+            if not product.bar_code:
+                product.bar_code = product_row["bar_code"]
+
+        paired_products.append(
+            dbProduct(
+                id=product.id,
+                name=product.name,
+                bar_code=product.bar_code,
+                amount=abs(product.amount),
+                wholesale_price=paired_wholesale_price,
+                price=paired_price,
+            )
+        )
+
+    paired_total = _calculate_bill_total_for_type(
+        paired_type,
+        paired_products,
+        bill.discount,
+    )
+
+    return dbBill(
+        id=pair["bill_id"],
+        time=bill.time,
+        discount=bill.discount,
+        total=paired_total,
+        type=paired_type,
+        note=bill.note,
+        products=paired_products,
+    )
+
+
 @app.get("/test")
 def test():
     return "Hello, World!"
@@ -755,7 +1065,10 @@ def get_bills(
 
 @app.put("/bill")
 def update_bill(
-    bill: dbBill, store_id: int, current_user: dict = Depends(get_current_user)
+    bill: dbBill,
+    store_id: int,
+    sync_pair: bool = True,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Update a bill in the database
@@ -773,22 +1086,26 @@ def update_bill(
     Returns:
         Dict: The updated bill
     """
-    # manipulate the bill to be able to update it
-    # 1. set the total to a negative value in case of return or buy bills
-    bill.total = -bill.total if bill.type in ["buy", "return"] else bill.total
-    # Special case, no products in bill
-    if not bill.products:
-        bill.total = 0
-        bill.discount = 0
-    # 2. set the amount in the products to a negative value in case of return or buy bills
-    products = bill.products
-    for product in products:
-        product.amount = (
-            product.amount if bill.type in ["buy", "return"] else -product.amount
-        )
+    pair_reference: Optional[Dict[str, int]] = None
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            pair_reference = _lock_paired_bill_prices(cur, bill, store_id)
+
+            bill.total = -bill.total if bill.type in ["buy", "return"] else bill.total
+
+            if not bill.products:
+                bill.total = 0
+                bill.discount = 0
+
+            products = bill.products
+            for product in products:
+                product.amount = (
+                    product.amount
+                    if bill.type in ["buy", "return"]
+                    else -product.amount
+                )
+
             # Check if this is an installment bill and get current total from products_flow
             cur.execute(
                 """
@@ -1082,14 +1399,31 @@ def update_bill(
                 """,
                 values,
             )
-            return JSONResponse(content={"message": "Bill updated successfully"})
+
+        if sync_pair and bill.type in ["sell", "buy"]:
+            if pair_reference:
+                with Database(HOST, DATABASE, USER, PASS) as cur:
+                    paired_bill = _build_paired_bill_for_update(
+                        cur,
+                        bill,
+                        pair_reference,
+                    )
+
+                if paired_bill:
+                    update_bill(
+                        paired_bill,
+                        pair_reference["store_id"],
+                        sync_pair=False,
+                        current_user=current_user,
+                    )
+
+        return JSONResponse(content={"message": "Bill updated successfully"})
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.post("/bill")
-def add_bill(
+def _add_bill_internal(
     bill: Bill,
     move_type: Literal[
         "sell", "buy", "BNPL", "return", "reserve", "installment", "buy-return"
@@ -1099,8 +1433,8 @@ def add_bill(
     paid: Optional[float] = None,
     installments: Optional[int] = None,
     installment_interval: Optional[int] = None,
-    current_user: dict = Depends(get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: Optional[dict] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
 ):
     """
     Add a bill to the database
@@ -1120,6 +1454,11 @@ def add_bill(
     Returns:
         Dict: A message indicating the result of the operation
     """
+    if current_user is None:
+        current_user = {}
+    if background_tasks is None:
+        background_tasks = BackgroundTasks()
+
     bill_total = (
         bill.total
         if move_type in ["buy-return", "sell", "reserve"]
@@ -1389,6 +1728,43 @@ def add_bill(
     except Exception as e:
         print("Error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/bill")
+def add_bill(
+    bill: Bill,
+    move_type: Literal[
+        "sell", "buy", "BNPL", "return", "reserve", "installment", "buy-return"
+    ],
+    store_id: int,
+    party_id: Optional[int] = None,
+    paid: Optional[float] = None,
+    installments: Optional[int] = None,
+    installment_interval: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    if move_type == "sell" and party_id is not None:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            party_store_id = _get_party_store_id(cur, party_id)
+
+        if party_store_id is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Store parties are not allowed for direct sell bill creation",
+            )
+
+    return _add_bill_internal(
+        bill=bill,
+        move_type=move_type,
+        store_id=store_id,
+        party_id=party_id,
+        paid=paid,
+        installments=installments,
+        installment_interval=installment_interval,
+        current_user=current_user,
+        background_tasks=background_tasks,
+    )
 
 
 @app.post("/admin/move-products")
@@ -1695,7 +2071,7 @@ def move_products(
         )
 
         # Add sell bill to source store (with destination store as party)
-        add_bill(
+        source_bill_result = _add_bill_internal(
             source_transfer_bill,
             "sell",
             source_store_id,
@@ -1704,13 +2080,26 @@ def move_products(
         )
 
         # Add buy bill to destination store (with source store as party)
-        add_bill(
+        destination_bill_result = _add_bill_internal(
             destination_transfer_bill,
             "buy",
             destination_store_id,
             source_party_id,  # Use source store's associated party ID
             current_user=current_user,
         )
+
+        source_bill_id = source_bill_result["bill"]["id"]
+        destination_bill_id = destination_bill_result["bill"]["id"]
+
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            _insert_bill_pair(
+                cur,
+                source_bill_id,
+                source_store_id,
+                destination_bill_id,
+                destination_store_id,
+                "move_products",
+            )
 
         # Prepare products data for notification
         transfer_products = []
@@ -1950,6 +2339,7 @@ def add_cash_flow(
     description: str,
     store_id: int,
     party_id: Optional[int] = None,
+    time: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -1965,6 +2355,9 @@ def add_cash_flow(
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            current_time = time or datetime.now().isoformat()
+            signed_amount = amount if move_type == "in" else -amount
+
             cur.execute(
                 """
                 INSERT INTO cash_flow (
@@ -1974,13 +2367,37 @@ def add_cash_flow(
                 """,
                 (
                     store_id,
-                    datetime.now().isoformat(),
-                    move_type == "in" and amount or -amount,
+                    current_time,
+                    signed_amount,
                     move_type,
                     description,
                     party_id,
                 ),
             )
+
+            party_store_id = _get_party_store_id(cur, party_id)
+            if party_store_id and party_store_id != store_id:
+                reverse_type = "out" if move_type == "in" else "in"
+                reverse_signed_amount = amount if reverse_type == "in" else -amount
+                source_store_party_id = _get_store_party_id(cur, store_id)
+
+                cur.execute(
+                    """
+                    INSERT INTO cash_flow (
+                        store_id, time, amount, type, description, party_id
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        party_store_id,
+                        current_time,
+                        reverse_signed_amount,
+                        reverse_type,
+                        f"{description}",
+                        source_store_party_id,
+                    ),
+                )
+
             return {"message": "Cash flow record added successfully"}
     except Exception as e:
         print(f"Error: {e}")
@@ -2267,6 +2684,21 @@ def get_bill_products(
             )
             products = cur.fetchall()
             return products
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/bill-pair-status")
+def get_bill_pair_status(
+    bill_id: int,
+    store_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            pair = _find_bill_pair(cur, bill_id, store_id)
+            return {"is_paired": pair is not None}
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
