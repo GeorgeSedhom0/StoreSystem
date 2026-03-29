@@ -60,12 +60,14 @@ const getBills = async (
   endDate: Dayjs,
   partyId: number | null,
   storeId: number,
+  billId?: string | null,
 ) => {
   const { data } = await axios.get<BillType[]>("/bills", {
     params: {
-      start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
-      end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
-      party_id: partyId,
+      start_date: billId ? undefined : startDate.format("YYYY-MM-DDTHH:mm:ss"),
+      end_date: billId ? undefined : endDate.format("YYYY-MM-DDTHH:mm:ss"),
+      party_id: billId ? undefined : partyId,
+      bill_id: billId || undefined,
       store_id: storeId,
     },
   });
@@ -92,6 +94,8 @@ const BillsAdmin = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product[]>([]);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
+  const [billIdInput, setBillIdInput] = useState("");
+  const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
 
   const { storeId } = useContext(StoreContext);
 
@@ -125,12 +129,40 @@ const BillsAdmin = () => {
     isLoading: isBillsLoading,
     refetch: refetchBills,
   } = useQuery({
-    queryKey: ["bills", startDate, endDate, selectedPartyId || "", storeId],
-    queryFn: () => getBills(startDate, endDate, selectedPartyId, storeId),
+    queryKey: [
+      "bills",
+      startDate,
+      endDate,
+      selectedPartyId || "",
+      storeId,
+      selectedBillId || "",
+    ],
+    queryFn: () =>
+      getBills(startDate, endDate, selectedPartyId, storeId, selectedBillId),
     initialData: [],
   });
 
   const { parties } = useParties(setMsg);
+
+  const isBillIdMode = billIdInput.trim().length > 0;
+  const hasActiveBillIdSearch = Boolean(selectedBillId);
+
+  const handleBillIdSearch = useCallback(() => {
+    const trimmedBillId = billIdInput.trim();
+    if (!trimmedBillId) {
+      setSelectedBillId(null);
+      return;
+    }
+
+    setSelectedBillId(trimmedBillId);
+    setSelectedProduct([]);
+    setSelectedPartyId(null);
+  }, [billIdInput]);
+
+  const clearBillIdSearch = useCallback(() => {
+    setBillIdInput("");
+    setSelectedBillId(null);
+  }, []);
 
   const setRange = useCallback(
     (range: "shift" | "day" | "week" | "month") => {
@@ -161,6 +193,12 @@ const BillsAdmin = () => {
   );
 
   const filteredBills = useMemo(() => {
+    if (hasActiveBillIdSearch) {
+      const bill = bills[0];
+      if (!bill) return [];
+      return [bill, { ...bill, isExpanded: true }];
+    }
+
     let filteredBills = bills.filter((bill) => filters.includes(bill.type));
 
     if (selectedProduct.length > 0) {
@@ -183,7 +221,13 @@ const BillsAdmin = () => {
     }
 
     return filteredBills;
-  }, [bills, filters, selectedProduct, showExpandedBill]);
+  }, [
+    bills,
+    filters,
+    selectedProduct,
+    showExpandedBill,
+    hasActiveBillIdSearch,
+  ]);
 
   // Statistics calculations
   const statistics = useMemo(() => {
@@ -415,8 +459,9 @@ const BillsAdmin = () => {
                   <Grid2>
                     <FormControlLabel
                       control={<Switch id="showExpandedBillSwitch" />}
-                      checked={showExpandedBill}
+                      checked={hasActiveBillIdSearch || showExpandedBill}
                       label="عرض الفواتير المفصلة"
+                      disabled={hasActiveBillIdSearch}
                       onChange={(_, isChecked: boolean) => {
                         // Don't turn this of while some product filter is applied
                         if (selectedProduct.length !== 0) return;
@@ -430,6 +475,34 @@ const BillsAdmin = () => {
                 </Typography>
               </Grid2>
               <Grid2 container gap={3} size={12}>
+                <TextField
+                  label="رقم الفاتورة"
+                  type="number"
+                  value={billIdInput}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setBillIdInput(nextValue);
+                    if (!nextValue.trim()) {
+                      setSelectedBillId(null);
+                    }
+                  }}
+                  sx={{ width: 220 }}
+                />
+
+                <ButtonGroup>
+                  <Button onClick={handleBillIdSearch} variant="contained">
+                    عرض الفاتورة
+                  </Button>
+                  <Button
+                    onClick={clearBillIdSearch}
+                    disabled={!isBillIdMode && !hasActiveBillIdSearch}
+                  >
+                    مسح
+                  </Button>
+                </ButtonGroup>
+              </Grid2>
+
+              <Grid2 container gap={3} size={12}>
                 <LocalizationProvider
                   dateAdapter={AdapterDayjs}
                   adapterLocale="ar-sa"
@@ -437,6 +510,7 @@ const BillsAdmin = () => {
                   <DateTimePicker
                     label="من"
                     value={startDate}
+                    disabled={isBillIdMode}
                     onChange={(newValue) => {
                       if (!newValue) return;
                       setStartDate(newValue);
@@ -452,6 +526,7 @@ const BillsAdmin = () => {
                   <DateTimePicker
                     label="الى"
                     value={endDate}
+                    disabled={isBillIdMode}
                     onChange={(newValue) => {
                       if (!newValue) return;
                       setEndDate(newValue);
@@ -463,6 +538,7 @@ const BillsAdmin = () => {
                   <InputLabel>نوع الفانورة</InputLabel>
                   <Select
                     value={filters}
+                    disabled={isBillIdMode}
                     onChange={(e) =>
                       setFilters(
                         Array.isArray(e.target.value)
@@ -492,6 +568,7 @@ const BillsAdmin = () => {
                   id="selectProductDropdown"
                   getOptionLabel={(option) => option.name}
                   value={selectedProduct}
+                  disabled={isBillIdMode}
                   sx={{ minWidth: 300 }}
                   onChange={(_, newValue) => {
                     setSelectedProduct(newValue);
@@ -508,15 +585,36 @@ const BillsAdmin = () => {
               </Grid2>
               <Grid2 size={12}>
                 <ButtonGroup>
-                  <Button onClick={() => setRange("shift")}>اخر شيفت</Button>
-                  <Button onClick={() => setRange("day")}>اليوم</Button>
-                  <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
-                  <Button onClick={() => setRange("month")}>هذا الشهر</Button>
+                  <Button
+                    onClick={() => setRange("shift")}
+                    disabled={isBillIdMode}
+                  >
+                    اخر شيفت
+                  </Button>
+                  <Button
+                    onClick={() => setRange("day")}
+                    disabled={isBillIdMode}
+                  >
+                    اليوم
+                  </Button>
+                  <Button
+                    onClick={() => setRange("week")}
+                    disabled={isBillIdMode}
+                  >
+                    هذا الاسبوع
+                  </Button>
+                  <Button
+                    onClick={() => setRange("month")}
+                    disabled={isBillIdMode}
+                  >
+                    هذا الشهر
+                  </Button>
                 </ButtonGroup>
               </Grid2>
               <Grid2 size={12}>
                 <Autocomplete
                   options={parties}
+                  disabled={isBillIdMode}
                   onChange={(_, value) => {
                     setSelectedPartyId(value?.id || null);
                   }}
@@ -552,7 +650,7 @@ const BillsAdmin = () => {
         </Grid2>
 
         {/* Product Flow Analysis */}
-        {selectedProduct.length > 0 && (
+        {!hasActiveBillIdSearch && selectedProduct.length > 0 && (
           <Grid2 size={12}>
             <Card elevation={3} sx={{ p: 2 }}>
               <Typography variant="h5" sx={{ mb: 2 }}>

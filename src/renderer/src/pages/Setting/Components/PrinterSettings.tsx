@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import {
   FormControl,
   InputLabel,
@@ -18,9 +18,18 @@ import {
   AccordionSummary,
   AccordionDetails,
   Slider,
+  Stack,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import AlertMessage, { AlertMsg } from "@renderer/pages/Shared/AlertMessage";
+import { StoreContext } from "@renderer/StoreDataProvider";
+import {
+  DEFAULT_BILL_LOGO_APPEARANCE,
+  type BillLogoAppearance,
+  notifyBillLogoAppearanceUpdated,
+  notifyBillLogoUpdated,
+  useBillLogo,
+} from "@renderer/pages/Shared/hooks/useBillLogo";
 import {
   Print as PrintIcon,
   Receipt as ReceiptIcon,
@@ -29,6 +38,9 @@ import {
   Straighten as SizeIcon,
   ExpandMore as ExpandMoreIcon,
   Tune as TuneIcon,
+  UploadFile as UploadFileIcon,
+  DeleteOutline as DeleteOutlineIcon,
+  ImageOutlined as ImageOutlinedIcon,
 } from "@mui/icons-material";
 
 // Default barcode settings optimized for 40mm x 25mm labels
@@ -82,9 +94,12 @@ interface PrinterSettingsState {
   barcodePrinterWidth: string;
   barcodePrinterHeight: string;
   barcodeSettings: BarcodeSettings;
+  billLogos?: Record<string, unknown>;
+  billLogoSettings?: Record<string, BillLogoAppearance>;
 }
 
 const PrinterSettings = () => {
+  const { storeId, store } = useContext(StoreContext);
   const [printers, setPrinters] = useState<
     {
       name: string;
@@ -104,6 +119,12 @@ const PrinterSettings = () => {
     type: "",
     text: "",
   });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [removingLogo, setRemovingLogo] = useState(false);
+  const { logo, reloadLogo } = useBillLogo(storeId);
+  const billLogoAppearance =
+    settings.billLogoSettings?.[String(storeId)] ||
+    DEFAULT_BILL_LOGO_APPEARANCE;
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -116,12 +137,19 @@ const PrinterSettings = () => {
         if (savedSettings) {
           // Merge saved settings with defaults to handle new fields
           setSettings({
-            ...settings,
+            billPrinter: "",
+            barcodePrinter: "",
+            billPrinterWidth: "",
+            billPrinterHeight: "",
+            barcodePrinterWidth: "40",
+            barcodePrinterHeight: "25",
             ...savedSettings,
             barcodeSettings: {
               ...DEFAULT_BARCODE_SETTINGS,
               ...(savedSettings.barcodeSettings || {}),
             },
+            billLogos: savedSettings.billLogos || {},
+            billLogoSettings: savedSettings.billLogoSettings || {},
           });
         }
       } catch (error) {
@@ -135,7 +163,36 @@ const PrinterSettings = () => {
 
   const saveSettings = async () => {
     try {
-      await window.electron.ipcRenderer.invoke("savePrinterSettings", settings);
+      const currentSettings =
+        (await window.electron.ipcRenderer.invoke("getPrinterSettings")) || {};
+
+      const mergedSettings = {
+        ...currentSettings,
+        ...settings,
+        barcodeSettings: {
+          ...(currentSettings.barcodeSettings || {}),
+          ...(settings.barcodeSettings || {}),
+        },
+        billLogos: {
+          ...(currentSettings.billLogos || {}),
+          ...(settings.billLogos || {}),
+        },
+        billLogoSettings: {
+          ...(currentSettings.billLogoSettings || {}),
+          ...(settings.billLogoSettings || {}),
+        },
+      };
+
+      await window.electron.ipcRenderer.invoke(
+        "savePrinterSettings",
+        mergedSettings,
+      );
+      setSettings((prev) => ({
+        ...prev,
+        billLogos: mergedSettings.billLogos,
+        billLogoSettings: mergedSettings.billLogoSettings,
+      }));
+      notifyBillLogoAppearanceUpdated(storeId);
       // Show success message
       setMsg({ type: "success", text: "تم حفظ الإعدادات بنجاح" });
     } catch (error) {
@@ -161,6 +218,90 @@ const PrinterSettings = () => {
       },
     }));
   };
+
+  const handleLogoUpload = async () => {
+    try {
+      setUploadingLogo(true);
+      const selection =
+        await window.electron.ipcRenderer.invoke("selectBillLogo");
+
+      if (selection?.cancelled || !selection?.sourcePath) {
+        return;
+      }
+
+      const savedLogo = await window.electron.ipcRenderer.invoke(
+        "saveBillLogo",
+        {
+          storeId,
+          sourcePath: selection.sourcePath,
+        },
+      );
+
+      setSettings((prev) => ({
+        ...prev,
+        billLogos: {
+          ...(prev.billLogos || {}),
+          [String(storeId)]: savedLogo,
+        },
+      }));
+      await reloadLogo();
+      notifyBillLogoUpdated(storeId);
+      setMsg({
+        type: "success",
+        text: "تم رفع شعار الفاتورة لهذا المخزن على هذا الجهاز",
+      });
+    } catch (error) {
+      console.error("Failed to upload bill logo:", error);
+      setMsg({ type: "error", text: "فشل رفع شعار الفاتورة" });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    try {
+      setRemovingLogo(true);
+      await window.electron.ipcRenderer.invoke("removeBillLogo", storeId);
+      setSettings((prev) => {
+        const nextBillLogos = { ...(prev.billLogos || {}) };
+        delete nextBillLogos[String(storeId)];
+
+        return {
+          ...prev,
+          billLogos: nextBillLogos,
+        };
+      });
+      await reloadLogo();
+      notifyBillLogoUpdated(storeId);
+      setMsg({
+        type: "success",
+        text: "تم حذف شعار الفاتورة لهذا المخزن على هذا الجهاز",
+      });
+    } catch (error) {
+      console.error("Failed to remove bill logo:", error);
+      setMsg({ type: "error", text: "فشل حذف شعار الفاتورة" });
+    } finally {
+      setRemovingLogo(false);
+    }
+  };
+
+  const handleBillLogoAppearanceChange = <K extends keyof BillLogoAppearance>(
+    field: K,
+    value: BillLogoAppearance[K],
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      billLogoSettings: {
+        ...(prev.billLogoSettings || {}),
+        [String(storeId)]: {
+          ...DEFAULT_BILL_LOGO_APPEARANCE,
+          ...(prev.billLogoSettings?.[String(storeId)] || {}),
+          [field]: value,
+        },
+      },
+    }));
+  };
+
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       <AlertMessage message={msg} setMessage={setMsg} />
@@ -275,6 +416,179 @@ const PrinterSettings = () => {
                     },
                   }}
                 />
+              </Grid2>
+
+              <Grid2 size={12}>
+                <Divider sx={{ my: 1.5 }} />
+              </Grid2>
+
+              <Grid2 size={12}>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2.5,
+                    borderRadius: 3,
+                    background:
+                      "linear-gradient(180deg, rgba(25, 118, 210, 0.04) 0%, rgba(25, 118, 210, 0.01) 100%)",
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: { xs: "flex-start", md: "center" },
+                      justifyContent: "space-between",
+                      gap: 2,
+                      flexDirection: { xs: "column", md: "row" },
+                      mb: 2,
+                    }}
+                  >
+                    <Box>
+                      <Typography
+                        variant="subtitle1"
+                        sx={{
+                          fontWeight: 700,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          mb: 0.5,
+                        }}
+                      >
+                        <ImageOutlinedIcon color="primary" />
+                        شعار أعلى الفاتورة
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        يطبّق هذا الشعار على المخزن الحالي فقط داخل هذا الجهاز
+                        فقط.
+                      </Typography>
+                    </Box>
+
+                    <Chip
+                      color="primary"
+                      variant="outlined"
+                      label={`المخزن الحالي: ${store.name || storeId} (#${storeId})`}
+                    />
+                  </Box>
+
+                  <Box
+                    sx={{
+                      minHeight: 140,
+                      borderRadius: 3,
+                      border: "1px dashed",
+                      borderColor: logo ? "success.light" : "divider",
+                      bgcolor: logo
+                        ? "rgba(76, 175, 80, 0.05)"
+                        : "background.paper",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      overflow: "hidden",
+                      p: 2,
+                    }}
+                  >
+                    {logo?.dataUrl ? (
+                      <Box sx={{ textAlign: "center", width: "100%" }}>
+                        <Box
+                          component="img"
+                          src={logo.dataUrl}
+                          alt="Bill logo preview"
+                          sx={{
+                            maxHeight: billLogoAppearance.maxHeight,
+                            maxWidth: "100%",
+                            objectFit: "contain",
+                            mb: 1,
+                          }}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          سيتم وضع الشعار بشكل مركزي أعلى الفاتورة المطبوعة
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Box sx={{ textAlign: "center" }}>
+                        <ImageOutlinedIcon
+                          sx={{
+                            fontSize: "2rem",
+                            color: "text.disabled",
+                            mb: 1,
+                          }}
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                          لا يوجد شعار محفوظ لهذا المخزن على هذا الجهاز
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1.5}
+                    sx={{ mt: 2 }}
+                  >
+                    <LoadingButton
+                      variant="contained"
+                      startIcon={<UploadFileIcon />}
+                      loading={uploadingLogo}
+                      onClick={handleLogoUpload}
+                    >
+                      رفع شعار
+                    </LoadingButton>
+                    <LoadingButton
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteOutlineIcon />}
+                      loading={removingLogo}
+                      onClick={handleLogoRemove}
+                      disabled={!logo}
+                    >
+                      حذف الشعار
+                    </LoadingButton>
+                  </Stack>
+
+                  <Grid2 container spacing={2} sx={{ mt: 0.5 }}>
+                    <Grid2 size={{ xs: 12, md: 6 }}>
+                      <Typography gutterBottom sx={{ fontWeight: 600 }}>
+                        ارتفاع الشعار
+                      </Typography>
+                      <Slider
+                        value={billLogoAppearance.maxHeight}
+                        min={40}
+                        max={180}
+                        step={5}
+                        valueLabelDisplay="auto"
+                        onChange={(_, value) =>
+                          handleBillLogoAppearanceChange(
+                            "maxHeight",
+                            value as number,
+                          )
+                        }
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        يتحكم في الحجم الأقصى للشعار أعلى الفاتورة
+                      </Typography>
+                    </Grid2>
+
+                    <Grid2 size={{ xs: 12, md: 6 }}>
+                      <Typography gutterBottom sx={{ fontWeight: 600 }}>
+                        المسافة أسفل الشعار
+                      </Typography>
+                      <Slider
+                        value={billLogoAppearance.spacingBottom}
+                        min={0}
+                        max={24}
+                        step={1}
+                        valueLabelDisplay="auto"
+                        onChange={(_, value) =>
+                          handleBillLogoAppearanceChange(
+                            "spacingBottom",
+                            value as number,
+                          )
+                        }
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        تتحكم في الفراغ بين الشعار واسم المتجر
+                      </Typography>
+                    </Grid2>
+                  </Grid2>
+                </Paper>
               </Grid2>
             </Grid2>
           </Paper>
@@ -469,7 +783,8 @@ const PrinterSettings = () => {
                       </Grid2>
                       <Grid2 size={6}>
                         <Typography variant="body2" gutterBottom>
-                          عرض الباركود: {settings.barcodeSettings.barcodeWidthPercent}%
+                          عرض الباركود:{" "}
+                          {settings.barcodeSettings.barcodeWidthPercent}%
                         </Typography>
                         <Slider
                           value={settings.barcodeSettings.barcodeWidthPercent}
@@ -486,7 +801,8 @@ const PrinterSettings = () => {
                       </Grid2>
                       <Grid2 size={6}>
                         <Typography variant="body2" gutterBottom>
-                          ارتفاع الباركود: {settings.barcodeSettings.barcodeHeightPercent}%
+                          ارتفاع الباركود:{" "}
+                          {settings.barcodeSettings.barcodeHeightPercent}%
                         </Typography>
                         <Slider
                           value={settings.barcodeSettings.barcodeHeightPercent}
@@ -508,7 +824,10 @@ const PrinterSettings = () => {
                         <Slider
                           value={settings.barcodeSettings.barWidth}
                           onChange={(_e, value) =>
-                            handleBarcodeSettingChange("barWidth", value as number)
+                            handleBarcodeSettingChange(
+                              "barWidth",
+                              value as number,
+                            )
                           }
                           min={1}
                           max={4}
@@ -566,7 +885,9 @@ const PrinterSettings = () => {
                         <FormControlLabel
                           control={
                             <Switch
-                              checked={settings.barcodeSettings.showBarcodeNumber}
+                              checked={
+                                settings.barcodeSettings.showBarcodeNumber
+                              }
                               onChange={(e) =>
                                 handleBarcodeSettingChange(
                                   "showBarcodeNumber",
@@ -604,7 +925,10 @@ const PrinterSettings = () => {
                             size="small"
                             value={settings.barcodeSettings.storeName}
                             onChange={(e) =>
-                              handleBarcodeSettingChange("storeName", e.target.value)
+                              handleBarcodeSettingChange(
+                                "storeName",
+                                e.target.value,
+                              )
                             }
                             placeholder="أدخل اسم المتجر"
                           />

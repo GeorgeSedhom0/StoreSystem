@@ -998,6 +998,7 @@ def get_bills(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     party_id: Optional[int] = None,
+    bill_id: Optional[int] = None,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -1007,20 +1008,28 @@ def get_bills(
         List[Dict]: A list of dictionaries containing the bills
 
     """
-    extra_condition = ""
-    params: tuple = (
-        start_date if start_date else "1970-01-01",
-        end_date if end_date else datetime.now().isoformat(),
-        store_id,
-    )
-    if party_id:
-        extra_condition = "AND party_id = %s"
-        params = (
-            start_date if start_date else "1970-01-01",
-            end_date if end_date else datetime.now().isoformat(),
-            party_id,
-            store_id,
+    extra_conditions: list[str] = []
+    params: list[Any] = []
+
+    if bill_id is not None:
+        extra_conditions.append("AND bills.id = %s")
+        params.extend([bill_id, store_id])
+    else:
+        extra_conditions.append("AND bills.time >= %s")
+        extra_conditions.append("AND bills.time <= %s")
+        params.extend(
+            [
+                start_date if start_date else "1970-01-01",
+                end_date if end_date else datetime.now().isoformat(),
+            ]
         )
+
+        if party_id:
+            extra_conditions.append("AND bills.party_id = %s")
+            params.append(party_id)
+
+        params.append(store_id)
+
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
@@ -1043,18 +1052,19 @@ def get_bills(
                         )
                     ) AS products
                 FROM bills
-                JOIN products_flow ON bills.id = products_flow.bill_id
+                JOIN products_flow
+                    ON bills.id = products_flow.bill_id
+                    AND bills.store_id = products_flow.store_id
                 JOIN products ON products_flow.product_id = products.id
                 LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
-                WHERE bills.time >= %s
-                AND bills.time <= %s
-                {extra_condition}
+                WHERE 1 = 1
+                {" ".join(extra_conditions)}
                 AND bills.store_id = %s
                 GROUP BY bills.id, bills.time, bills.discount,
                     bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name
                 ORDER BY bills.time DESC
                     """,
-                params,
+                tuple(params),
             )
             bills = cur.fetchall()
             return bills

@@ -1,9 +1,166 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  OpenDialogOptions,
+} from "electron";
 import { join } from "path";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  unlinkSync,
+} from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
 import { settingsManager } from "./settings_manager";
 import { ServiceManager } from "./service-manager";
+
+interface StoredBillLogo {
+  path: string;
+  fileName: string;
+  updatedAt: string;
+}
+
+interface BillLogoPayload extends StoredBillLogo {
+  dataUrl: string;
+}
+
+const getMimeType = (filePath: string) => {
+  const extension = filePath.split(".").pop()?.toLowerCase();
+
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    case "bmp":
+      return "image/bmp";
+    default:
+      return "image/png";
+  }
+};
+
+const BILL_LOGO_FILE_PREFIX = "logo";
+
+const getBillLogoDirectory = (storeId: number) => {
+  const billLogosDir = join(
+    settingsManager.getSettingsDirectory(),
+    "bill-logos",
+  );
+  const storeLogoDir = join(billLogosDir, `store-${storeId}`);
+
+  if (!existsSync(storeLogoDir)) {
+    mkdirSync(storeLogoDir, { recursive: true });
+  }
+
+  return storeLogoDir;
+};
+
+const getPrinterSettingsSafe = () =>
+  settingsManager.readPrinterSettings() || {};
+
+const findExistingBillLogoFile = (storeId: number): StoredBillLogo | null => {
+  const logoDirectory = getBillLogoDirectory(storeId);
+
+  if (!existsSync(logoDirectory)) {
+    return null;
+  }
+
+  const logoFile = readdirSync(logoDirectory).find((fileName) =>
+    fileName.toLowerCase().startsWith(`${BILL_LOGO_FILE_PREFIX}.`),
+  );
+
+  if (!logoFile) {
+    return null;
+  }
+
+  const logoPath = join(logoDirectory, logoFile);
+  return {
+    path: logoPath,
+    fileName: logoFile,
+    updatedAt: new Date().toISOString(),
+  };
+};
+
+const buildBillLogoPayload = (
+  logo: StoredBillLogo | null,
+): BillLogoPayload | null => {
+  if (!logo || !logo.path || !existsSync(logo.path)) {
+    return null;
+  }
+
+  return {
+    ...logo,
+    dataUrl: `data:${getMimeType(logo.path)};base64,${readFileSync(logo.path).toString("base64")}`,
+  };
+};
+
+const getStoredBillLogo = (storeId: number): StoredBillLogo | null => {
+  const printerSettings = getPrinterSettingsSafe();
+  const billLogos = printerSettings.billLogos || {};
+  const logo = billLogos[String(storeId)] as StoredBillLogo | undefined;
+
+  if (!logo) {
+    const discoveredLogo = findExistingBillLogoFile(storeId);
+    if (discoveredLogo) {
+      saveStoredBillLogo(storeId, discoveredLogo);
+      return discoveredLogo;
+    }
+
+    return null;
+  }
+
+  if (!existsSync(logo.path)) {
+    const discoveredLogo = findExistingBillLogoFile(storeId);
+    if (discoveredLogo) {
+      saveStoredBillLogo(storeId, discoveredLogo);
+      return discoveredLogo;
+    }
+
+    delete billLogos[String(storeId)];
+    printerSettings.billLogos = billLogos;
+    settingsManager.writePrinterSettings(printerSettings);
+    return null;
+  }
+
+  return logo;
+};
+
+const saveStoredBillLogo = (storeId: number, logo: StoredBillLogo | null) => {
+  const printerSettings = getPrinterSettingsSafe();
+  const billLogos = printerSettings.billLogos || {};
+
+  if (logo) {
+    billLogos[String(storeId)] = logo;
+  } else {
+    delete billLogos[String(storeId)];
+  }
+
+  printerSettings.billLogos = billLogos;
+  settingsManager.writePrinterSettings(printerSettings);
+};
+
+const removeBillLogoFiles = (storeId: number) => {
+  const existingLogo = getStoredBillLogo(storeId);
+  if (existingLogo?.path && existsSync(existingLogo.path)) {
+    unlinkSync(existingLogo.path);
+  }
+
+  const logoDirectory = getBillLogoDirectory(storeId);
+  for (const fileName of readdirSync(logoDirectory)) {
+    rmSync(join(logoDirectory, fileName), { force: true, recursive: true });
+  }
+
+  saveStoredBillLogo(storeId, null);
+};
 
 // Service manager for standalone mode (manages PostgreSQL + Backend)
 let serviceManager: ServiceManager | null = null;
@@ -266,7 +423,23 @@ function getPrinters() {
 }
 
 function savePrinterSettings(printerSettings) {
-  settingsManager.writePrinterSettings(printerSettings);
+  const currentSettings = settingsManager.readPrinterSettings() || {};
+  settingsManager.writePrinterSettings({
+    ...currentSettings,
+    ...printerSettings,
+    barcodeSettings: {
+      ...(currentSettings.barcodeSettings || {}),
+      ...(printerSettings?.barcodeSettings || {}),
+    },
+    billLogos: {
+      ...(currentSettings.billLogos || {}),
+      ...(printerSettings?.billLogos || {}),
+    },
+    billLogoSettings: {
+      ...(currentSettings.billLogoSettings || {}),
+      ...(printerSettings?.billLogoSettings || {}),
+    },
+  });
 }
 
 function getPrinterSettings() {
@@ -300,6 +473,25 @@ const createPrintWindow = async (html: string, config: any) => {
   await win.webContents.executeJavaScript(
     `document.body.innerHTML = \`${html}\`;`,
   );
+  await win.webContents.executeJavaScript(`
+    Promise.all(
+      Array.from(document.images).map((image) => {
+        if (image.complete) {
+          return Promise.resolve();
+        }
+
+        return new Promise((resolve) => {
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', resolve, { once: true });
+        });
+      })
+    ).then(async () => {
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+      return true;
+    })
+  `);
 
   const height =
     config.height ||
@@ -358,6 +550,74 @@ ipcMain.handle("getPrinterSettings", () => {
   return getPrinterSettings();
 });
 
+ipcMain.handle("selectBillLogo", async () => {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  const dialogOptions: OpenDialogOptions = {
+    title: "اختر شعار الفاتورة",
+    properties: ["openFile"],
+    filters: [
+      {
+        name: "Images",
+        extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
+      },
+    ],
+  };
+  const result = focusedWindow
+    ? await dialog.showOpenDialog(focusedWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions);
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { cancelled: true };
+  }
+
+  return {
+    cancelled: false,
+    sourcePath: result.filePaths[0],
+  };
+});
+
+ipcMain.handle("saveBillLogo", async (_event, { storeId, sourcePath }) => {
+  if (typeof storeId !== "number" || !sourcePath || !existsSync(sourcePath)) {
+    throw new Error("Invalid logo upload payload");
+  }
+
+  const extension = sourcePath.split(".").pop()?.toLowerCase() || "png";
+  const logoDirectory = getBillLogoDirectory(storeId);
+  removeBillLogoFiles(storeId);
+
+  const targetPath = join(
+    logoDirectory,
+    `${BILL_LOGO_FILE_PREFIX}.${extension}`,
+  );
+  copyFileSync(sourcePath, targetPath);
+
+  const storedLogo: StoredBillLogo = {
+    path: targetPath,
+    fileName: `logo.${extension}`,
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveStoredBillLogo(storeId, storedLogo);
+  return buildBillLogoPayload(storedLogo);
+});
+
+ipcMain.handle("getBillLogo", (_event, storeId) => {
+  if (typeof storeId !== "number") {
+    return null;
+  }
+
+  return buildBillLogoPayload(getStoredBillLogo(storeId));
+});
+
+ipcMain.handle("removeBillLogo", (_event, storeId) => {
+  if (typeof storeId !== "number") {
+    throw new Error("Invalid store id");
+  }
+
+  removeBillLogoFiles(storeId);
+  return { success: true };
+});
+
 ipcMain.handle("set", (_event, key, value) => {
   settingsManager.setSetting(key, value);
 });
@@ -402,7 +662,10 @@ ipcMain.handle("get-active-window-ids", () => {
 // Get current service status (for splash screen)
 ipcMain.handle("get-service-status", () => {
   if (!serviceManager) return { status: "ready", message: "" };
-  return { status: serviceManager.status, message: serviceManager.statusMessage };
+  return {
+    status: serviceManager.status,
+    message: serviceManager.statusMessage,
+  };
 });
 
 // Set app mode (called from first-run wizard)

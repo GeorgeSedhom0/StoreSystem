@@ -4,6 +4,7 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { is } from "@electron-toolkit/utils";
 
 export class SettingsManager {
+  private settingsDir: string;
   private settingsPath: string;
   private printerSettingsPath: string;
 
@@ -18,6 +19,7 @@ export class SettingsManager {
     }
 
     const settingsDir = join(userDataPath, "OpenStore", "settings");
+    this.settingsDir = settingsDir;
 
     // Ensure settings directory exists
     if (!existsSync(settingsDir)) {
@@ -71,6 +73,10 @@ export class SettingsManager {
 
   writePrinterSettings(settings: any): void {
     writeFileSync(this.printerSettingsPath, JSON.stringify(settings, null, 2));
+  }
+
+  getSettingsDirectory(): string {
+    return this.settingsDir;
   }
 }
 

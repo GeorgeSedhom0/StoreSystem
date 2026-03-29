@@ -2,6 +2,10 @@ import { Button, DialogActions } from "@mui/material";
 import { Bill } from "./types";
 import { forwardRef, useContext } from "react";
 import { StoreContext } from "../../StoreDataProvider";
+import {
+  useBillLogo,
+  useBillLogoAppearance,
+} from "../Shared/hooks/useBillLogo";
 
 const BillView = forwardRef(
   (
@@ -17,7 +21,9 @@ const BillView = forwardRef(
     ref: any,
   ) => {
     if (!bill) return null;
-    const { store } = useContext(StoreContext);
+    const { store, storeId } = useContext(StoreContext);
+    const { logo } = useBillLogo(storeId);
+    const { appearance } = useBillLogoAppearance(storeId);
 
     return (
       <div
@@ -54,12 +60,34 @@ const BillView = forwardRef(
           }}
           id={`bill-${bill.id}`}
         >
+          {logo?.dataUrl && (
+            <div
+              style={{
+                width: "100%",
+                display: "flex",
+                justifyContent: "center",
+                padding: `0.75rem 0 ${appearance.spacingBottom}px`,
+              }}
+            >
+              <img
+                src={logo.dataUrl}
+                alt="Store logo"
+                style={{
+                  display: "block",
+                  maxWidth: "80%",
+                  maxHeight: `${appearance.maxHeight}px`,
+                  objectFit: "contain",
+                }}
+              />
+            </div>
+          )}
+
           <div style={{ width: "100%" }}>
             <h2
               style={{
                 textAlign: "center",
                 fontSize: "1.5rem",
-                margin: "0.15rem 0",
+                margin: logo?.dataUrl ? "0.05rem 0 0.15rem" : "0.15rem 0",
                 wordBreak: "break-word",
                 whiteSpace: "normal",
               }}
