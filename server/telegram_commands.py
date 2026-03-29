@@ -526,9 +526,9 @@ def _get_shift_summary(
         SELECT
         COALESCE(SUM(CASE WHEN b.type = 'sell' AND (b.party_id IS NULL OR ap.type != 'store') THEN b.total ELSE 0 END), 0) AS sell_total,
         COALESCE(SUM(CASE WHEN b.type = 'sell' AND b.party_id IS NOT NULL AND ap.type = 'store' THEN b.total ELSE 0 END), 0) AS sell_total_internal,
-            COALESCE(SUM(CASE WHEN type = 'return' THEN ABS(total) ELSE 0 END), 0) AS return_total,
-            COALESCE(SUM(CASE WHEN type = 'buy' THEN ABS(total) ELSE 0 END), 0) AS buy_total,
-            COALESCE(SUM(CASE WHEN type = 'installment' THEN ABS(total) ELSE 0 END), 0) AS installment_total,
+            COALESCE(SUM(CASE WHEN b.type = 'return' THEN ABS(b.total) ELSE 0 END), 0) AS return_total,
+            COALESCE(SUM(CASE WHEN b.type = 'buy' THEN ABS(b.total) ELSE 0 END), 0) AS buy_total,
+            COALESCE(SUM(CASE WHEN b.type = 'installment' THEN ABS(b.total) ELSE 0 END), 0) AS installment_total,
         COUNT(*) FILTER (WHERE b.type = 'sell' AND (b.party_id IS NULL OR ap.type != 'store')) AS bills_count,
         COUNT(*) FILTER (WHERE b.type = 'sell' AND b.party_id IS NOT NULL AND ap.type = 'store') AS internal_sell_bills_count
     FROM bills b
@@ -775,7 +775,7 @@ def _format_currency(amount: float) -> str:
     return f"{amount:.2f} ج.م"
 
 
-def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
+def _handle_command_impl(chat_id: str, command: str, args: Dict[str, Any]) -> str:
     if command == "help":
         return HELP_MESSAGE
 
@@ -1057,6 +1057,20 @@ def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
     return "❓ الأمر غير معروف.\nاكتب: مساعدة\nلرؤية كل الأوامر المتاحة."
 
 
+def _handle_command(chat_id: str, command: str, args: Dict[str, Any]) -> str:
+    try:
+        return _handle_command_impl(chat_id, command, args)
+    except Exception as e:
+        logger.exception(
+            "Unhandled error while handling Telegram command '%s' for chat %s with args %s: %s",
+            command,
+            chat_id,
+            args,
+            e,
+        )
+        return "⚠️ حدث خطأ أثناء تنفيذ الأمر. حاول مرة أخرى أو اكتب: مساعدة"
+
+
 def _process_single_update(update: Dict[str, Any]) -> None:
     message = update.get("message") or {}
     text = message.get("text")
@@ -1066,9 +1080,27 @@ def _process_single_update(update: Dict[str, Any]) -> None:
     if not text or chat_id is None:
         return
 
-    command, args = _parse_command(str(text))
-    response = _handle_command(str(chat_id), command, args)
-    send_telegram_message(str(chat_id), response)
+    try:
+        command, args = _parse_command(str(text))
+        response = _handle_command(str(chat_id), command, args)
+    except Exception as e:
+        logger.exception(
+            "Failed to process Telegram update %s from chat %s: %s",
+            update.get("update_id"),
+            chat_id,
+            e,
+        )
+        response = "⚠️ حدث خطأ أثناء تنفيذ الأمر. حاول مرة أخرى أو اكتب: مساعدة"
+
+    try:
+        send_telegram_message(str(chat_id), response)
+    except Exception as e:
+        logger.exception(
+            "Failed to send Telegram response for update %s to chat %s: %s",
+            update.get("update_id"),
+            chat_id,
+            e,
+        )
 
 
 async def telegram_command_worker_loop() -> None:
@@ -1092,10 +1124,19 @@ async def telegram_command_worker_loop() -> None:
                     if update_id <= 0:
                         continue
 
-                    await asyncio.to_thread(_process_single_update, update)
-                    offset = update_id + 1
-                    _worker_health["last_update_id"] = update_id
-                    await asyncio.to_thread(_save_telegram_updates_offset, offset)
+                    try:
+                        await asyncio.to_thread(_process_single_update, update)
+                    except Exception as e:
+                        # Never let one bad update poison the polling loop.
+                        _worker_health["last_error"] = str(e)
+                        logger.exception(
+                            "Error processing Telegram update %s. Skipping it.",
+                            update_id,
+                        )
+                    finally:
+                        offset = update_id + 1
+                        _worker_health["last_update_id"] = update_id
+                        await asyncio.to_thread(_save_telegram_updates_offset, offset)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
