@@ -56,6 +56,18 @@ export interface Bill {
   type: string;
   note?: string | null;
   party_name: string | null;
+  installment_details?: {
+    id: number;
+    paid: number;
+    installments_count: number;
+    installment_interval: number;
+    total_paid: number;
+    flow: {
+      id: number;
+      amount: number;
+      time: string;
+    }[];
+  } | null;
   products: {
     id: number;
     name: string;

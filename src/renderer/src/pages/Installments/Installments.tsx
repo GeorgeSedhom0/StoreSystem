@@ -47,6 +47,7 @@ import {
   TrendingUp,
   TrendingDown,
   AccountBalance,
+  PictureAsPdf,
 } from "@mui/icons-material";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
@@ -56,6 +57,10 @@ import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import PayInstallment from "./Components/PayInstallment";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import FormatedNumber from "../Shared/FormatedNumber";
+import {
+  buildInstallmentsReportHtml,
+  exportPdfDocument,
+} from "../utils/a4Reports";
 
 export interface Installment {
   id: number;
@@ -116,7 +121,7 @@ const Installments = () => {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [showFilters, setShowFilters] = useState(false);
 
-  const { storeId } = useContext(StoreContext);
+  const { storeId, store } = useContext(StoreContext);
 
   // Helper functions for calculations - moved before usage
   const getTotalPaid = (installment: Installment) => {
@@ -301,6 +306,51 @@ const Installments = () => {
     }
   };
 
+  const handleExportInstallmentsPdf = async () => {
+    try {
+      const html = buildInstallmentsReportHtml({
+        store,
+        installments: data,
+        searchTerm,
+        statusFilter,
+        showEnded,
+        totalBills: summaryStats.totalBills,
+        totalPaid: summaryStats.totalPaid,
+        totalRemaining: summaryStats.totalRemaining,
+        overdueCount: summaryStats.overdueCount,
+        completedCount: summaryStats.completedCount,
+        getStatus: getInstallmentStatus,
+        getTotalPaid,
+        getTotalRemaining,
+        getPaymentProgress,
+      });
+
+      const result = await exportPdfDocument({
+        fileName: `installments-${new Date().toISOString().slice(0, 10)}.pdf`,
+        html,
+      });
+
+      if (result?.cancelled) {
+        return;
+      }
+
+      if (!result?.success) {
+        throw new Error(result?.error || "Unknown export error");
+      }
+
+      setMsg({
+        type: "success",
+        text: "تم تصدير تقرير الأقساط PDF بنجاح",
+      });
+    } catch (error) {
+      console.error("Installments PDF export failed:", error);
+      setMsg({
+        type: "error",
+        text: "فشل تصدير تقرير الأقساط PDF",
+      });
+    }
+  };
+
   return (
     <>
       <Dialog
@@ -374,6 +424,16 @@ const Installments = () => {
                   <Typography variant="body1" color="text.secondary">
                     متابعة وإدارة أقساط العملاء والمدفوعات
                   </Typography>
+                </Box>
+                <Box sx={{ ml: "auto" }}>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={<PictureAsPdf />}
+                    onClick={handleExportInstallmentsPdf}
+                  >
+                    تصدير PDF A4
+                  </Button>
                 </Box>
               </Stack>
 

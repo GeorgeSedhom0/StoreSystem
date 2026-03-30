@@ -7,6 +7,18 @@ import {
   useBillLogoAppearance,
 } from "../Shared/hooks/useBillLogo";
 
+const billTypeLabels: Record<string, string> = {
+  sell: "فاتورة مبيعات",
+  buy: "فاتورة شراء",
+  return: "فاتورة مرتجع",
+  BNPL: "فاتورة بيع اجل",
+  reserve: "فاتورة حجز",
+  installment: "فاتورة تقسيط",
+  "buy-return": "فاتورة مرتجع شراء",
+};
+
+const specialBillTypes = new Set(["installment", "BNPL", "reserve"]);
+
 const BillView = forwardRef(
   (
     {
@@ -20,10 +32,463 @@ const BillView = forwardRef(
     },
     ref: any,
   ) => {
-    if (!bill) return null;
     const { store, storeId } = useContext(StoreContext);
     const { logo } = useBillLogo(storeId);
     const { appearance } = useBillLogoAppearance(storeId);
+
+    if (!bill) return null;
+
+    const productsTotal = bill.products.reduce(
+      (acc, product) => acc + Math.abs(product.amount) * product.price,
+      0,
+    );
+    const grossTotal = productsTotal;
+    const netTotal = Math.max(grossTotal - Math.abs(bill.discount), 0);
+    const installmentDetails = bill.installment_details;
+    const installmentTotalPaid = installmentDetails?.total_paid || 0;
+    const installmentRemaining = Math.max(netTotal - installmentTotalPaid, 0);
+    const shouldHideReturnMessage = specialBillTypes.has(bill.type);
+
+    const renderDefaultTotals = () => (
+      <div style={{ width: "100%" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+          }}
+        >
+          <tbody>
+            <tr
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.20)",
+                color: "black",
+              }}
+            >
+              <td
+                style={{
+                  fontSize: "1.5em",
+                  textAlign: "center",
+                  padding: "12px",
+                }}
+              >
+                الاجمالى
+              </td>
+              <td
+                style={{
+                  fontSize: "1.5em",
+                  textAlign: "center",
+                  padding: "12px",
+                }}
+              >
+                {Math.abs(bill.total) + Math.abs(bill.discount)}
+              </td>
+            </tr>
+            <tr>
+              <td
+                style={{
+                  fontSize: "1.5em",
+                  textAlign: "center",
+                  padding: "12px",
+                }}
+              >
+                الخصم
+              </td>
+              <td
+                style={{
+                  fontSize: "1.5em",
+                  textAlign: "center",
+                  padding: "12px",
+                }}
+              >
+                {bill.discount}
+              </td>
+            </tr>
+            <tr
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.20)",
+                color: "black",
+              }}
+            >
+              <td
+                style={{
+                  fontSize: "1.5em",
+                  textAlign: "center",
+                  padding: "12px",
+                }}
+              >
+                الصافى
+              </td>
+              <td
+                style={{
+                  fontSize: "1.5em",
+                  textAlign: "center",
+                  padding: "12px",
+                }}
+              >
+                {Math.abs(bill.total)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    );
+
+    const renderBnplSection = () => (
+      <div style={{ width: "100%" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+          }}
+        >
+          <tbody>
+            <tr
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.20)",
+                color: "black",
+              }}
+            >
+              <td
+                style={{
+                  fontSize: "1.35em",
+                  textAlign: "center",
+                  padding: "10px",
+                }}
+              >
+                إجمالي المنتجات
+              </td>
+              <td
+                style={{
+                  fontSize: "1.35em",
+                  textAlign: "center",
+                  padding: "10px",
+                }}
+              >
+                {grossTotal}
+              </td>
+            </tr>
+            <tr>
+              <td
+                style={{
+                  fontSize: "1.35em",
+                  textAlign: "center",
+                  padding: "10px",
+                }}
+              >
+                الخصم
+              </td>
+              <td
+                style={{
+                  fontSize: "1.35em",
+                  textAlign: "center",
+                  padding: "10px",
+                }}
+              >
+                {bill.discount}
+              </td>
+            </tr>
+            <tr
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.20)",
+                color: "black",
+              }}
+            >
+              <td
+                style={{
+                  fontSize: "1.35em",
+                  textAlign: "center",
+                  padding: "10px",
+                }}
+              >
+                المطلوب سداده
+              </td>
+              <td
+                style={{
+                  fontSize: "1.35em",
+                  textAlign: "center",
+                  padding: "10px",
+                }}
+              >
+                {netTotal}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style={{ width: "100%" }}>
+          <h5
+            style={{
+              textAlign: "center",
+              fontSize: "1rem",
+              margin: "0.75rem 0 0.15rem",
+            }}
+          >
+            هذه الفاتورة بيع اجل ويتم سداد المبلغ بالكامل دفعة واحدة عند
+            التحصيل.
+          </h5>
+        </div>
+      </div>
+    );
+
+    const renderReserveSection = () => (
+      <div style={{ width: "100%" }}>
+        {renderDefaultTotals()}
+        <div style={{ width: "100%" }}>
+          <h5
+            style={{
+              textAlign: "center",
+              fontSize: "1rem",
+              margin: "0.75rem 0 0.15rem",
+            }}
+          >
+            هذه الفاتورة حجز والمنتجات محفوظة للعميل ولم يتم تسليمها بعد. يرجى
+            الاحتفاظ بها عند الاستلام.
+          </h5>
+        </div>
+      </div>
+    );
+
+    const renderInstallmentSection = () => (
+      <div style={{ width: "100%" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+          }}
+        >
+          <tbody>
+            <tr
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.20)",
+                color: "black",
+              }}
+            >
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                إجمالي الفاتورة
+              </td>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                {netTotal}
+              </td>
+            </tr>
+            <tr>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                المقدم
+              </td>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                {installmentDetails?.paid || 0}
+              </td>
+            </tr>
+            <tr
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.20)",
+                color: "black",
+              }}
+            >
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                إجمالي المسدد
+              </td>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                {installmentTotalPaid}
+              </td>
+            </tr>
+            <tr>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                المتبقي
+              </td>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                {installmentRemaining}
+              </td>
+            </tr>
+            <tr
+              style={{
+                backgroundColor: "rgba(0, 0, 0, 0.20)",
+                color: "black",
+              }}
+            >
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                عدد الأقساط
+              </td>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                {installmentDetails?.installments_count || "-"}
+              </td>
+            </tr>
+            <tr>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                الفاصل بين الأقساط
+              </td>
+              <td
+                style={{
+                  fontSize: "1.2em",
+                  textAlign: "center",
+                  padding: "9px",
+                }}
+              >
+                {installmentDetails?.installment_interval
+                  ? `${installmentDetails.installment_interval} يوم`
+                  : "-"}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style={{ width: "100%", marginTop: "0.6rem" }}>
+          <h6
+            style={{
+              textAlign: "center",
+              fontSize: "1rem",
+              margin: "0.15rem 0 0.5rem",
+            }}
+          >
+            سجل الدفعات
+          </h6>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              tableLayout: "fixed",
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  backgroundColor: "rgba(0, 0, 0, 1)",
+                  color: "white",
+                }}
+              >
+                <th
+                  style={{
+                    fontSize: "1.1em",
+                    textAlign: "center",
+                    padding: "4px",
+                    width: "60%",
+                  }}
+                >
+                  التاريخ
+                </th>
+                <th
+                  style={{
+                    fontSize: "1.1em",
+                    textAlign: "center",
+                    padding: "4px",
+                    width: "40%",
+                  }}
+                >
+                  المبلغ
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {installmentDetails?.flow?.length ? (
+                installmentDetails.flow.map((payment) => (
+                  <tr key={payment.id}>
+                    <td
+                      style={{
+                        fontSize: "1.1em",
+                        textAlign: "center",
+                        padding: "4px",
+                      }}
+                    >
+                      {new Date(payment.time).toLocaleString("ar-EG")}
+                    </td>
+                    <td
+                      style={{
+                        fontSize: "1.1em",
+                        textAlign: "center",
+                        padding: "4px",
+                      }}
+                    >
+                      {payment.amount}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={2}
+                    style={{
+                      fontSize: "1.1em",
+                      textAlign: "center",
+                      padding: "6px",
+                    }}
+                  >
+                    لا توجد دفعات مسجلة بعد
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
 
     return (
       <div
@@ -128,16 +593,7 @@ const BillView = forwardRef(
                 margin: "0.15rem 0",
               }}
             >
-              {
-                {
-                  sell: "فاتورة مبيعات",
-                  buy: "فاتورة شراء",
-                  return: "فاتورة مرتجع",
-                  BNPL: "فاتورة بيع اجل",
-                  reserve: "فاتورة حجز",
-                  installment: "فاتورة تقسيط",
-                }[bill.type]
-              }
+              {billTypeLabels[bill.type] || bill.type}
             </h6>
           </div>
 
@@ -309,110 +765,27 @@ const BillView = forwardRef(
             }}
           />
 
-          <div style={{ width: "100%" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                tableLayout: "fixed",
-              }}
-            >
-              <tbody>
-                <tr
-                  style={{
-                    backgroundColor: "rgba(0, 0, 0, 0.20)",
-                    color: "black",
-                  }}
-                >
-                  <td
-                    style={{
-                      fontSize: "1.5em",
-                      textAlign: "center",
-                      padding: "12px",
-                    }}
-                  >
-                    الاجمالى
-                  </td>
-                  <td
-                    style={{
-                      fontSize: "1.5em",
-                      textAlign: "center",
-                      padding: "12px",
-                    }}
-                  >
-                    {bill.type === "BNPL"
-                      ? bill.products.reduce(
-                          (acc, p) => acc + Math.abs(p.amount) * p.price,
-                          0,
-                        )
-                      : Math.abs(bill.total) + Math.abs(bill.discount)}
-                  </td>
-                </tr>
-                <tr>
-                  <td
-                    style={{
-                      fontSize: "1.5em",
-                      textAlign: "center",
-                      padding: "12px",
-                    }}
-                  >
-                    الخصم
-                  </td>
-                  <td
-                    style={{
-                      fontSize: "1.5em",
-                      textAlign: "center",
-                      padding: "12px",
-                    }}
-                  >
-                    {bill.discount}
-                  </td>
-                </tr>
-                <tr
-                  style={{
-                    backgroundColor: "rgba(0, 0, 0, 0.20)",
-                    color: "black",
-                  }}
-                >
-                  <td
-                    style={{
-                      fontSize: "1.5em",
-                      textAlign: "center",
-                      padding: "12px",
-                    }}
-                  >
-                    الصافى
-                  </td>
-                  <td
-                    style={{
-                      fontSize: "1.5em",
-                      textAlign: "center",
-                      padding: "12px",
-                    }}
-                  >
-                    {bill.type === "BNPL"
-                      ? bill.products.reduce(
-                          (acc, p) => acc + Math.abs(p.amount) * p.price,
-                          0,
-                        ) - bill.discount
-                      : Math.abs(bill.total)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {bill.type === "installment"
+            ? renderInstallmentSection()
+            : bill.type === "BNPL"
+              ? renderBnplSection()
+              : bill.type === "reserve"
+                ? renderReserveSection()
+                : renderDefaultTotals()}
 
-          <div style={{ width: "100%" }}>
-            <h5
-              style={{
-                textAlign: "center",
-                fontSize: "1rem",
-                margin: "0.15rem 0",
-              }}
-            >
-              عند ارجاع المنتجات لا تقبل الا من خلال هذة الفاتورة
-            </h5>
-          </div>
+          {!shouldHideReturnMessage && (
+            <div style={{ width: "100%" }}>
+              <h5
+                style={{
+                  textAlign: "center",
+                  fontSize: "1rem",
+                  margin: "0.15rem 0",
+                }}
+              >
+                عند ارجاع المنتجات لا تقبل الا من خلال هذة الفاتورة
+              </h5>
+            </div>
+          )}
           {open && (
             <DialogActions>
               <Button variant="contained" onClick={() => setOpen(false)}>

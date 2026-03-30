@@ -1041,6 +1041,17 @@ def get_bills(
                     bills.type,
                     bills.note,
                     assosiated_parties.name AS party_name,
+                    CASE
+                        WHEN installments_data.installment_id IS NOT NULL THEN jsonb_build_object(
+                            'id', installments_data.installment_id,
+                            'paid', installments_data.paid,
+                            'installments_count', installments_data.installments_count,
+                            'installment_interval', installments_data.installment_interval,
+                            'total_paid', installments_data.total_paid,
+                            'flow', installments_data.flow
+                        )
+                        ELSE NULL
+                    END AS installment_details,
                     json_agg(
                         json_build_object(
                             'id', products_flow.product_id,
@@ -1057,11 +1068,42 @@ def get_bills(
                     AND bills.store_id = products_flow.store_id
                 JOIN products ON products_flow.product_id = products.id
                 LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
+                LEFT JOIN (
+                    SELECT
+                        i.bill_id,
+                        i.store_id,
+                        i.id AS installment_id,
+                        i.paid::double precision AS paid,
+                        i.installments_count,
+                        i.installment_interval,
+                        COALESCE(flow_data.flow, '[]'::jsonb) AS flow,
+                        (i.paid::double precision + COALESCE(flow_data.total_flow_paid, 0)) AS total_paid
+                    FROM installments i
+                    LEFT JOIN (
+                        SELECT
+                            installment_id,
+                            COALESCE(SUM(amount::double precision), 0) AS total_flow_paid,
+                            jsonb_agg(
+                                jsonb_build_object(
+                                    'id', id,
+                                    'amount', amount::double precision,
+                                    'time', time::text
+                                )
+                                ORDER BY time, id
+                            ) AS flow
+                        FROM installments_flow
+                        GROUP BY installment_id
+                    ) AS flow_data ON i.id = flow_data.installment_id
+                ) AS installments_data ON bills.id = installments_data.bill_id
+                    AND bills.store_id = installments_data.store_id
                 WHERE 1 = 1
                 {" ".join(extra_conditions)}
                 AND bills.store_id = %s
                 GROUP BY bills.id, bills.time, bills.discount,
-                    bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name
+                    bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name,
+                    installments_data.installment_id, installments_data.paid,
+                    installments_data.installments_count, installments_data.installment_interval,
+                    installments_data.total_paid, installments_data.flow
                 ORDER BY bills.time DESC
                     """,
                 tuple(params),
@@ -1711,6 +1753,17 @@ def _add_bill_internal(
                     bills.type,
                     bills.note,
                     assosiated_parties.name AS party_name,
+                    CASE
+                        WHEN installments_data.installment_id IS NOT NULL THEN jsonb_build_object(
+                            'id', installments_data.installment_id,
+                            'paid', installments_data.paid,
+                            'installments_count', installments_data.installments_count,
+                            'installment_interval', installments_data.installment_interval,
+                            'total_paid', installments_data.total_paid,
+                            'flow', installments_data.flow
+                        )
+                        ELSE NULL
+                    END AS installment_details,
                     json_agg(
                         json_build_object(
                             'id', products_flow.product_id,
@@ -1725,9 +1778,40 @@ def _add_bill_internal(
                 JOIN products_flow ON bills.id = products_flow.bill_id
                 JOIN products ON products_flow.product_id = products.id
                 LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
+                LEFT JOIN (
+                    SELECT
+                        i.bill_id,
+                        i.store_id,
+                        i.id AS installment_id,
+                        i.paid::double precision AS paid,
+                        i.installments_count,
+                        i.installment_interval,
+                        COALESCE(flow_data.flow, '[]'::jsonb) AS flow,
+                        (i.paid::double precision + COALESCE(flow_data.total_flow_paid, 0)) AS total_paid
+                    FROM installments i
+                    LEFT JOIN (
+                        SELECT
+                            installment_id,
+                            COALESCE(SUM(amount::double precision), 0) AS total_flow_paid,
+                            jsonb_agg(
+                                jsonb_build_object(
+                                    'id', id,
+                                    'amount', amount::double precision,
+                                    'time', time::text
+                                )
+                                ORDER BY time, id
+                            ) AS flow
+                        FROM installments_flow
+                        GROUP BY installment_id
+                    ) AS flow_data ON i.id = flow_data.installment_id
+                ) AS installments_data ON bills.id = installments_data.bill_id
+                    AND bills.store_id = installments_data.store_id
                 WHERE bills.id = %s
                 GROUP BY bills.id, bills.time, bills.discount,
-                    bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name
+                    bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name,
+                    installments_data.installment_id, installments_data.paid,
+                    installments_data.installments_count, installments_data.installment_interval,
+                    installments_data.total_paid, installments_data.flow
                 """,
                 (bill_id,),
             )

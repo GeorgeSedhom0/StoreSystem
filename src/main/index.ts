@@ -14,6 +14,7 @@ import {
   readdirSync,
   rmSync,
   unlinkSync,
+  writeFileSync,
 } from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
@@ -502,6 +503,14 @@ const createPrintWindow = async (html: string, config: any) => {
   return { win, height };
 };
 
+const ensurePdfExtension = (fileName: string) => {
+  return fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
+};
+
+const sanitizeFileName = (fileName: string) => {
+  return fileName.replace(/[<>:"/\\|?*]+/g, "-").trim() || "report.pdf";
+};
+
 ipcMain.handle("print", async (_event, { html, type, copies }) => {
   try {
     const config = await getPrinterConfig(type);
@@ -537,6 +546,90 @@ ipcMain.handle("print", async (_event, { html, type, copies }) => {
     return { success: false, error: error };
   }
 });
+
+ipcMain.handle(
+  "export-pdf",
+  async (_event, { html, fileName, landscape = false }) => {
+    let win: BrowserWindow | null = null;
+
+    try {
+      const safeFileName = ensurePdfExtension(
+        sanitizeFileName(fileName || "report.pdf"),
+      );
+      const focusedWindow = BrowserWindow.getFocusedWindow();
+      const saveDialogOptions = {
+        title: "حفظ ملف PDF",
+        defaultPath: join(app.getPath("documents"), safeFileName),
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      };
+
+      const saveResult = focusedWindow
+        ? await dialog.showSaveDialog(focusedWindow, saveDialogOptions)
+        : await dialog.showSaveDialog(saveDialogOptions);
+
+      if (saveResult.canceled || !saveResult.filePath) {
+        return { success: false, cancelled: true };
+      }
+
+      win = new BrowserWindow({
+        show: false,
+        webPreferences: { nodeIntegration: true },
+      });
+
+      await win.loadFile("print-template.html");
+      await win.webContents.executeJavaScript(
+        `document.body.innerHTML = \`${html}\`;`,
+      );
+      await win.webContents.executeJavaScript(`
+        Promise.all(
+          Array.from(document.images).map((image) => {
+            if (image.complete) {
+              return Promise.resolve();
+            }
+
+            return new Promise((resolve) => {
+              image.addEventListener('load', resolve, { once: true });
+              image.addEventListener('error', resolve, { once: true });
+            });
+          })
+        ).then(async () => {
+          if (document.fonts?.ready) {
+            await document.fonts.ready;
+          }
+          return true;
+        })
+      `);
+
+      const pdfBuffer = await win.webContents.printToPDF({
+        printBackground: true,
+        landscape,
+        pageSize: "A4",
+        preferCSSPageSize: false,
+        margins: {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+        },
+      });
+
+      writeFileSync(saveResult.filePath, pdfBuffer);
+
+      return {
+        success: true,
+        cancelled: false,
+        filePath: saveResult.filePath,
+      };
+    } catch (error) {
+      dialog.showErrorBox("PDF Export Error", `Failed to export PDF: ${error}`);
+      return { success: false, error: String(error) };
+    } finally {
+      if (win && !win.isDestroyed()) {
+        win.close();
+      }
+    }
+  },
+);
 
 ipcMain.handle("getPrinters", async () => {
   return getPrinters();

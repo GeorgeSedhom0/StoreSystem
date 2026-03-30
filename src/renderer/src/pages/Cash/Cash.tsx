@@ -34,6 +34,7 @@ import {
   TrendingUp as TrendingUpIcon,
   TrendingDown as TrendingDownIcon,
   AccountBalance as AccountBalanceIcon,
+  PictureAsPdf as PictureAsPdfIcon,
 } from "@mui/icons-material";
 import { CashFlow, Party } from "../utils/types";
 import LoadingScreen from "../Shared/LoadingScreen";
@@ -46,6 +47,7 @@ import FormatedNumber from "../Shared/FormatedNumber";
 import useParties from "../Shared/hooks/useParties";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { exportToExcel } from "../Analytics/utils";
+import { buildCashFlowReportHtml, exportPdfDocument } from "../utils/a4Reports";
 
 const getCashFlow = async (
   startDate: Dayjs,
@@ -81,12 +83,8 @@ const Cash = () => {
     type: "",
     extra_info: {},
   });
-  const [localTotal, setLocalTotal] = useState<boolean>(() => {
-    const localTotal = localStorage.getItem("localTotal");
-    if (localTotal) {
-      return true;
-    }
-    return false;
+  const [showGlobalTotal, setShowGlobalTotal] = useState<boolean>(() => {
+    return localStorage.getItem("cashFlowShowGlobalTotal") === "true";
   });
 
   // New state for enhanced table functionality
@@ -97,19 +95,23 @@ const Cash = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const { partyId } = useParams();
-  const { storeId } = useContext(StoreContext);
+  const { storeId, store } = useContext(StoreContext);
 
   useEffect(() => {
     if (partyId) setSelectedPartyId(parseInt(partyId));
   }, [partyId]);
 
   useEffect(() => {
-    if (localTotal) {
-      localStorage.setItem("localTotal", "true");
+    if (showGlobalTotal) {
+      localStorage.setItem("cashFlowShowGlobalTotal", "true");
     } else {
-      localStorage.removeItem("localTotal");
+      localStorage.removeItem("cashFlowShowGlobalTotal");
     }
-  }, [localTotal]);
+  }, [showGlobalTotal]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, selectedPartyId, startDate, endDate]);
 
   const { data: lastShift, isLoading: isShiftLoading } = useQuery({
     queryKey: ["lastShift"],
@@ -135,36 +137,24 @@ const Cash = () => {
     initialData: [],
   });
 
-  const cashFlow = useMemo(() => {
-    // Process the raw data
-    const localCashFlow: CashFlow[] = [];
-    if (localTotal) {
-      // override the total column to have the first total as 0
-      let total = 0;
-      for (let i = rawCashFlow.length - 1; i >= 0; i--) {
-        const row = rawCashFlow[i];
-        total += row.amount;
-        localCashFlow.unshift({ ...row, total });
-      }
-    } else {
-      localCashFlow.push(...rawCashFlow);
-    }
-
-    return localCashFlow;
-  }, [rawCashFlow, localTotal]);
-
-  // Enhanced filtering and sorting logic
   const filteredAndSortedCashFlow = useMemo(() => {
-    let filtered = cashFlow.filter((item) => {
-      const matchesSearch =
-        item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.party_name &&
-          item.party_name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const searchTokens = searchTerm
+      .split(",")
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean);
 
-      return matchesSearch;
+    const filtered = rawCashFlow.filter((item) => {
+      if (searchTokens.length === 0) {
+        return true;
+      }
+
+      const searchableText = [item.description, item.party_name || ""]
+        .join(" ")
+        .toLowerCase();
+
+      return searchTokens.every((token) => searchableText.includes(token));
     });
 
-    // Sort the filtered data
     filtered.sort((a, b) => {
       const aValue = a[orderBy];
       const bValue = b[orderBy];
@@ -188,8 +178,20 @@ const Cash = () => {
         : bStr.localeCompare(aStr);
     });
 
-    return filtered;
-  }, [cashFlow, searchTerm, orderBy, order]);
+    if (showGlobalTotal) {
+      return filtered;
+    }
+
+    const localCashFlow: CashFlow[] = [];
+    let total = 0;
+    for (let i = filtered.length - 1; i >= 0; i--) {
+      const row = filtered[i];
+      total += row.amount;
+      localCashFlow.unshift({ ...row, total });
+    }
+
+    return localCashFlow;
+  }, [rawCashFlow, searchTerm, orderBy, order, showGlobalTotal]);
 
   // Statistics calculations
   const statistics = useMemo(() => {
@@ -199,7 +201,7 @@ const Cash = () => {
 
     const totalOut = filteredAndSortedCashFlow
       .filter((item) => item.type === "out")
-      .reduce((sum, item) => sum + item.amount, 0);
+      .reduce((sum, item) => sum + Math.abs(item.amount), 0);
 
     const netFlow = totalIn - totalOut;
 
@@ -245,6 +247,52 @@ const Cash = () => {
       ]),
     ];
     exportToExcel(exportData);
+  };
+
+  const handleExportToPdf = async () => {
+    try {
+      const selectedPartyName =
+        parties.find((party) => party.id === selectedPartyId)?.name ||
+        (selectedPartyId === null ? "كل الأطراف" : "طرف غير معروف");
+
+      const html = buildCashFlowReportHtml({
+        store,
+        rows: filteredAndSortedCashFlow,
+        startDate: startDate.format("YYYY/MM/DD HH:mm"),
+        endDate: endDate.format("YYYY/MM/DD HH:mm"),
+        totalIn: statistics.totalIn,
+        totalOut: statistics.totalOut,
+        netFlow: statistics.netFlow,
+        showGlobalTotal,
+        searchTerm,
+        selectedParty: selectedPartyName,
+      });
+
+      const result = await exportPdfDocument({
+        fileName: `cash-flow-${startDate.format("YYYY-MM-DD")}-${endDate.format("YYYY-MM-DD")}.pdf`,
+        html,
+        landscape: true,
+      });
+
+      if (result?.cancelled) {
+        return;
+      }
+
+      if (!result?.success) {
+        throw new Error(result?.error || "Unknown export error");
+      }
+
+      setMsg({
+        type: "success",
+        text: "تم تصدير تقرير التدفقات النقدية PDF بنجاح",
+      });
+    } catch (error) {
+      console.error("Cash flow PDF export failed:", error);
+      setMsg({
+        type: "error",
+        text: "فشل تصدير تقرير التدفقات النقدية PDF",
+      });
+    }
   };
 
   const setRange = useCallback(
@@ -478,10 +526,12 @@ const Cash = () => {
                 </Box>
                 <FormControlLabel
                   control={
-                    <Switch onChange={(e) => setLocalTotal(e.target.checked)} />
+                    <Switch
+                      checked={showGlobalTotal}
+                      onChange={(e) => setShowGlobalTotal(e.target.checked)}
+                    />
                   }
-                  checked={localTotal}
-                  label="إظهار الإجمالى المحلي"
+                  label="إظهار الإجمالي العام"
                 />
               </Grid2>
               <Grid2 container gap={3} size={12}>
@@ -638,7 +688,7 @@ const Cash = () => {
               <Grid2 size={{ xs: 12, md: 4 }}>
                 <TextField
                   fullWidth
-                  placeholder="البحث في الوصف أو الطرف الثاني..."
+                  placeholder="ابحث في الوصف أو الطرف الثاني. استخدم فاصلة للمطابقة مع كل الكلمات"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   slotProps={{
@@ -661,6 +711,17 @@ const Cash = () => {
                   fullWidth
                 >
                   تصدير Excel
+                </Button>
+              </Grid2>
+              <Grid2 size={{ xs: 12, md: 2 }}>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  startIcon={<PictureAsPdfIcon />}
+                  onClick={handleExportToPdf}
+                  fullWidth
+                >
+                  تصدير PDF A4
                 </Button>
               </Grid2>
             </Grid2>
