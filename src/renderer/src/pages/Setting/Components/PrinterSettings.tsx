@@ -31,6 +31,16 @@ import {
   useBillLogo,
 } from "@renderer/pages/Shared/hooks/useBillLogo";
 import {
+  BILL_PRINT_TYPES,
+  BILL_TYPE_LABELS,
+  getBillBodyMessagesForStore,
+  getBillFooterMessagesForStore,
+  notifyBillPrintMessagesUpdated,
+  type BillPrintType,
+  type StoredBillBodyMessages,
+  type StoredBillFooterMessages,
+} from "@renderer/pages/Shared/hooks/useBillFooterMessages";
+import {
   Print as PrintIcon,
   Receipt as ReceiptIcon,
   QrCode as BarcodeIcon,
@@ -42,49 +52,12 @@ import {
   DeleteOutline as DeleteOutlineIcon,
   ImageOutlined as ImageOutlinedIcon,
 } from "@mui/icons-material";
-
-// Default barcode settings optimized for 40mm x 25mm labels
-const DEFAULT_BARCODE_SETTINGS = {
-  // Margins in mm
-  marginTop: 1,
-  marginBottom: 1,
-  marginLeft: 2,
-  marginRight: 2,
-  // Barcode size as percentage of available space
-  barcodeWidthPercent: 90,
-  barcodeHeightPercent: 40,
-  // What to show
-  showProductName: true,
-  showPrice: true,
-  showStoreName: false,
-  showBarcodeNumber: true,
-  // Store name (for when showStoreName is true)
-  storeName: "",
-  // Font sizes in pixels
-  productNameFontSize: 14,
-  priceFontSize: 12,
-  storeNameFontSize: 10,
-  // Bar width (1-4, higher = thicker bars)
-  barWidth: 2,
-};
-
-interface BarcodeSettings {
-  marginTop: number;
-  marginBottom: number;
-  marginLeft: number;
-  marginRight: number;
-  barcodeWidthPercent: number;
-  barcodeHeightPercent: number;
-  showProductName: boolean;
-  showPrice: boolean;
-  showStoreName: boolean;
-  showBarcodeNumber: boolean;
-  storeName: string;
-  productNameFontSize: number;
-  priceFontSize: number;
-  storeNameFontSize: number;
-  barWidth: number;
-}
+import BarcodePreview from "./BarcodePreview";
+import {
+  DEFAULT_BARCODE_SETTINGS,
+  type BarcodeSettings,
+  type BarcodeTextOverflowMode,
+} from "@renderer/pages/Shared/barcodeUtils";
 
 interface PrinterSettingsState {
   billPrinter: string;
@@ -96,6 +69,8 @@ interface PrinterSettingsState {
   barcodeSettings: BarcodeSettings;
   billLogos?: Record<string, unknown>;
   billLogoSettings?: Record<string, BillLogoAppearance>;
+  billBodyMessages?: StoredBillBodyMessages;
+  billFooterMessages?: StoredBillFooterMessages;
 }
 
 const PrinterSettings = () => {
@@ -113,6 +88,8 @@ const PrinterSettings = () => {
     barcodePrinterWidth: "40",
     barcodePrinterHeight: "25",
     barcodeSettings: { ...DEFAULT_BARCODE_SETTINGS },
+    billBodyMessages: {},
+    billFooterMessages: {},
   });
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<AlertMsg>({
@@ -125,6 +102,14 @@ const PrinterSettings = () => {
   const billLogoAppearance =
     settings.billLogoSettings?.[String(storeId)] ||
     DEFAULT_BILL_LOGO_APPEARANCE;
+  const billBodyMessages = getBillBodyMessagesForStore(
+    settings.billBodyMessages,
+    storeId,
+  );
+  const billFooterMessages = getBillFooterMessagesForStore(
+    settings.billFooterMessages,
+    storeId,
+  );
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -150,6 +135,8 @@ const PrinterSettings = () => {
             },
             billLogos: savedSettings.billLogos || {},
             billLogoSettings: savedSettings.billLogoSettings || {},
+            billBodyMessages: savedSettings.billBodyMessages || {},
+            billFooterMessages: savedSettings.billFooterMessages || {},
           });
         }
       } catch (error) {
@@ -181,6 +168,14 @@ const PrinterSettings = () => {
           ...(currentSettings.billLogoSettings || {}),
           ...(settings.billLogoSettings || {}),
         },
+        billBodyMessages: {
+          ...(currentSettings.billBodyMessages || {}),
+          ...(settings.billBodyMessages || {}),
+        },
+        billFooterMessages: {
+          ...(currentSettings.billFooterMessages || {}),
+          ...(settings.billFooterMessages || {}),
+        },
       };
 
       await window.electron.ipcRenderer.invoke(
@@ -191,8 +186,11 @@ const PrinterSettings = () => {
         ...prev,
         billLogos: mergedSettings.billLogos,
         billLogoSettings: mergedSettings.billLogoSettings,
+        billBodyMessages: mergedSettings.billBodyMessages,
+        billFooterMessages: mergedSettings.billFooterMessages,
       }));
       notifyBillLogoAppearanceUpdated(storeId);
+      notifyBillPrintMessagesUpdated(storeId);
       // Show success message
       setMsg({ type: "success", text: "تم حفظ الإعدادات بنجاح" });
     } catch (error) {
@@ -297,6 +295,38 @@ const PrinterSettings = () => {
           ...DEFAULT_BILL_LOGO_APPEARANCE,
           ...(prev.billLogoSettings?.[String(storeId)] || {}),
           [field]: value,
+        },
+      },
+    }));
+  };
+
+  const handleBillFooterMessageChange = (
+    billType: BillPrintType,
+    value: string,
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      billFooterMessages: {
+        ...(prev.billFooterMessages || {}),
+        [String(storeId)]: {
+          ...getBillFooterMessagesForStore(prev.billFooterMessages, storeId),
+          [billType]: value,
+        },
+      },
+    }));
+  };
+
+  const handleBillBodyMessageChange = (
+    billType: BillPrintType,
+    value: string,
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      billBodyMessages: {
+        ...(prev.billBodyMessages || {}),
+        [String(storeId)]: {
+          ...getBillBodyMessagesForStore(prev.billBodyMessages, storeId),
+          [billType]: value,
         },
       },
     }));
@@ -590,6 +620,79 @@ const PrinterSettings = () => {
                   </Grid2>
                 </Paper>
               </Grid2>
+
+              <Grid2 size={12}>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2.5,
+                    borderRadius: 3,
+                    background:
+                      "linear-gradient(180deg, rgba(25, 118, 210, 0.04) 0%, rgba(25, 118, 210, 0.01) 100%)",
+                  }}
+                >
+                  <Box sx={{ mb: 2 }}>
+                    <Typography
+                      variant="subtitle1"
+                      sx={{ fontWeight: 700, mb: 0.5 }}
+                    >
+                      رسائل الفاتورة حسب النوع
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      يمكنك التحكم في الرسالة داخل الفاتورة ورسالة نهاية
+                      الفاتورة لكل نوع فاتورة في المخزن الحالي. اترك أي حقل
+                      فارغا لإخفائه.
+                    </Typography>
+                  </Box>
+
+                  <Grid2 container spacing={2}>
+                    {BILL_PRINT_TYPES.map((billType) => (
+                      <Grid2 size={{ xs: 12, md: 6 }} key={billType}>
+                        <Paper
+                          variant="outlined"
+                          sx={{ p: 2, borderRadius: 2 }}
+                        >
+                          <Typography sx={{ fontWeight: 700, mb: 1.5 }}>
+                            {BILL_TYPE_LABELS[billType]}
+                          </Typography>
+
+                          <Stack spacing={1.5}>
+                            <TextField
+                              fullWidth
+                              multiline
+                              minRows={2}
+                              label="رسالة داخل الفاتورة"
+                              value={billBodyMessages[billType]}
+                              onChange={(event) =>
+                                handleBillBodyMessageChange(
+                                  billType,
+                                  event.target.value,
+                                )
+                              }
+                              helperText="تظهر بعد التفاصيل أو الجداول داخل الفاتورة"
+                            />
+
+                            <TextField
+                              fullWidth
+                              multiline
+                              minRows={2}
+                              label="رسالة نهاية الفاتورة"
+                              value={billFooterMessages[billType]}
+                              onChange={(event) =>
+                                handleBillFooterMessageChange(
+                                  billType,
+                                  event.target.value,
+                                )
+                              }
+                              helperText="تظهر في آخر الفاتورة لهذا النوع"
+                            />
+                          </Stack>
+                        </Paper>
+                      </Grid2>
+                    ))}
+                  </Grid2>
+                </Paper>
+              </Grid2>
             </Grid2>
           </Paper>
         </Grid2>
@@ -837,6 +940,53 @@ const PrinterSettings = () => {
                         />
                       </Grid2>
 
+                      <Grid2 size={6}>
+                        <Typography variant="body2" gutterBottom>
+                          التباعد بين العناصر:{" "}
+                          {settings.barcodeSettings.elementSpacing}
+                          px
+                        </Typography>
+                        <Slider
+                          value={settings.barcodeSettings.elementSpacing}
+                          onChange={(_e, value) =>
+                            handleBarcodeSettingChange(
+                              "elementSpacing",
+                              value as number,
+                            )
+                          }
+                          min={0}
+                          max={12}
+                          step={1}
+                          marks
+                          valueLabelDisplay="auto"
+                        />
+                      </Grid2>
+
+                      <Grid2 size={6}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>النص الطويل</InputLabel>
+                          <Select
+                            value={
+                              settings.barcodeSettings.productNameOverflowMode
+                            }
+                            label="النص الطويل"
+                            onChange={(event) =>
+                              handleBarcodeSettingChange(
+                                "productNameOverflowMode",
+                                event.target.value as BarcodeTextOverflowMode,
+                              )
+                            }
+                          >
+                            <MenuItem value="ellipsis">
+                              اختصار النص الطويل إلى ...
+                            </MenuItem>
+                            <MenuItem value="wrap">
+                              نقل اسم المنتج إلى سطر جديد
+                            </MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid2>
+
                       {/* Display Options */}
                       <Grid2 size={12}>
                         <Divider sx={{ my: 1 }} />
@@ -848,6 +998,22 @@ const PrinterSettings = () => {
                         >
                           العناصر المعروضة
                         </Typography>
+                      </Grid2>
+                      <Grid2 size={6}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={settings.barcodeSettings.showBarcode}
+                              onChange={(e) =>
+                                handleBarcodeSettingChange(
+                                  "showBarcode",
+                                  e.target.checked,
+                                )
+                              }
+                            />
+                          }
+                          label="شكل الباركود"
+                        />
                       </Grid2>
                       <Grid2 size={6}>
                         <FormControlLabel
@@ -998,9 +1164,34 @@ const PrinterSettings = () => {
                           disabled={!settings.barcodeSettings.showStoreName}
                         />
                       </Grid2>
+                      <Grid2 size={4}>
+                        <TextField
+                          fullWidth
+                          label="رقم الباركود"
+                          type="number"
+                          size="small"
+                          value={settings.barcodeSettings.barcodeNumberFontSize}
+                          onChange={(e) =>
+                            handleBarcodeSettingChange(
+                              "barcodeNumberFontSize",
+                              Number(e.target.value),
+                            )
+                          }
+                          inputProps={{ min: 8, max: 24 }}
+                          disabled={!settings.barcodeSettings.showBarcodeNumber}
+                        />
+                      </Grid2>
                     </Grid2>
                   </AccordionDetails>
                 </Accordion>
+              </Grid2>
+
+              <Grid2 size={12}>
+                <BarcodePreview
+                  barcodeSettings={settings.barcodeSettings}
+                  barcodePrinterWidth={settings.barcodePrinterWidth}
+                  barcodePrinterHeight={settings.barcodePrinterHeight}
+                />
               </Grid2>
             </Grid2>
           </Paper>

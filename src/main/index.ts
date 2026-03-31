@@ -440,6 +440,14 @@ function savePrinterSettings(printerSettings) {
       ...(currentSettings.billLogoSettings || {}),
       ...(printerSettings?.billLogoSettings || {}),
     },
+    billBodyMessages: {
+      ...(currentSettings.billBodyMessages || {}),
+      ...(printerSettings?.billBodyMessages || {}),
+    },
+    billFooterMessages: {
+      ...(currentSettings.billFooterMessages || {}),
+      ...(printerSettings?.billFooterMessages || {}),
+    },
   });
 }
 

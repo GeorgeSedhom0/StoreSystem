@@ -3,21 +3,13 @@ import { Bill } from "./types";
 import { forwardRef, useContext } from "react";
 import { StoreContext } from "../../StoreDataProvider";
 import {
+  BILL_TYPE_LABELS,
+  useBillPrintMessages,
+} from "../Shared/hooks/useBillFooterMessages";
+import {
   useBillLogo,
   useBillLogoAppearance,
 } from "../Shared/hooks/useBillLogo";
-
-const billTypeLabels: Record<string, string> = {
-  sell: "فاتورة مبيعات",
-  buy: "فاتورة شراء",
-  return: "فاتورة مرتجع",
-  BNPL: "فاتورة بيع اجل",
-  reserve: "فاتورة حجز",
-  installment: "فاتورة تقسيط",
-  "buy-return": "فاتورة مرتجع شراء",
-};
-
-const specialBillTypes = new Set(["installment", "BNPL", "reserve"]);
 
 const BillView = forwardRef(
   (
@@ -35,8 +27,13 @@ const BillView = forwardRef(
     const { store, storeId } = useContext(StoreContext);
     const { logo } = useBillLogo(storeId);
     const { appearance } = useBillLogoAppearance(storeId);
+    const { bodyMessages, footerMessages } = useBillPrintMessages(storeId);
 
     if (!bill) return null;
+
+    const billTypeKey = (bill.type in BILL_TYPE_LABELS ? bill.type : null) as
+      | keyof typeof BILL_TYPE_LABELS
+      | null;
 
     const productsTotal = bill.products.reduce(
       (acc, product) => acc + Math.abs(product.amount) * product.price,
@@ -47,7 +44,23 @@ const BillView = forwardRef(
     const installmentDetails = bill.installment_details;
     const installmentTotalPaid = installmentDetails?.total_paid || 0;
     const installmentRemaining = Math.max(netTotal - installmentTotalPaid, 0);
-    const shouldHideReturnMessage = specialBillTypes.has(bill.type);
+    const bodyMessage = billTypeKey ? bodyMessages[billTypeKey].trim() : "";
+    const footerMessage = billTypeKey ? footerMessages[billTypeKey].trim() : "";
+
+    const renderBodyMessage = (message: string, marginTop = "0.75rem") =>
+      message ? (
+        <div style={{ width: "100%" }}>
+          <h5
+            style={{
+              textAlign: "center",
+              fontSize: "1rem",
+              margin: `${marginTop} 0 0.15rem`,
+            }}
+          >
+            {message}
+          </h5>
+        </div>
+      ) : null;
 
     const renderDefaultTotals = () => (
       <div style={{ width: "100%" }}>
@@ -131,6 +144,8 @@ const BillView = forwardRef(
             </tr>
           </tbody>
         </table>
+
+        {renderBodyMessage(bodyMessage)}
       </div>
     );
 
@@ -217,37 +232,12 @@ const BillView = forwardRef(
           </tbody>
         </table>
 
-        <div style={{ width: "100%" }}>
-          <h5
-            style={{
-              textAlign: "center",
-              fontSize: "1rem",
-              margin: "0.75rem 0 0.15rem",
-            }}
-          >
-            هذه الفاتورة بيع اجل ويتم سداد المبلغ بالكامل دفعة واحدة عند
-            التحصيل.
-          </h5>
-        </div>
+        {renderBodyMessage(bodyMessage)}
       </div>
     );
 
     const renderReserveSection = () => (
-      <div style={{ width: "100%" }}>
-        {renderDefaultTotals()}
-        <div style={{ width: "100%" }}>
-          <h5
-            style={{
-              textAlign: "center",
-              fontSize: "1rem",
-              margin: "0.75rem 0 0.15rem",
-            }}
-          >
-            هذه الفاتورة حجز والمنتجات محفوظة للعميل ولم يتم تسليمها بعد. يرجى
-            الاحتفاظ بها عند الاستلام.
-          </h5>
-        </div>
-      </div>
+      <div style={{ width: "100%" }}>{renderDefaultTotals()}</div>
     );
 
     const renderInstallmentSection = () => (
@@ -487,6 +477,8 @@ const BillView = forwardRef(
             </tbody>
           </table>
         </div>
+
+        {renderBodyMessage(bodyMessage, "0.9rem")}
       </div>
     );
 
@@ -593,7 +585,7 @@ const BillView = forwardRef(
                 margin: "0.15rem 0",
               }}
             >
-              {billTypeLabels[bill.type] || bill.type}
+              {billTypeKey ? BILL_TYPE_LABELS[billTypeKey] : bill.type}
             </h6>
           </div>
 
@@ -773,7 +765,7 @@ const BillView = forwardRef(
                 ? renderReserveSection()
                 : renderDefaultTotals()}
 
-          {!shouldHideReturnMessage && (
+          {footerMessage && (
             <div style={{ width: "100%" }}>
               <h5
                 style={{
@@ -782,7 +774,7 @@ const BillView = forwardRef(
                   margin: "0.15rem 0",
                 }}
               >
-                عند ارجاع المنتجات لا تقبل الا من خلال هذة الفاتورة
+                {footerMessage}
               </h5>
             </div>
           )}
