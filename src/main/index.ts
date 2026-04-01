@@ -170,6 +170,47 @@ let isShuttingDown = false;
 // Track window IDs
 const windowRegistry = new Map<number, BrowserWindow>();
 
+const APP_ZOOM_SETTING_KEY = "appZoomFactor";
+const DEFAULT_APP_ZOOM_FACTOR = 1;
+const MIN_APP_ZOOM_FACTOR = 0.8;
+const MAX_APP_ZOOM_FACTOR = 1.5;
+
+const normalizeAppZoomFactor = (value: unknown) => {
+  const numericValue = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return DEFAULT_APP_ZOOM_FACTOR;
+  }
+
+  return Math.min(
+    MAX_APP_ZOOM_FACTOR,
+    Math.max(MIN_APP_ZOOM_FACTOR, Math.round(numericValue * 100) / 100),
+  );
+};
+
+const getAppZoomFactor = () => {
+  return normalizeAppZoomFactor(
+    settingsManager.getSetting(APP_ZOOM_SETTING_KEY),
+  );
+};
+
+const applyAppZoomFactorToWindow = (window: BrowserWindow) => {
+  window.webContents.setZoomFactor(getAppZoomFactor());
+};
+
+const setAppZoomFactor = (value: unknown) => {
+  const zoomFactor = normalizeAppZoomFactor(value);
+  settingsManager.setSetting(APP_ZOOM_SETTING_KEY, zoomFactor);
+
+  for (const window of windowRegistry.values()) {
+    if (!window.isDestroyed()) {
+      window.webContents.setZoomFactor(zoomFactor);
+    }
+  }
+
+  return zoomFactor;
+};
+
 // Function to find the smallest available window ID
 function getNextAvailableWindowId(): number {
   // If registry is empty, start with 1
@@ -210,6 +251,7 @@ function createChildWindow(url: string): void {
   });
   // Register window with its ID
   windowRegistry.set(windowId, childWindow);
+  applyAppZoomFactorToWindow(childWindow);
   console.log(
     `Created child window with ID: ${windowId}, active windows: ${Array.from(windowRegistry.keys())}`,
   );
@@ -270,6 +312,7 @@ function createWindow(): void {
       },
     }); // Register main window with its ID
     windowRegistry.set(windowId, mainWindow);
+    applyAppZoomFactorToWindow(mainWindow);
     console.log(
       `Created main window with ID: ${windowId}, active windows: ${Array.from(windowRegistry.keys())}`,
     );
@@ -720,10 +763,19 @@ ipcMain.handle("removeBillLogo", (_event, storeId) => {
 });
 
 ipcMain.handle("set", (_event, key, value) => {
+  if (key === APP_ZOOM_SETTING_KEY) {
+    return setAppZoomFactor(value);
+  }
+
   settingsManager.setSetting(key, value);
+  return value;
 });
 
 ipcMain.handle("get", (_event, key) => {
+  if (key === APP_ZOOM_SETTING_KEY) {
+    return getAppZoomFactor();
+  }
+
   return settingsManager.getSetting(key);
 });
 

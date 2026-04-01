@@ -1,5 +1,13 @@
 import { LoadingButton } from "@mui/lab";
-import { Grid2, TextField, Typography, Paper, Box } from "@mui/material";
+import {
+  Grid2,
+  TextField,
+  Typography,
+  Paper,
+  Box,
+  Slider,
+  Stack,
+} from "@mui/material";
 import { useCallback, useEffect, useState, useContext } from "react";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import axios from "axios";
@@ -13,6 +21,8 @@ import {
   Save as SaveIcon,
   Business as BusinessIcon,
   Notifications as NotificationsIcon,
+  ZoomInMap as ZoomIcon,
+  RestartAlt as ResetIcon,
 } from "@mui/icons-material";
 
 interface ExtraInfo {
@@ -20,6 +30,26 @@ interface ExtraInfo {
   expiration_check_time?: string;
   [key: string]: unknown;
 }
+
+const MIN_APP_ZOOM_PERCENT = 80;
+const MAX_APP_ZOOM_PERCENT = 150;
+const APP_ZOOM_MARKS = [
+  { value: 80, label: "80%" },
+  { value: 100, label: "100%" },
+  { value: 125, label: "125%" },
+  { value: 150, label: "150%" },
+];
+
+const clampAppZoomPercent = (value: number) => {
+  if (!Number.isFinite(value)) {
+    return 100;
+  }
+
+  return Math.min(
+    MAX_APP_ZOOM_PERCENT,
+    Math.max(MIN_APP_ZOOM_PERCENT, Math.round(value)),
+  );
+};
 
 const saveStoreData = async ({
   name,
@@ -59,11 +89,13 @@ const getStoreData = async (storeId: number) => {
 
 const Basics = () => {
   const [loading, setLoading] = useState(false);
+  const [zoomLoading, setZoomLoading] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [expirationAlertDays, setExpirationAlertDays] = useState(14);
   const [expirationCheckTime, setExpirationCheckTime] = useState("15:00");
+  const [zoomPercent, setZoomPercent] = useState(100);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
 
   const queryClient = useQueryClient();
@@ -140,6 +172,41 @@ const Basics = () => {
     queryFn: () => getStoreData(storeId),
   });
 
+  const saveAppZoom = useCallback(
+    async (nextZoomPercent?: number) => {
+      setZoomLoading(true);
+      try {
+        const targetZoomPercent = clampAppZoomPercent(
+          nextZoomPercent ?? zoomPercent,
+        );
+        const appliedZoom = await window.electron.ipcRenderer.invoke(
+          "set",
+          "appZoomFactor",
+          targetZoomPercent / 100,
+        );
+
+        setZoomPercent(clampAppZoomPercent(Number(appliedZoom) * 100));
+        setMsg({
+          type: "success",
+          text: "تم تحديث حجم الواجهة على هذا الجهاز",
+        });
+      } catch (error) {
+        console.error(error);
+        setMsg({
+          type: "error",
+          text: "تعذر تحديث حجم الواجهة",
+        });
+      } finally {
+        setZoomLoading(false);
+      }
+    },
+    [zoomPercent],
+  );
+
+  const resetAppZoom = useCallback(() => {
+    void saveAppZoom(100);
+  }, [saveAppZoom]);
+
   useEffect(() => {
     if (storeInfo) {
       setName(storeInfo.name);
@@ -155,6 +222,23 @@ const Basics = () => {
       setExpirationCheckTime(extraInfo.expiration_check_time || "15:00");
     }
   }, [storeInfo]);
+
+  useEffect(() => {
+    const loadAppZoom = async () => {
+      try {
+        const storedZoom = await window.electron.ipcRenderer.invoke(
+          "get",
+          "appZoomFactor",
+        );
+        setZoomPercent(clampAppZoomPercent((Number(storedZoom) || 1) * 100));
+      } catch (error) {
+        console.error("Failed to load app zoom factor:", error);
+      }
+    };
+
+    loadAppZoom();
+  }, []);
+
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       <AlertMessage message={msg} setMessage={setMsg} />
@@ -314,6 +398,118 @@ const Basics = () => {
                     },
                   }}
                 />
+              </Grid2>
+            </Grid2>
+          </Paper>
+        </Grid2>
+
+        {/* Display Zoom Section */}
+        <Grid2 size={12}>
+          <Paper
+            elevation={1}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+              <ZoomIcon sx={{ color: "secondary.main" }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                حجم الواجهة
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              يكبر أو يصغر واجهة البرنامج على هذا الجهاز فقط لتسهيل القراءة، ولن
+              يؤثر على الطباعة أو بيانات المتجر.
+            </Typography>
+
+            <Grid2 container spacing={3} alignItems="center">
+              <Grid2 size={{ xs: 12, md: 8 }}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1.5 }}
+                >
+                  اختر الحجم المناسب ثم اضغط تطبيق.
+                </Typography>
+                <Slider
+                  value={zoomPercent}
+                  min={MIN_APP_ZOOM_PERCENT}
+                  max={MAX_APP_ZOOM_PERCENT}
+                  step={5}
+                  marks={APP_ZOOM_MARKS}
+                  valueLabelDisplay="auto"
+                  onChange={(_event, value) =>
+                    setZoomPercent(
+                      clampAppZoomPercent(
+                        Array.isArray(value) ? value[0] : value,
+                      ),
+                    )
+                  }
+                />
+              </Grid2>
+
+              <Grid2 size={{ xs: 12, md: 4 }}>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    textAlign: "center",
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    الحجم الحالي
+                  </Typography>
+                  <Typography
+                    variant="h4"
+                    sx={{ fontWeight: 700, color: "primary.main" }}
+                  >
+                    {zoomPercent}%
+                  </Typography>
+                </Paper>
+              </Grid2>
+
+              <Grid2 size={12}>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={2}
+                  justifyContent="flex-end"
+                >
+                  <LoadingButton
+                    variant="outlined"
+                    startIcon={<ResetIcon />}
+                    loading={zoomLoading}
+                    disabled={zoomLoading || zoomPercent === 100}
+                    onClick={resetAppZoom}
+                    sx={{
+                      borderRadius: 2,
+                      px: 3,
+                      py: 1.25,
+                      textTransform: "none",
+                      fontWeight: 600,
+                    }}
+                  >
+                    إعادة الحجم الافتراضي
+                  </LoadingButton>
+                  <LoadingButton
+                    variant="contained"
+                    startIcon={<ZoomIcon />}
+                    loading={zoomLoading}
+                    onClick={() => void saveAppZoom()}
+                    sx={{
+                      borderRadius: 2,
+                      px: 3,
+                      py: 1.25,
+                      textTransform: "none",
+                      fontWeight: 600,
+                    }}
+                  >
+                    تطبيق الحجم
+                  </LoadingButton>
+                </Stack>
               </Grid2>
             </Grid2>
           </Paper>
