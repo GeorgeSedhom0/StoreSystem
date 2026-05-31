@@ -746,16 +746,17 @@ def get_products_as_admin(current_user: dict = Depends(get_current_user)):
                     rp.product_id,
                     rp.store_id,
                     sd.name AS store_name,
-                    rp.amount
+                    SUM(rp.amount) AS amount
                 FROM reserved_products rp
                 JOIN store_data sd ON rp.store_id = sd.id
+                GROUP BY rp.product_id, rp.store_id, sd.name
                 """
             )
 
             reserved_products_raw = cur.fetchall()
 
             # Create a structure where reserved_products is {product_id: {store_key: amount}}
-            reserved_products = {}
+            reserved_products: dict[int, dict[str, Any]] = {}
             for record in reserved_products_raw:
                 product_id = record["product_id"]
                 store_id = record["store_id"]
@@ -1722,14 +1723,21 @@ def _add_bill_internal(
                 )
 
             if move_type == "reserve":
+                reservation_amounts: dict[int, int] = {}
+                for product_flow in bill.products_flow:
+                    reservation_amounts[product_flow.id] = (
+                        reservation_amounts.get(product_flow.id, 0)
+                        + product_flow.quantity
+                    )
+
                 cur.executemany(
                     """
-                    INSERT INTO reserved_products (product_id, amount, store_id)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO reserved_products (product_id, amount, store_id, bill_id)
+                    VALUES (%s, %s, %s, %s)
                     """,
                     [
-                        (product_flow.id, product_flow.quantity, store_id)
-                        for product_flow in bill.products_flow
+                        (product_id, amount, store_id, bill_id)
+                        for product_id, amount in reservation_amounts.items()
                     ],
                 )
 
@@ -2268,10 +2276,11 @@ def end_reservation(
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                SELECT product_id, amount
+                SELECT product_id, SUM(ABS(amount)) AS amount
                 FROM products_flow
                 WHERE bill_id = %s
                 AND store_id = %s
+                GROUP BY product_id
                 """,
                 (bill_id, store_id),
             )
@@ -2287,23 +2296,49 @@ def end_reservation(
                 (bill_id, store_id),
             )
 
-            cur.executemany(
+            cur.execute(
                 """
                 DELETE FROM reserved_products
-                WHERE id IN (
-                    SELECT id
-                    FROM reserved_products
-                    WHERE product_id = %s
-                    AND amount = %s
-                    AND store_id = %s
-                    LIMIT 1
-                )
+                WHERE store_id = %s
+                AND bill_id = %s
+                RETURNING product_id, amount
                 """,
-                [
-                    (product["product_id"], product["amount"] * -1, store_id)
-                    for product in products
-                ],
+                (store_id, bill_id),
             )
+            deleted_products = cur.fetchall()
+
+            deleted_amounts: dict[int, int] = {}
+            for product in deleted_products:
+                deleted_amounts[product["product_id"]] = (
+                    deleted_amounts.get(product["product_id"], 0) + product["amount"]
+                )
+
+            legacy_rows_to_delete = [
+                (
+                    product["product_id"],
+                    product["amount"] - deleted_amounts.get(product["product_id"], 0),
+                    store_id,
+                )
+                for product in products
+                if product["amount"] > deleted_amounts.get(product["product_id"], 0)
+            ]
+
+            if legacy_rows_to_delete:
+                cur.executemany(
+                    """
+                    DELETE FROM reserved_products
+                    WHERE id IN (
+                        SELECT id
+                        FROM reserved_products
+                        WHERE product_id = %s
+                        AND amount = %s
+                        AND store_id = %s
+                        AND bill_id IS NULL
+                        LIMIT 1
+                    )
+                    """,
+                    legacy_rows_to_delete,
+                )
 
             return {"message": "Reservation ended successfully"}
     except Exception as e:

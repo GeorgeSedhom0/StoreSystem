@@ -189,9 +189,10 @@ def create_all_tables(cur):
     CREATE TABLE reserved_products (
         id BIGSERIAL PRIMARY KEY,
         store_id BIGINT REFERENCES store_data(id),
+        bill_id BIGINT,
         product_id BIGINT,
         amount INT,
-        UNIQUE(store_id, product_id),
+        UNIQUE(store_id, bill_id, product_id),
         FOREIGN KEY (product_id, store_id) REFERENCES product_inventory(product_id, store_id)
     )
     """)
@@ -229,6 +230,23 @@ def create_all_tables(cur):
       party_id BIGINT REFERENCES assosiated_parties(id),
       PRIMARY KEY (id, store_id)
     )
+    """)
+
+    cur.execute("""
+    ALTER TABLE reserved_products
+    ADD CONSTRAINT fk_reserved_products_bill_store
+    FOREIGN KEY (bill_id, store_id) REFERENCES bills(id, store_id)
+    ON DELETE CASCADE
+    """)
+
+    cur.execute("""
+    CREATE INDEX IF NOT EXISTS idx_reserved_products_store_product
+    ON reserved_products (store_id, product_id)
+    """)
+
+    cur.execute("""
+    CREATE INDEX IF NOT EXISTS idx_reserved_products_store_bill
+    ON reserved_products (store_id, bill_id)
     """)
 
     cur.execute("""INSERT INTO bills (id, store_id) VALUES (-1, 0)""")

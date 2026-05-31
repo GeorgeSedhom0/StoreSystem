@@ -367,9 +367,10 @@ def insert_new_data(old_data):
                 # Insert reserved products
                 print("Inserting reserved products...")
                 for rp in reserved_products:
+                    bill_id = rp[4] if len(rp) > 4 else None
                     cur.execute(
-                        "INSERT INTO reserved_products (id, store_id, product_id, amount) VALUES (%s, %s, %s, %s)",
-                        (rp[0], 1, rp[1], rp[2]),
+                        "INSERT INTO reserved_products (id, store_id, product_id, amount, bill_id) VALUES (%s, %s, %s, %s, %s)",
+                        (rp[0], 1, rp[1], rp[2], bill_id),
                     )
 
                 # Insert installments
