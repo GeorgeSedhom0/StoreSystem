@@ -9,6 +9,7 @@ import Users from "./Components/Users";
 import Themes from "./Components/Themes";
 import PrinterSettings from "./Components/PrinterSettings";
 import Telegram from "./Components/Telegram";
+import PaymentMethods from "./Components/PaymentMethods";
 import {
   Settings as SettingsIcon,
   People as PeopleIcon,
@@ -17,6 +18,7 @@ import {
   Palette as PaletteIcon,
   Print as PrintIcon,
   Telegram as TelegramIcon,
+  Payments as PaymentsIcon,
 } from "@mui/icons-material";
 
 const Settings = () => {
@@ -150,6 +152,12 @@ const Settings = () => {
             label="تليجرام"
             value="7"
           />
+          <Tab
+            icon={<PaymentsIcon />}
+            iconPosition="start"
+            label="طرق الدفع"
+            value="8"
+          />
         </TabList>
 
         <Divider sx={{ opacity: 0.3 }} />
@@ -175,6 +183,9 @@ const Settings = () => {
           </TabPanel>
           <TabPanel value="7" sx={{ p: 0 }}>
             <Telegram />
+          </TabPanel>
+          <TabPanel value="8" sx={{ p: 0 }}>
+            <PaymentMethods />
           </TabPanel>
         </Box>
       </TabContext>

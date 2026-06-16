@@ -142,9 +142,15 @@ const Layout = ({
             >
               {profile &&
                 profile.user.pages
-                  .filter((page) => page !== "admin" && page !== "الإشعارات")
-                  .map((page, index) => (
-                    <NavLink key={index} to={profile.user.paths[index]}>
+                  .map((page, index) => ({
+                    page,
+                    path: profile.user.paths[index],
+                  }))
+                  .filter(
+                    ({ page }) => page !== "admin" && page !== "الإشعارات",
+                  )
+                  .map(({ page, path }) => (
+                    <NavLink key={path} to={path}>
                       <Button>{page}</Button>
                     </NavLink>
                   ))}

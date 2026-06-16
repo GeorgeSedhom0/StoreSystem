@@ -306,6 +306,73 @@ def income_analytics(
                 for row in daily_cashflow
             ]
 
+            # --- Payment method composition of sales revenue (sell/return) ---
+            # Totals + bill counts per method (return amounts subtract).
+            cursor.execute(
+                """
+                SELECT
+                    elem->>'name' AS method,
+                    COALESCE(SUM((elem->>'amount')::numeric
+                        * CASE WHEN b.type = 'return' THEN -1 ELSE 1 END), 0) AS total,
+                    COUNT(DISTINCT b.id) AS bills_count
+                FROM bills b
+                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+                CROSS JOIN LATERAL jsonb_array_elements(b.payments) elem
+                WHERE b.store_id = %s AND b.time > %s AND b.time <= %s
+                  AND b.type IN ('sell', 'return') AND b.payments IS NOT NULL
+                  AND (b.party_id IS NULL OR ap.type != 'store')
+                GROUP BY method
+                ORDER BY total DESC
+                """,
+                (store_id, start_date, end_date),
+            )
+            pm_breakdown = [
+                {
+                    "method": r["method"] or "غير معروف",
+                    "total": float(r["total"] or 0),
+                    "bills_count": int(r["bills_count"] or 0),
+                }
+                for r in cursor.fetchall()
+            ]
+
+            # Daily per-method totals, for a payment-mix trend over time.
+            cursor.execute(
+                """
+                SELECT DATE_TRUNC('day', b.time)::date AS day,
+                       elem->>'name' AS method,
+                       COALESCE(SUM((elem->>'amount')::numeric
+                           * CASE WHEN b.type = 'return' THEN -1 ELSE 1 END), 0) AS total
+                FROM bills b
+                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+                CROSS JOIN LATERAL jsonb_array_elements(b.payments) elem
+                WHERE b.store_id = %s AND b.time > %s AND b.time <= %s
+                  AND b.type IN ('sell', 'return') AND b.payments IS NOT NULL
+                  AND (b.party_id IS NULL OR ap.type != 'store')
+                GROUP BY day, method
+                ORDER BY day
+                """,
+                (store_id, start_date, end_date),
+            )
+            trend_rows = cursor.fetchall()
+
+            # Pivot trend rows into echarts-friendly { dates, series }
+            days_sorted = sorted({r["day"] for r in trend_rows})
+            methods_list = [m["method"] for m in pm_breakdown]
+            for r in trend_rows:
+                if r["method"] not in methods_list:
+                    methods_list.append(r["method"] or "غير معروف")
+            day_index = {d: i for i, d in enumerate(days_sorted)}
+            series_map = {m: [0.0] * len(days_sorted) for m in methods_list}
+            for r in trend_rows:
+                m = r["method"] or "غير معروف"
+                series_map[m][day_index[r["day"]]] = float(r["total"] or 0)
+            pm_trend = {
+                "dates": [d.strftime("%Y-%m-%d") for d in days_sorted],
+                "series": [
+                    {"name": m, "data": series_map[m]} for m in methods_list
+                ],
+            }
+
             return {
                 "cash_in": float(cash_summary["cash_in"] or 0),
                 "cash_out": float(cash_summary["cash_out"] or 0),
@@ -314,6 +381,8 @@ def income_analytics(
                 "profit": float(total_profit),
                 "daily_cashflow": cashflow_data,
                 "daily_profit": daily_profit_data,
+                "payment_method_breakdown": pm_breakdown,
+                "payment_method_trend": pm_trend,
             }
 
     except Exception as e:

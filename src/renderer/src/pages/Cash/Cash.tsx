@@ -45,6 +45,8 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { useParams } from "react-router-dom";
 import FormatedNumber from "../Shared/FormatedNumber";
 import useParties from "../Shared/hooks/useParties";
+import usePaymentMethods from "../Shared/hooks/usePaymentMethods";
+import useAccounts from "../Shared/hooks/useAccounts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { exportToExcel } from "../Analytics/utils";
 import { buildCashFlowReportHtml, exportPdfDocument } from "../utils/a4Reports";
@@ -71,6 +73,7 @@ const Cash = () => {
   const [amount, setAmount] = useState(0);
   const [moveType, setMoveType] = useState<"in" | "out">("in");
   const [description, setDescription] = useState("");
+  const [accountId, setAccountId] = useState<number | "">("");
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
@@ -126,6 +129,9 @@ const Cash = () => {
   });
 
   const { parties, addPartyMutationAsync } = useParties(setMsg);
+  const { paymentMethods } = usePaymentMethods();
+  const { accounts: accountBalances, total: accountsTotal } =
+    useAccounts(storeId);
 
   const {
     data: rawCashFlow,
@@ -236,7 +242,15 @@ const Cash = () => {
 
   const handleExportToExcel = () => {
     const exportData = [
-      ["الوقت", "المبلغ", "نوع الحركة", "الوصف", "المجموع", "الطرف الثاني"],
+      [
+        "الوقت",
+        "المبلغ",
+        "نوع الحركة",
+        "الوصف",
+        "المجموع",
+        "الطرف الثاني",
+        "الحساب",
+      ],
       ...filteredAndSortedCashFlow.map((item) => [
         new Date(item.time).toLocaleString("ar-EG"),
         item.amount,
@@ -244,6 +258,13 @@ const Cash = () => {
         item.description,
         item.total,
         item.party_name || "بدون طرف ثاني",
+        (item.accounts || [])
+          .map((acc) =>
+            (item.accounts || []).length > 1
+              ? `${acc.name}: ${Math.abs(acc.amount)}`
+              : acc.name,
+          )
+          .join("، "),
       ]),
     ];
     exportToExcel(exportData);
@@ -359,6 +380,7 @@ const Cash = () => {
             store_id: storeId,
             party_id: newPartyId,
             time: new Date().toLocaleString(),
+            payment_method_id: accountId === "" ? null : accountId,
           },
         },
       );
@@ -367,6 +389,7 @@ const Cash = () => {
       setDescription("");
       setMoveType("in");
       setSelectedPartyId(null);
+      setAccountId("");
       setMsg({ type: "success", text: "تمت إضافة سجل التدفق النقدي بنجاح" });
     } catch (error) {
       setMsg({ type: "error", text: "لم تتم الإضافة بنجاح" });
@@ -463,6 +486,47 @@ const Cash = () => {
           </Card>
         </Grid2>
 
+        {/* Account balances strip */}
+        {accountBalances.length > 0 && (
+          <Grid2 size={12}>
+            <Card elevation={3} sx={{ p: 3 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  mb: 2,
+                }}
+              >
+                <Typography
+                  variant="h6"
+                  sx={{ color: "primary.main", fontWeight: 600 }}
+                >
+                  أرصدة الحسابات
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  الإجمالي: <FormatedNumber>{accountsTotal}</FormatedNumber> جنيه
+                </Typography>
+              </Box>
+              <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+                {accountBalances.map((account) => (
+                  <Chip
+                    key={account.id}
+                    color={account.balance >= 0 ? "success" : "error"}
+                    variant="outlined"
+                    sx={{ fontWeight: 600, fontSize: "0.95rem", py: 2 }}
+                    label={
+                      <span>
+                        {account.name}: <FormatedNumber>{account.balance}</FormatedNumber> جنيه
+                      </span>
+                    }
+                  />
+                ))}
+              </Box>
+            </Card>
+          </Grid2>
+        )}
+
         {/* Add Cash Flow Form */}
         <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 3 }}>
@@ -502,6 +566,28 @@ const Cash = () => {
                     >
                       <MenuItem value="in">دخول</MenuItem>
                       <MenuItem value="out">خروج</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl>
+                    <InputLabel>الحساب</InputLabel>
+                    <Select
+                      label="الحساب"
+                      value={accountId}
+                      onChange={(e) =>
+                        setAccountId(
+                          e.target.value === "" ? "" : Number(e.target.value),
+                        )
+                      }
+                      sx={{ minWidth: 140 }}
+                    >
+                      <MenuItem value="">
+                        <em>نقدي (افتراضي)</em>
+                      </MenuItem>
+                      {paymentMethods.map((m) => (
+                        <MenuItem key={m.id} value={m.id}>
+                          {m.name}
+                        </MenuItem>
+                      ))}
                     </Select>
                   </FormControl>
                   <TextField
@@ -789,6 +875,7 @@ const Cash = () => {
                         الطرف الثاني
                       </TableSortLabel>
                     </TableCell>
+                    <TableCell>الحساب</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -821,6 +908,28 @@ const Cash = () => {
                         </TableCell>
                         <TableCell>
                           {row.party_name ? row.party_name : "بدون طرف ثاني"}
+                        </TableCell>
+                        <TableCell>
+                          {row.accounts && row.accounts.length > 0 ? (
+                            <Box
+                              sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}
+                            >
+                              {row.accounts.map((acc, i) => (
+                                <Chip
+                                  key={i}
+                                  size="small"
+                                  variant="outlined"
+                                  label={
+                                    row.accounts!.length > 1
+                                      ? `${acc.name}: ${Math.abs(acc.amount)}`
+                                      : acc.name
+                                  }
+                                />
+                              ))}
+                            </Box>
+                          ) : (
+                            "-"
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

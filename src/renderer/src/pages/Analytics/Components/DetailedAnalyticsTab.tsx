@@ -79,6 +79,11 @@ interface DetailedAnalyticsResponse {
       category: string;
     }>;
   };
+  payment_method_breakdown: Array<{
+    method: string;
+    total: number;
+    bills_count: number;
+  }>;
   cash_flow_daily: Series3; // [date, cash_in, cash_out]
   inventory_net_value_3m: [string, number][]; // [date, net_value]
   inventory_net_value_by_shift: [string, number][]; // [datetime, net_value] - shift end times
@@ -157,6 +162,7 @@ const DetailedAnalyticsTab = () => {
         },
         all_clients: [],
       },
+      payment_method_breakdown: [],
       cash_flow_daily: [],
       inventory_net_value_3m: [],
       inventory_net_value_by_shift: [],
@@ -363,6 +369,57 @@ const DetailedAnalyticsTab = () => {
     }),
     [data.clients.categories],
   );
+
+  const paymentMethodPie: echarts.EChartsOption = useMemo(
+    () => ({
+      tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
+      legend: {},
+      toolbox: { feature: { saveAsImage: {} }, show: true },
+      series: [
+        {
+          name: "المبيعات حسب طريقة الدفع",
+          type: "pie",
+          radius: ["40%", "70%"],
+          avoidLabelOverlap: true,
+          data: (data.payment_method_breakdown || [])
+            .filter((m) => m.total > 0)
+            .map((m) => ({ value: Number(m.total.toFixed(2)), name: m.method })),
+        },
+      ],
+    }),
+    [data.payment_method_breakdown],
+  );
+
+  const paymentMethodAvgTicket: echarts.EChartsOption = useMemo(() => {
+    const rows = (data.payment_method_breakdown || []).filter(
+      (m) => m.bills_count > 0,
+    );
+    return {
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        valueFormatter: (v) => formatCurrency(Number(v)),
+      },
+      toolbox: { feature: { saveAsImage: {} }, show: true },
+      grid: { left: 90 },
+      xAxis: { type: "value" },
+      yAxis: { type: "category", data: rows.map((m) => m.method) },
+      series: [
+        {
+          name: "متوسط قيمة الفاتورة",
+          type: "bar",
+          data: rows.map((m) =>
+            Number((m.total / Math.max(m.bills_count, 1)).toFixed(2)),
+          ),
+          label: {
+            show: true,
+            position: "right",
+            formatter: (p: any) => formatCurrency(Number(p.value)),
+          },
+        },
+      ],
+    };
+  }, [data.payment_method_breakdown]);
 
   const clientCountsBar: echarts.EChartsOption = useMemo(
     () => ({
@@ -714,6 +771,96 @@ const DetailedAnalyticsTab = () => {
           />
         </Card>
       </Grid2>
+
+      {/* Payment method breakdown */}
+      {data.payment_method_breakdown &&
+        data.payment_method_breakdown.length > 0 &&
+        (() => {
+          const paymentTotal = data.payment_method_breakdown.reduce(
+            (acc, m) => acc + m.total,
+            0,
+          );
+          return (
+            <>
+              <Grid2 size={12}>
+                <Typography variant="h6" sx={{ mt: 1 }}>
+                  تحليل طرق الدفع
+                </Typography>
+              </Grid2>
+
+              <Grid2 container size={12} spacing={2}>
+                <Grid2 size={5}>
+                  <Card elevation={3} sx={{ p: 2, height: 420 }}>
+                    <Typography variant="h6" gutterBottom>
+                      المبيعات حسب طريقة الدفع
+                    </Typography>
+                    <EChartsReact
+                      option={paymentMethodPie}
+                      style={{ height: 360 }}
+                      theme={mode}
+                      notMerge
+                    />
+                  </Card>
+                </Grid2>
+                <Grid2 size={7}>
+                  <Card elevation={3} sx={{ p: 2, height: 420 }}>
+                    <Typography variant="h6" gutterBottom>
+                      متوسط قيمة الفاتورة حسب طريقة الدفع
+                    </Typography>
+                    <EChartsReact
+                      option={paymentMethodAvgTicket}
+                      style={{ height: 360 }}
+                      theme={mode}
+                      notMerge
+                    />
+                  </Card>
+                </Grid2>
+              </Grid2>
+
+              <Grid2 size={12}>
+                <Card elevation={3} sx={{ p: 2, mb: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    تفاصيل طرق الدفع
+                  </Typography>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>طريقة الدفع</TableCell>
+                          <TableCell align="right">الإجمالي</TableCell>
+                          <TableCell align="right">النسبة</TableCell>
+                          <TableCell align="right">عدد الفواتير</TableCell>
+                          <TableCell align="right">متوسط الفاتورة</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {data.payment_method_breakdown.map((m) => (
+                          <TableRow key={m.method} hover>
+                            <TableCell>{m.method}</TableCell>
+                            <TableCell align="right">
+                              {formatCurrency(m.total)}
+                            </TableCell>
+                            <TableCell align="right">
+                              {paymentTotal > 0
+                                ? `${Math.round((m.total / paymentTotal) * 100)}%`
+                                : "-"}
+                            </TableCell>
+                            <TableCell align="right">{m.bills_count}</TableCell>
+                            <TableCell align="right">
+                              {m.bills_count > 0
+                                ? formatCurrency(m.total / m.bills_count)
+                                : "-"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Card>
+              </Grid2>
+            </>
+          );
+        })()}
 
       {/* Cash flow daily */}
       <Grid2 size={12}>

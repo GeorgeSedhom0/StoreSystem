@@ -448,6 +448,43 @@ async def get_detailed_analytics(
             "all_clients": all_clients,
         }
 
+    def fetch_payment_method_breakdown() -> List[Dict]:
+        """
+        Aggregate sell/return bill amounts per payment method in the period.
+        Return amounts subtract (money out). Store-internal parties are excluded.
+        """
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT
+                    elem->>'name' AS method,
+                    COALESCE(SUM(
+                        (elem->>'amount')::numeric
+                        * CASE WHEN b.type = 'return' THEN -1 ELSE 1 END
+                    ), 0) AS total,
+                    COUNT(DISTINCT b.id) AS bills_count
+                FROM bills b
+                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+                CROSS JOIN LATERAL jsonb_array_elements(b.payments) elem
+                WHERE b.store_id = %s
+                  AND b.time >= %s AND b.time < %s
+                  AND b.type IN ('sell', 'return')
+                  AND b.payments IS NOT NULL
+                  AND (b.party_id IS NULL OR ap.type != 'store')
+                GROUP BY elem->>'name'
+                ORDER BY total DESC
+                """,
+                (store_id, start_dt, end_dt_next),
+            )
+            return [
+                {
+                    "method": r["method"] or "غير معروف",
+                    "total": float(r["total"] or 0),
+                    "bills_count": int(r["bills_count"] or 0),
+                }
+                for r in cur.fetchall()
+            ]
+
     def fetch_cashflow_in_vs_out() -> List[List]:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
@@ -700,6 +737,7 @@ async def get_detailed_analytics(
         compute_fifo_once_and_aggregate()
     )
     clients = fetch_clients_analytics()
+    payment_method_breakdown = fetch_payment_method_breakdown()
     cash_flow_daily = fetch_cashflow_in_vs_out()
     cash_in_series = fetch_cash_in_series_only()
     non_bill_cash = fetch_non_bill_cash_totals()
@@ -726,6 +764,7 @@ async def get_detailed_analytics(
         },
         "top_products": top_products,
         "clients": clients,
+        "payment_method_breakdown": payment_method_breakdown,
         "cash_flow_daily": cash_flow_daily,
         "inventory_net_value_3m": inventory_net_value_3m,
         "inventory_net_value_by_shift": inventory_net_value_by_shift,

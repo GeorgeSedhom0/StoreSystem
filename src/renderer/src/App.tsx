@@ -31,6 +31,7 @@ import PartiesBills from "./pages/PartiesBills/PartiesBills";
 import AdminSell from "./pages/AdminSell/AdminSell";
 import Notifications from "./pages/Notifications/Notifications";
 import Setup from "./pages/Setup/Setup";
+import Accounts from "./pages/Accounts/Accounts";
 
 axios.defaults.withCredentials = true;
 
@@ -237,6 +238,7 @@ const App = () => {
                   <Route path="/cash" element={<Cash />} />
                   <Route path="/cash/:partyId" element={<Cash />} />
                   <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/accounts" element={<Accounts />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/installments" element={<Installments />} />
                   <Route path="/employees" element={<Employee />} />

@@ -765,6 +765,58 @@ const BillView = forwardRef(
                 ? renderReserveSection()
                 : renderDefaultTotals()}
 
+          {bill.payments && bill.payments.length > 1 && (
+            <div style={{ width: "100%", marginTop: "0.5rem" }}>
+              <h6
+                style={{
+                  textAlign: "center",
+                  fontSize: "1rem",
+                  margin: "0.15rem 0 0.35rem",
+                }}
+              >
+                طرق الدفع
+              </h6>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  tableLayout: "fixed",
+                }}
+              >
+                <tbody>
+                  {bill.payments.map((p, i) => (
+                    <tr
+                      key={i}
+                      style={{
+                        backgroundColor:
+                          i % 2 === 0 ? "white" : "rgba(0, 0, 0, 0.20)",
+                      }}
+                    >
+                      <td
+                        style={{
+                          fontSize: "1.2em",
+                          textAlign: "center",
+                          padding: "6px",
+                        }}
+                      >
+                        {p.name}
+                      </td>
+                      <td
+                        style={{
+                          fontSize: "1.2em",
+                          textAlign: "center",
+                          padding: "6px",
+                        }}
+                      >
+                        {p.amount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {footerMessage && (
             <div style={{ width: "100%" }}>
               <h5

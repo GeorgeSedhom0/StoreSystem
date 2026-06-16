@@ -28,6 +28,11 @@ import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
 import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import useParties from "../Shared/hooks/useParties";
+import usePaymentMethods from "../Shared/hooks/usePaymentMethods";
+import PaymentSplit, {
+  buildPayments,
+  PaymentLineState,
+} from "../Shared/PaymentSplit";
 import useProducts from "../Shared/hooks/useProducts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
@@ -80,6 +85,8 @@ const Buy = () => {
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
 
   const { parties, addPartyMutationAsync } = useParties(setMsg);
+  const { paymentMethods } = usePaymentMethods();
+  const [paymentLines, setPaymentLines] = useState<PaymentLineState[]>([]);
 
   const { storeId } = useContext(StoreContext);
 
@@ -187,15 +194,18 @@ const Buy = () => {
       }
 
       try {
+        const billTotal =
+          shoppingCart.reduce(
+            (acc, item) => acc + item.wholesale_price * item.quantity,
+            0,
+          ) - discount;
+
         const bill = {
           time: new Date().toLocaleString(),
           discount,
-          total:
-            shoppingCart.reduce(
-              (acc, item) => acc + item.wholesale_price * item.quantity,
-              0,
-            ) - discount,
+          total: billTotal,
           products_flow: shoppingCart,
+          payments: buildPayments(billTotal, paymentMethods, paymentLines),
         };
 
         let newPartyId = partyId;
@@ -226,6 +236,7 @@ const Buy = () => {
         setDiscount(0);
         setMoveType("buy");
         setPartyId(null);
+        setPaymentLines([]);
         setMsg({
           type: "success",
           text: "تم اضافة الفاتورة بنجاح",
@@ -250,6 +261,8 @@ const Buy = () => {
       storeId,
       moveType,
       isSubmitting,
+      paymentMethods,
+      paymentLines,
     ],
   );
 
@@ -320,6 +333,23 @@ const Buy = () => {
                 <Typography variant="body1" align="center"></Typography>
               </Grid2>
             </Grid2>
+
+            {paymentMethods.length > 0 && (
+              <Grid2 size={12}>
+                <PaymentSplit
+                  total={
+                    shoppingCart.reduce(
+                      (acc, item) =>
+                        acc + item.wholesale_price * item.quantity,
+                      0,
+                    ) - discount
+                  }
+                  methods={paymentMethods}
+                  lines={paymentLines}
+                  setLines={setPaymentLines}
+                />
+              </Grid2>
+            )}
 
             <Grid2 size={12}>
               <ProductAutocomplete

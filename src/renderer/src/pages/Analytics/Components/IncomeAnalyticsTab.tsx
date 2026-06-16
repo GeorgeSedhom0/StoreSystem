@@ -18,13 +18,23 @@ import axios from "axios";
 import EChartsReact from "echarts-for-react";
 import { useTheme } from "@mui/material";
 import AnalyticsCard from "../../Shared/AnalyticsCard";
+import usePaymentMethods from "../../Shared/hooks/usePaymentMethods";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
+import PaymentsIcon from "@mui/icons-material/Payments";
+import CreditCardIcon from "@mui/icons-material/CreditCard";
+import PercentIcon from "@mui/icons-material/Percent";
 import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
+
+interface PaymentMethodStat {
+  method: string;
+  total: number;
+  bills_count: number;
+}
 
 interface CashFlowData {
   cash_in: number;
@@ -33,6 +43,11 @@ interface CashFlowData {
   profit: number;
   daily_cashflow: [string, number, number, number][];
   daily_profit: [string, number][];
+  payment_method_breakdown: PaymentMethodStat[];
+  payment_method_trend: {
+    dates: string[];
+    series: { name: string; data: number[] }[];
+  };
 }
 
 const getIncomeAnalytics = async (
@@ -64,6 +79,7 @@ const IncomeAnalyticsTab = () => {
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
   const [method, setMethod] = useState<string>("simple");
   const { storeId } = useContext(StoreContext);
+  const { paymentMethods } = usePaymentMethods();
 
   const {
     palette: { mode },
@@ -85,6 +101,8 @@ const IncomeAnalyticsTab = () => {
       profit: 0,
       daily_cashflow: [],
       daily_profit: [],
+      payment_method_breakdown: [],
+      payment_method_trend: { dates: [], series: [] },
     },
   });
 
@@ -197,6 +215,69 @@ const IncomeAnalyticsTab = () => {
     [data.daily_profit],
   );
 
+  // --- Payment method composition (cash vs digital, share, trend) ---
+  const cashName = paymentMethods[0]?.name;
+  const paymentBreakdown = data.payment_method_breakdown ?? [];
+  const paymentTotal = paymentBreakdown.reduce((acc, m) => acc + m.total, 0);
+  const cashTotal = paymentBreakdown
+    .filter((m) => m.method === cashName)
+    .reduce((acc, m) => acc + m.total, 0);
+  const digitalTotal = paymentTotal - cashTotal;
+  const digitalShare =
+    paymentTotal > 0 ? Math.round((digitalTotal / paymentTotal) * 100) : 0;
+
+  const paymentDonut: echarts.EChartsOption = useMemo(
+    () => ({
+      tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
+      legend: { bottom: 0 },
+      toolbox: { feature: { saveAsImage: {} }, show: true },
+      series: [
+        {
+          name: "حسب طريقة الدفع",
+          type: "pie",
+          radius: ["45%", "70%"],
+          avoidLabelOverlap: true,
+          label: { formatter: "{b}\n{d}%" },
+          data: (data.payment_method_breakdown ?? [])
+            .filter((m) => m.total > 0)
+            .map((m) => ({ value: Number(m.total.toFixed(2)), name: m.method })),
+        },
+      ],
+    }),
+    [data.payment_method_breakdown],
+  );
+
+  const paymentTrendOptions: echarts.EChartsOption = useMemo(
+    () => ({
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      legend: { bottom: 0 },
+      toolbox: {
+        feature: {
+          // Toggle absolute stack vs. 100% view via tiling/stack
+          magicType: { type: ["bar", "line"] },
+          saveAsImage: {},
+        },
+        show: true,
+      },
+      grid: { bottom: 60 },
+      xAxis: {
+        type: "category",
+        data: (data.payment_method_trend ?? { dates: [] }).dates,
+      },
+      yAxis: { type: "value" },
+      series: (data.payment_method_trend ?? { series: [] }).series.map((s) => ({
+        name: s.name,
+        type: "bar",
+        stack: "total",
+        emphasis: { focus: "series" },
+        data: s.data,
+      })),
+    }),
+    [data.payment_method_trend],
+  );
+
+  const hasPaymentData = paymentBreakdown.length > 0;
+
   return (
     <Grid2 container spacing={2}>
       <Grid2 size={12}>
@@ -306,7 +387,7 @@ const IncomeAnalyticsTab = () => {
       </Grid2>
 
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2 }}>
+        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
           <Typography variant="h6" gutterBottom>
             الأرباح اليومية
           </Typography>
@@ -318,6 +399,74 @@ const IncomeAnalyticsTab = () => {
           />
         </Card>
       </Grid2>
+
+      {/* Payment methods: how sales revenue is collected */}
+      {hasPaymentData && (
+        <>
+          <Grid2 size={12}>
+            <Typography variant="h6" sx={{ mt: 1 }}>
+              تحصيل المبيعات حسب طريقة الدفع
+            </Typography>
+          </Grid2>
+
+          <Grid2 container size={12} spacing={2}>
+            <Grid2 size={4}>
+              <AnalyticsCard
+                title={`مدفوعات نقدية${cashName ? ` (${cashName})` : ""}`}
+                value={formatCurrency(cashTotal)}
+                color="success.main"
+                loading={isFetching}
+                icon={<PaymentsIcon fontSize="large" color="success" />}
+              />
+            </Grid2>
+            <Grid2 size={4}>
+              <AnalyticsCard
+                title="مدفوعات غير نقدية"
+                value={formatCurrency(digitalTotal)}
+                color="info.main"
+                loading={isFetching}
+                icon={<CreditCardIcon fontSize="large" color="info" />}
+              />
+            </Grid2>
+            <Grid2 size={4}>
+              <AnalyticsCard
+                title="نسبة المدفوعات غير النقدية"
+                value={`${digitalShare}%`}
+                color={digitalShare >= 50 ? "info.main" : "text.primary"}
+                loading={isFetching}
+                icon={<PercentIcon fontSize="large" color="info" />}
+              />
+            </Grid2>
+          </Grid2>
+
+          <Grid2 size={5}>
+            <Card elevation={3} sx={{ p: 2, height: 420 }}>
+              <Typography variant="h6" gutterBottom>
+                توزيع التحصيل حسب طريقة الدفع
+              </Typography>
+              <EChartsReact
+                option={paymentDonut}
+                style={{ height: 360 }}
+                theme={mode}
+                notMerge
+              />
+            </Card>
+          </Grid2>
+          <Grid2 size={7}>
+            <Card elevation={3} sx={{ p: 2, height: 420 }}>
+              <Typography variant="h6" gutterBottom>
+                تطور طرق الدفع عبر الوقت
+              </Typography>
+              <EChartsReact
+                option={paymentTrendOptions}
+                style={{ height: 360 }}
+                theme={mode}
+                notMerge
+              />
+            </Card>
+          </Grid2>
+        </>
+      )}
     </Grid2>
   );
 };

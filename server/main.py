@@ -1,4 +1,5 @@
 from typing import Optional
+import json
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
@@ -28,6 +29,9 @@ from telegram import router as telegram_router
 from detailed_analytics import router as detailed_analytics_router
 from notifications import router as notifications_router
 from batches import router as batches_router
+from payment_methods import router as payment_methods_router
+from payment_methods import get_default_payment_method
+from accounts import router as accounts_router
 from auth_middleware import get_current_user, get_store_info
 from telegram_utils import (
     send_telegram_notification_background,
@@ -63,6 +67,8 @@ app.include_router(telegram_router)
 app.include_router(detailed_analytics_router)
 app.include_router(notifications_router)
 app.include_router(batches_router)
+app.include_router(payment_methods_router)
+app.include_router(accounts_router)
 
 
 telegram_command_worker_task: Optional[asyncio.Task] = None
@@ -194,6 +200,14 @@ class ProductFlow(BaseModel):
         return data
 
 
+class PaymentLine(BaseModel):
+    "A single payment-method portion of a bill"
+
+    method_id: Optional[int] = None
+    name: Optional[str] = None
+    amount: float
+
+
 class Bill(BaseModel):
     "Define the Bill model"
 
@@ -202,6 +216,7 @@ class Bill(BaseModel):
     total: float
     note: Optional[str] = None
     products_flow: list[ProductFlow]
+    payments: Optional[list[PaymentLine]] = None
 
     def dict(self, *args, **kwargs):
         data = super().dict(*args, **kwargs)
@@ -1041,6 +1056,7 @@ def get_bills(
                     bills.total,
                     bills.type,
                     bills.note,
+                    bills.payments,
                     assosiated_parties.name AS party_name,
                     CASE
                         WHEN installments_data.installment_id IS NOT NULL THEN jsonb_build_object(
@@ -1101,7 +1117,7 @@ def get_bills(
                 {" ".join(extra_conditions)}
                 AND bills.store_id = %s
                 GROUP BY bills.id, bills.time, bills.discount,
-                    bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name,
+                    bills.total, bills.type, bills.note, bills.payments, bills.party_id, assosiated_parties.name,
                     installments_data.installment_id, installments_data.paid,
                     installments_data.installments_count, installments_data.installment_interval,
                     installments_data.total_paid, installments_data.flow
@@ -1476,6 +1492,58 @@ def update_bill(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+def _resolve_bill_payments(cur, bill: "Bill", move_type: str, bill_abs_total: float):
+    """
+    Build the payments JSON snapshot for a bill.
+
+    Payment methods apply to 'sell', 'return', 'buy' and 'buy-return' bills (the
+    money actually changing hands). For those, we either use the split sent from
+    the client (snapshotting each method's current name) or fall back to 100% of
+    the default cash method. Returns a JSON string for a ::jsonb insert, or None
+    when payment methods do not apply.
+    """
+    if move_type not in ("sell", "return", "buy", "buy-return"):
+        return None
+
+    lines: list[dict] = []
+
+    if bill.payments:
+        # Snapshot the current name for each referenced method (robust to rename/delete)
+        method_names: dict[int, str] = {}
+        method_ids = [p.method_id for p in bill.payments if p.method_id is not None]
+        if method_ids:
+            cur.execute(
+                "SELECT id, name FROM payment_methods WHERE id = ANY(%s)",
+                (method_ids,),
+            )
+            method_names = {row["id"]: row["name"] for row in cur.fetchall()}
+
+        for p in bill.payments:
+            amount = round(float(p.amount or 0), 2)
+            if amount <= 0:
+                continue
+            name = p.name or method_names.get(p.method_id) or "غير معروف"
+            lines.append(
+                {"method_id": p.method_id, "name": name, "amount": amount}
+            )
+
+    if not lines:
+        # Default: the whole bill on the default cash method
+        default_method = get_default_payment_method(cur)
+        if default_method:
+            lines = [
+                {
+                    "method_id": default_method["id"],
+                    "name": default_method["name"],
+                    "amount": round(bill_abs_total, 2),
+                }
+            ]
+        else:
+            return None
+
+    return json.dumps(lines, ensure_ascii=False)
+
+
 def _add_bill_internal(
     bill: Bill,
     move_type: Literal[
@@ -1598,10 +1666,14 @@ def _add_bill_internal(
                         "user_name": current_user.get("username"),
                     }
 
+            payments_json = _resolve_bill_payments(
+                cur, bill, move_type, abs(bill.total)
+            )
+
             cur.execute(
                 """
-                INSERT INTO bills (store_id, time, discount, total, type, note, party_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO bills (store_id, time, discount, total, type, note, party_id, payments)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
                 RETURNING id
                 """,
                 (
@@ -1612,6 +1684,7 @@ def _add_bill_internal(
                     move_type,
                     bill.note,
                     party_id,
+                    payments_json,
                 ),
             )
             result = cur.fetchone()
@@ -1760,6 +1833,7 @@ def _add_bill_internal(
                     bills.total,
                     bills.type,
                     bills.note,
+                    bills.payments,
                     assosiated_parties.name AS party_name,
                     CASE
                         WHEN installments_data.installment_id IS NOT NULL THEN jsonb_build_object(
@@ -1816,7 +1890,7 @@ def _add_bill_internal(
                     AND bills.store_id = installments_data.store_id
                 WHERE bills.id = %s
                 GROUP BY bills.id, bills.time, bills.discount,
-                    bills.total, bills.type, bills.note, bills.party_id, assosiated_parties.name,
+                    bills.total, bills.type, bills.note, bills.payments, bills.party_id, assosiated_parties.name,
                     installments_data.installment_id, installments_data.paid,
                     installments_data.installments_count, installments_data.installment_interval,
                     installments_data.total_paid, installments_data.flow
@@ -2443,7 +2517,17 @@ def get_cash_flow(
                     cash_flow.type,
                     description,
                     total,
-                    assosiated_parties.name AS party_name
+                    assosiated_parties.name AS party_name,
+                    COALESCE((
+                        SELECT jsonb_agg(
+                            jsonb_build_object('name', pm.name, 'amount', at.amount)
+                            ORDER BY at.id
+                        )
+                        FROM account_transactions at
+                        JOIN payment_methods pm ON pm.id = at.payment_method_id
+                        WHERE at.cash_flow_id = cash_flow.id
+                          AND at.store_id = cash_flow.store_id
+                    ), '[]'::jsonb) AS accounts
                 FROM cash_flow
                 LEFT JOIN assosiated_parties ON cash_flow.party_id = assosiated_parties.id
                 WHERE time >= %s
@@ -2469,6 +2553,7 @@ def add_cash_flow(
     store_id: int,
     party_id: Optional[int] = None,
     time: Optional[str] = None,
+    payment_method_id: Optional[int] = None,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -2490,9 +2575,9 @@ def add_cash_flow(
             cur.execute(
                 """
                 INSERT INTO cash_flow (
-                    store_id, time, amount, type, description, party_id
+                    store_id, time, amount, type, description, party_id, payment_method_id
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     store_id,
@@ -2501,6 +2586,7 @@ def add_cash_flow(
                     move_type,
                     description,
                     party_id,
+                    payment_method_id,
                 ),
             )
 
@@ -2531,6 +2617,36 @@ def add_cash_flow(
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# The latest DB schema version this backend expects (bump with each update_db_N).
+LATEST_DB_VERSION = 19
+
+
+@app.get("/db-version")
+def db_version(current_user: dict = Depends(get_current_user)):
+    """
+    Return the applied database schema version (from db_meta) alongside the
+    latest version this backend expects. `current` is None on databases that
+    predate version tracking (i.e. update_db_18 has not been run).
+    """
+    current_version: Optional[int] = None
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                "SELECT value FROM db_meta WHERE key = 'version' LIMIT 1"
+            )
+            row = cur.fetchone()
+            if row and row["value"] is not None:
+                try:
+                    current_version = int(row["value"])
+                except (TypeError, ValueError):
+                    current_version = None
+    except Exception:
+        # db_meta table does not exist yet on older databases
+        current_version = None
+
+    return {"current": current_version, "latest": LATEST_DB_VERSION}
 
 
 @app.get("/current-shift")
@@ -2620,6 +2736,7 @@ def shift_total(
                     "cash_out": 0,
                     "net_cash_flow": 0,
                     "transaction_count": 0,
+                    "payment_breakdown": [],
                     "shift_start": None,
                 }
 
@@ -2654,6 +2771,34 @@ def shift_total(
                 (shift_start_time, store_id),
             )
             cash_flow_data = cur.fetchall()
+
+            # Get payment-method breakdown for sell/return bills in the shift.
+            # Return amounts count negatively (money out). Store-internal parties excluded.
+            cur.execute(
+                """
+                SELECT
+                    elem->>'name' AS method,
+                    COALESCE(SUM(
+                        (elem->>'amount')::numeric
+                        * CASE WHEN bills.type = 'return' THEN -1 ELSE 1 END
+                    ), 0) AS total
+                FROM bills
+                LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
+                CROSS JOIN LATERAL jsonb_array_elements(bills.payments) elem
+                WHERE bills.time >= %s
+                  AND bills.store_id = %s
+                  AND bills.type IN ('sell', 'return')
+                  AND bills.payments IS NOT NULL
+                  AND (bills.party_id IS NULL OR assosiated_parties.type != 'store')
+                GROUP BY elem->>'name'
+                ORDER BY total DESC
+                """,
+                (shift_start_time, store_id),
+            )
+            payment_breakdown = [
+                {"method": row["method"], "total": float(row["total"] or 0)}
+                for row in cur.fetchall()
+            ]
 
         # Process bill totals
         totals = {
@@ -2691,6 +2836,7 @@ def shift_total(
             "cash_in": cash_in,
             "cash_out": cash_out,
             "net_cash_flow": net_cash_flow,
+            "payment_breakdown": payment_breakdown,
             "shift_start": shift_start_time.isoformat() if shift_start_time else None,
         }
     except Exception as e:

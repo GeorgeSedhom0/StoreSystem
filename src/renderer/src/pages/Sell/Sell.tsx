@@ -1,5 +1,6 @@
 import {
   Autocomplete,
+  Box,
   Button,
   ButtonGroup,
   Card,
@@ -43,6 +44,11 @@ import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import Installments from "./Components/Installments";
 import useParties from "../Shared/hooks/useParties";
+import usePaymentMethods from "../Shared/hooks/usePaymentMethods";
+import PaymentSplit, {
+  buildPayments,
+  PaymentLineState,
+} from "../Shared/PaymentSplit";
 import useProducts from "../Shared/hooks/useProducts";
 import { useShift } from "./hooks/useShifts";
 import useBills from "./hooks/useBills";
@@ -87,12 +93,16 @@ const Sell = () => {
   const [installmentInterval, setInstallmentInterval] = useState<number>(30);
   const [paid, setPaid] = useState<number>(0);
   const [usingThirdParties, setUsingThirdParties] = useState<boolean>(false);
+  const [showPaymentMethods, setShowPaymentMethods] = useState<boolean>(
+    () => localStorage.getItem("showPaymentMethods") === "true",
+  );
   const [highDiscountDialogOpen, setHighDiscountDialogOpen] =
     useState<boolean>(false);
   const [pendingPrintAfterSubmit, setPendingPrintAfterSubmit] =
     useState<boolean>(false);
   const [noteDialogOpen, setNoteDialogOpen] = useState<boolean>(false);
   const [billNote, setBillNote] = useState<string>("");
+  const [paymentLines, setPaymentLines] = useState<PaymentLineState[]>([]);
 
   // Ref for the cart container to enable auto-scroll
   const cartTableRef = useRef<HTMLDivElement>(null);
@@ -113,6 +123,11 @@ const Sell = () => {
 
   const { parties, addPartyMutationAsync, generateClientBarcode } =
     useParties(setMsg);
+
+  const { paymentMethods } = usePaymentMethods(setMsg);
+
+  const usesPaymentMethods =
+    billPayment === "sell" || billPayment === "return";
 
   const selectableParties = parties.filter(
     (party) => !party.extra_info?.store_id,
@@ -216,16 +231,22 @@ const Sell = () => {
   const executeBillSubmission = useCallback(
     async (shouldPrint: boolean = false) => {
       try {
+        const billTotal =
+          shoppingCart.reduce(
+            (acc, item) => acc + item.price * item.quantity,
+            0,
+          ) - discount;
+
         const bill = {
           time: new Date().toLocaleString(),
           discount: discount,
-          total:
-            shoppingCart.reduce(
-              (acc, item) => acc + item.price * item.quantity,
-              0,
-            ) - discount,
+          total: billTotal,
           note: billNote.trim() ? billNote.trim() : null,
           products_flow: shoppingCart,
+          payments:
+            billPayment === "sell" || billPayment === "return"
+              ? buildPayments(billTotal, paymentMethods, paymentLines)
+              : null,
         };
 
         let newPartyId = partyId;
@@ -259,6 +280,7 @@ const Sell = () => {
         setDiscount(0);
         setBillNote("");
         setBillPayment("sell");
+        setPaymentLines([]);
         setPartyId(null);
         setAddingParty(false);
         setNewParty({
@@ -310,6 +332,8 @@ const Sell = () => {
       shoppingCart,
       addPartyMutationAsync,
       createBill,
+      paymentMethods,
+      paymentLines,
     ],
   );
 
@@ -358,6 +382,25 @@ const Sell = () => {
         return;
       }
 
+      // Validate the payment split for sell/return bills
+      if (billPayment === "sell" || billPayment === "return") {
+        const billTotal = cartTotal - discount;
+        const paymentsSum = paymentLines.reduce(
+          (acc, p) => acc + (p.amount || 0),
+          0,
+        );
+        // Only guard when a split has actually been configured
+        if (paymentLines.length > 0 && paymentsSum - billTotal > 0.01) {
+          setMsg({
+            type: "error",
+            text: "مجموع طرق الدفع أكبر من إجمالي الفاتورة",
+          });
+          setIsSubmitting(false);
+          submissionInProgress.current = false;
+          return;
+        }
+      }
+
       // Warn only when DISCOUNT itself pushes a normal sell bill below wholesale cost.
       // If prices are already below cost before discount, do not warn here.
       if (!bypassDiscountCheck && billPayment === "sell") {
@@ -384,7 +427,13 @@ const Sell = () => {
 
       await executeBillSubmission(shouldPrint);
     },
-    [billPayment, isCreatingBill, isSubmitting, executeBillSubmission],
+    [
+      billPayment,
+      isCreatingBill,
+      isSubmitting,
+      executeBillSubmission,
+      paymentLines,
+    ],
   );
 
   // Handle confirmation from high discount dialog
@@ -511,18 +560,32 @@ const Sell = () => {
               <Button variant="contained" onClick={() => setShiftDialog(true)}>
                 الشيفتات
               </Button>
-              <FormControlLabel
-                control={<Switch />}
-                checked={usingThirdParties}
-                onChange={() => {
-                  localStorage.setItem(
-                    "usingThirdParties",
-                    usingThirdParties ? "" : "true",
-                  );
-                  setUsingThirdParties((prev) => !prev);
-                }}
-                label="اظهار العملاء"
-              />
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <FormControlLabel
+                  control={<Switch />}
+                  checked={showPaymentMethods}
+                  onChange={() => {
+                    localStorage.setItem(
+                      "showPaymentMethods",
+                      showPaymentMethods ? "" : "true",
+                    );
+                    setShowPaymentMethods((prev) => !prev);
+                  }}
+                  label="طرق الدفع"
+                />
+                <FormControlLabel
+                  control={<Switch />}
+                  checked={usingThirdParties}
+                  onChange={() => {
+                    localStorage.setItem(
+                      "usingThirdParties",
+                      usingThirdParties ? "" : "true",
+                    );
+                    setUsingThirdParties((prev) => !prev);
+                  }}
+                  label="اظهار العملاء"
+                />
+              </Box>
             </Grid2>
 
             <Grid2 size={2}>
@@ -599,6 +662,23 @@ const Sell = () => {
               </Typography>
               <Typography variant="body1" align="center"></Typography>
             </Grid2>
+            {showPaymentMethods &&
+              usesPaymentMethods &&
+              paymentMethods.length > 0 && (
+              <Grid2 size={12}>
+                <PaymentSplit
+                  total={
+                    shoppingCart.reduce(
+                      (acc, item) => acc + item.price * item.quantity,
+                      0,
+                    ) - discount
+                  }
+                  methods={paymentMethods}
+                  lines={paymentLines}
+                  setLines={setPaymentLines}
+                />
+              </Grid2>
+            )}
             {billPayment === "installment" && (
               <Installments
                 installments={installments}

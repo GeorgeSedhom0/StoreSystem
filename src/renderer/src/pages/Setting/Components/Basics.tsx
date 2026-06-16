@@ -23,6 +23,7 @@ import {
   Notifications as NotificationsIcon,
   ZoomInMap as ZoomIcon,
   RestartAlt as ResetIcon,
+  Storage as StorageIcon,
 } from "@mui/icons-material";
 
 interface ExtraInfo {
@@ -84,6 +85,13 @@ const getStoreData = async (storeId: number) => {
       store_id: storeId,
     },
   });
+  return data;
+};
+
+const getDbVersion = async () => {
+  const { data } = await axios.get<{ current: number | null; latest: number }>(
+    "/db-version",
+  );
   return data;
 };
 
@@ -170,6 +178,11 @@ const Basics = () => {
   const { data: storeInfo } = useQuery({
     queryKey: ["store-data"],
     queryFn: () => getStoreData(storeId),
+  });
+
+  const { data: dbVersion } = useQuery({
+    queryKey: ["db-version"],
+    queryFn: getDbVersion,
   });
 
   const saveAppZoom = useCallback(
@@ -610,6 +623,62 @@ const Basics = () => {
                 </Box>
               </Grid2>
             </Grid2>
+          </Paper>
+        </Grid2>
+
+        {/* System Information Section */}
+        <Grid2 size={12}>
+          <Paper
+            elevation={1}
+            sx={{
+              p: 3,
+              borderRadius: 3,
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+              <StorageIcon sx={{ color: "info.main" }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                معلومات النظام
+              </Typography>
+            </Box>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 1,
+              }}
+            >
+              <Typography variant="body1" color="text.secondary">
+                إصدار قاعدة البيانات
+              </Typography>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 700,
+                  color:
+                    dbVersion && dbVersion.current === dbVersion.latest
+                      ? "success.main"
+                      : "warning.main",
+                }}
+              >
+                {dbVersion
+                  ? dbVersion.current === null
+                    ? `غير معروف (المتوقع ${dbVersion.latest})`
+                    : `${dbVersion.current}`
+                  : "..."}
+              </Typography>
+            </Box>
+            {dbVersion &&
+              dbVersion.current !== null &&
+              dbVersion.current < dbVersion.latest && (
+                <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
+                  ⚠️ يلزم تحديث قاعدة البيانات إلى الإصدار {dbVersion.latest}
+                </Typography>
+              )}
           </Paper>
         </Grid2>
       </Grid2>

@@ -53,6 +53,9 @@ def drop_all_tables(cur):
     cur.execute("DROP TABLE IF EXISTS bills_collections CASCADE")
     cur.execute("DROP TABLE IF EXISTS notifications CASCADE")
     cur.execute("DROP TABLE IF EXISTS product_batches CASCADE")
+    cur.execute("DROP TABLE IF EXISTS payment_methods CASCADE")
+    cur.execute("DROP TABLE IF EXISTS account_transactions CASCADE")
+    cur.execute("DROP TABLE IF EXISTS db_meta CASCADE")
     cur.execute("SET TIME ZONE 'Africa/Cairo'")
     cur.execute(f"ALTER DATABASE {DATABASE} SET timezone TO 'Africa/Cairo';")
 
@@ -72,7 +75,7 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
+    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
     """)
     cur.execute("""
     INSERT INTO scopes (name, pages)
@@ -107,7 +110,8 @@ def create_all_tables(cur):
     ('ادارة الاقساط', '/installments'),
     ('الموظفين', '/employees'),
     ('الإشعارات', '/notifications'),
-    ('admin', '/admin')
+    ('admin', '/admin'),
+    ('الحسابات', '/accounts')
     """)
 
     # Create the users table
@@ -217,6 +221,45 @@ def create_all_tables(cur):
         WHERE bar_code IS NOT NULL
     """)
 
+    # Create the store owner party (used for account deposits / payouts)
+    cur.execute("""
+    INSERT INTO assosiated_parties (name, phone, address, type, extra_info)
+    VALUES ('صاحب المحل', '', '', 'owner', '{}')
+    """)
+
+    # Create the db_meta table (schema version + misc metadata)
+    cur.execute("""
+    CREATE TABLE db_meta (
+        key VARCHAR PRIMARY KEY,
+        value VARCHAR
+    )
+    """)
+    cur.execute("""
+    INSERT INTO db_meta (key, value) VALUES ('version', '19')
+    """)
+
+    # Create the payment_methods table (dynamic, user-managed payment methods)
+    cur.execute("""
+    CREATE TABLE payment_methods (
+        id BIGSERIAL PRIMARY KEY,
+        name VARCHAR NOT NULL,
+        is_default BOOLEAN DEFAULT FALSE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+    )
+    """)
+    # Unique name only among active methods so a deleted name can be reused
+    cur.execute("""
+        CREATE UNIQUE INDEX idx_payment_methods_unique_active_name
+        ON payment_methods (name)
+        WHERE is_deleted = FALSE
+    """)
+    # Seed the default cash method
+    cur.execute("""
+    INSERT INTO payment_methods (name, is_default, is_deleted)
+    VALUES ('نقدي', TRUE, FALSE)
+    """)
+
     # Create the bills table
     cur.execute("""
     CREATE TABLE bills (
@@ -228,6 +271,7 @@ def create_all_tables(cur):
       type VARCHAR, -- 'sell' or 'buy' or 'return' or 'BNPL' or 'reserve' or 'installment'
       note TEXT,
       party_id BIGINT REFERENCES assosiated_parties(id),
+      payments JSONB, -- per-method payment split: [{"method_id", "name", "amount"}]
       PRIMARY KEY (id, store_id)
     )
     """)
@@ -309,9 +353,35 @@ def create_all_tables(cur):
       description VARCHAR,
       total FLOAT,
       party_id BIGINT,
+      payment_method_id BIGINT REFERENCES payment_methods(id),
       PRIMARY KEY (id, store_id),
       FOREIGN KEY (store_id, bill_id) REFERENCES bills(store_id, id)
     )
+    """)
+
+    # Create the account_transactions table (per-payment-method ledger,
+    # a mirror of cash_flow; balance per account = SUM(amount))
+    cur.execute("""
+    CREATE TABLE account_transactions (
+        id BIGSERIAL PRIMARY KEY,
+        store_id BIGINT NOT NULL,
+        payment_method_id BIGINT NOT NULL REFERENCES payment_methods(id),
+        cash_flow_id BIGINT,
+        amount FLOAT NOT NULL,
+        source VARCHAR,
+        time TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        FOREIGN KEY (store_id, cash_flow_id)
+            REFERENCES cash_flow(store_id, id) ON DELETE CASCADE
+    )
+    """)
+    cur.execute("""
+        CREATE INDEX idx_account_transactions_method
+        ON account_transactions (store_id, payment_method_id)
+    """)
+    cur.execute("""
+        CREATE INDEX idx_account_transactions_cashflow
+        ON account_transactions (store_id, cash_flow_id)
     """)
 
     # Create Installments table
@@ -1078,6 +1148,87 @@ def create_all_triggers(cur):
     BEFORE UPDATE ON notifications
     FOR EACH ROW
     EXECUTE FUNCTION update_notification_timestamp();
+    """)
+
+    # Mirror every cash_flow movement into per-account ledger rows so each
+    # payment method has a balance and SUM(accounts) == store cash total.
+    cur.execute("""
+    CREATE OR REPLACE FUNCTION mirror_cash_flow_to_accounts()
+    RETURNS TRIGGER AS $$
+    DECLARE
+        default_method_id BIGINT;
+        bill_payments JSONB;
+        payments_sum NUMERIC;
+        elem JSONB;
+        mid BIGINT;
+        ratio NUMERIC;
+    BEGIN
+        IF TG_OP = 'UPDATE' THEN
+            DELETE FROM account_transactions
+            WHERE cash_flow_id = NEW.id AND store_id = NEW.store_id;
+        END IF;
+
+        IF COALESCE(NEW.amount, 0) = 0 THEN
+            RETURN NEW;
+        END IF;
+
+        SELECT id INTO default_method_id FROM payment_methods
+        WHERE is_deleted = FALSE
+        ORDER BY is_default DESC, id ASC
+        LIMIT 1;
+
+        bill_payments := NULL;
+        IF NEW.bill_id IS NOT NULL THEN
+            SELECT payments INTO bill_payments FROM bills
+            WHERE id = NEW.bill_id AND store_id = NEW.store_id;
+        END IF;
+
+        IF bill_payments IS NOT NULL
+           AND jsonb_typeof(bill_payments) = 'array'
+           AND jsonb_array_length(bill_payments) > 0 THEN
+            SELECT COALESCE(SUM((e->>'amount')::numeric), 0) INTO payments_sum
+            FROM jsonb_array_elements(bill_payments) e;
+
+            IF payments_sum > 0 THEN
+                FOR elem IN SELECT * FROM jsonb_array_elements(bill_payments) LOOP
+                    mid := NULLIF(elem->>'method_id', '')::bigint;
+                    IF mid IS NULL THEN
+                        mid := default_method_id;
+                    END IF;
+                    ratio := (elem->>'amount')::numeric / payments_sum;
+                    INSERT INTO account_transactions
+                        (store_id, payment_method_id, cash_flow_id, amount, source, time)
+                    VALUES
+                        (NEW.store_id, mid, NEW.id, NEW.amount * ratio, 'bill', NEW.time);
+                END LOOP;
+                RETURN NEW;
+            END IF;
+        END IF;
+
+        mid := COALESCE(NEW.payment_method_id, default_method_id);
+        IF mid IS NOT NULL THEN
+            INSERT INTO account_transactions
+                (store_id, payment_method_id, cash_flow_id, amount, source, time)
+            VALUES
+                (NEW.store_id, mid, NEW.id, NEW.amount,
+                 CASE WHEN NEW.bill_id IS NOT NULL THEN 'bill' ELSE 'manual' END,
+                 NEW.time);
+        END IF;
+
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trigger_mirror_cash_flow_insert
+    AFTER INSERT ON cash_flow
+    FOR EACH ROW
+    EXECUTE FUNCTION mirror_cash_flow_to_accounts();
+
+    CREATE TRIGGER trigger_mirror_cash_flow_update
+    AFTER UPDATE ON cash_flow
+    FOR EACH ROW
+    WHEN (NEW.amount IS DISTINCT FROM OLD.amount)
+    EXECUTE FUNCTION mirror_cash_flow_to_accounts();
     """)
 
 

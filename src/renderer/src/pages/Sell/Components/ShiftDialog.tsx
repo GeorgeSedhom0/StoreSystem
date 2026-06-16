@@ -31,6 +31,11 @@ interface ShiftDialogProps {
   shift: string;
 }
 
+interface PaymentBreakdownItem {
+  method: string;
+  total: number;
+}
+
 interface ShiftTotal {
   sell_total: number;
   buy_total: number;
@@ -40,6 +45,7 @@ interface ShiftTotal {
   cash_out: number;
   net_cash_flow: number;
   transaction_count: number;
+  payment_breakdown: PaymentBreakdownItem[];
   shift_start: string | null;
 }
 
@@ -81,6 +87,7 @@ const ShiftDialog = ({
       cash_out: 0,
       net_cash_flow: 0,
       transaction_count: 0,
+      payment_breakdown: [],
       shift_start: null,
     },
   });
@@ -247,6 +254,61 @@ const ShiftDialog = ({
               </CardContent>
             </Card>
           </Grid2>
+
+          {/* Payment Method Breakdown */}
+          {shiftTotal.payment_breakdown &&
+            shiftTotal.payment_breakdown.length > 0 && (
+              <Grid2 size={12}>
+                <Card elevation={3} sx={{ borderRadius: 2 }}>
+                  <CardContent>
+                    <Box display="flex" alignItems="center" mb={2}>
+                      <AccountBalanceWalletIcon
+                        color="primary"
+                        sx={{ mr: 1 }}
+                      />
+                      <Typography variant="h6" fontWeight="bold">
+                        تقسيم المدفوعات حسب طريقة الدفع
+                      </Typography>
+                    </Box>
+                    <Grid2 container spacing={2}>
+                      {shiftTotal.payment_breakdown.map((item) => (
+                        <Grid2
+                          size={{ xs: 6, sm: 4, md: 3 }}
+                          key={item.method}
+                        >
+                          <Box
+                            sx={{
+                              p: 2,
+                              borderRadius: 2,
+                              border: "1px solid",
+                              borderColor: "divider",
+                              textAlign: "center",
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              noWrap
+                            >
+                              {item.method}
+                            </Typography>
+                            <Typography
+                              variant="h6"
+                              fontWeight="bold"
+                              color={
+                                item.total >= 0 ? "success.main" : "error.main"
+                              }
+                            >
+                              {formatCurrency(item.total)}
+                            </Typography>
+                          </Box>
+                        </Grid2>
+                      ))}
+                    </Grid2>
+                  </CardContent>
+                </Card>
+              </Grid2>
+            )}
 
           {/* Summary Statistics */}
           <Grid2 size={12}>

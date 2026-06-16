@@ -48,6 +48,36 @@ export interface SCProduct {
   batch_id?: number;
 }
 
+export interface PaymentMethod {
+  id: number;
+  name: string;
+  is_default?: boolean;
+}
+
+export interface PaymentLine {
+  method_id: number | null;
+  name?: string;
+  amount: number;
+}
+
+export interface Account {
+  id: number;
+  name: string;
+  is_default?: boolean;
+  is_deleted?: boolean;
+  balance: number;
+}
+
+export interface AccountTransaction {
+  id: number;
+  time: string;
+  amount: number;
+  source: string;
+  description: string | null;
+  cash_flow_type: string | null;
+  party_name: string | null;
+}
+
 export interface Bill {
   id: string;
   time: string;
@@ -55,6 +85,7 @@ export interface Bill {
   total: number;
   type: string;
   note?: string | null;
+  payments?: PaymentLine[] | null;
   party_name: string | null;
   installment_details?: {
     id: number;
@@ -97,6 +128,7 @@ export interface CashFlow {
   description: string;
   total: number;
   party_name: string | null;
+  accounts?: { name: string; amount: number }[];
 }
 
 export interface Scope {
