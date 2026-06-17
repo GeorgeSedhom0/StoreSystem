@@ -8,7 +8,16 @@ import {
   MenuItem,
   InputLabel,
   IconButton,
+  Box,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemText,
+  Divider,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
+import MenuIcon from "@mui/icons-material/Menu";
 import { ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -59,6 +68,9 @@ const Layout = ({
   const [currentStoreId, setCurrentStoreId] = useState<number>(storeId);
   const [isCheckingShift, setIsCheckingShift] = useState(true);
   const topNavRef = useRef<HTMLDivElement>(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Check for current shift
   const { data: shiftData, isLoading: isShiftLoading } = useQuery({
@@ -113,6 +125,34 @@ const Layout = ({
     <LoadingScreen loading={true} />;
   }
 
+  const navItems =
+    profile?.user.pages
+      .map((page, index) => ({ page, path: profile.user.paths[index] }))
+      .filter(({ page }) => page !== "admin" && page !== "الإشعارات") || [];
+
+  const storeSelector = profile?.user.paths.includes("/admin") && (
+    <FormControl size="small" fullWidth={isMobile}>
+      <InputLabel size="small">المتجر</InputLabel>
+      <Select
+        size="small"
+        value={currentStoreId}
+        label="المتجر"
+        onChange={async (e) => {
+          await setGlobalStoreId(e.target.value as number);
+          setCurrentStoreId(e.target.value as number);
+          window.location.reload();
+        }}
+      >
+        {storesData &&
+          storesData.map((store) => (
+            <MenuItem key={store.id} value={store.id}>
+              {store.name}
+            </MenuItem>
+          ))}
+      </Select>
+    </FormControl>
+  );
+
   return (
     <>
       <AppBar
@@ -120,92 +160,133 @@ const Layout = ({
         sx={{
           bgcolor: "background.paper",
           display: location.pathname === "/login" ? "none" : "block",
-          width: "100vw",
+          width: "100%",
         }}
         ref={topNavRef}
       >
         <Toolbar sx={{ width: "100%" }}>
-          <Grid2 container spacing={2} py={2} px={1} width="100%">
-            <Grid2
-              container
-              size={9.5}
-              gap={2}
+          {isMobile ? (
+            <Box
               sx={{
-                ".active > Button": {
-                  borderBottom: 1,
-                  borderColor: "primary.dark",
-                },
-                Button: {
-                  color: "text.primary",
-                },
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                width: "100%",
+                py: 1,
               }}
             >
-              {profile &&
-                profile.user.pages
-                  .map((page, index) => ({
-                    page,
-                    path: profile.user.paths[index],
-                  }))
-                  .filter(
-                    ({ page }) => page !== "admin" && page !== "الإشعارات",
-                  )
-                  .map(({ page, path }) => (
-                    <NavLink key={path} to={path}>
-                      <Button>{page}</Button>
-                    </NavLink>
-                  ))}
-            </Grid2>
-            <Grid2
-              container
-              size={2.5}
-              gap={2}
-              justifyContent="flex-end"
-              alignItems="flex-start"
-            >
-              {profile?.user.paths.includes("/admin") && (
-                <FormControl>
-                  <InputLabel size="small">المتجر</InputLabel>
-                  <Select
-                    size="small"
-                    value={currentStoreId}
-                    label="المتجر"
-                    onChange={async (e) => {
-                      await setGlobalStoreId(e.target.value as number);
-                      setCurrentStoreId(e.target.value as number);
-                      window.location.reload();
-                    }}
-                  >
-                    {storesData &&
-                      storesData.map((store) => (
-                        <MenuItem key={store.id} value={store.id}>
-                          {store.name}
-                        </MenuItem>
-                      ))}
-                  </Select>
-                </FormControl>
-              )}
-              <Button
-                variant="contained"
-                onClick={() => switchAccount()}
-                color="error"
+              <IconButton
+                color="primary"
+                edge="start"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="القائمة"
               >
-                تبديل المستخدم
-              </Button>
+                <MenuIcon />
+              </IconButton>
               {profile?.user.paths.includes("/notifications") && (
                 <NotificationBell />
               )}
-              <IconButton
-                onClick={() => {
-                  window.electron.ipcRenderer.invoke("open-new-window");
+            </Box>
+          ) : (
+            <Grid2 container spacing={2} py={2} px={1} width="100%">
+              <Grid2
+                container
+                size={9.5}
+                gap={2}
+                sx={{
+                  ".active > Button": {
+                    borderBottom: 1,
+                    borderColor: "primary.dark",
+                  },
+                  Button: {
+                    color: "text.primary",
+                  },
                 }}
-                color="primary"
               >
-                <AddIcon />
-              </IconButton>
+                {navItems.map(({ page, path }) => (
+                  <NavLink key={path} to={path}>
+                    <Button>{page}</Button>
+                  </NavLink>
+                ))}
+              </Grid2>
+              <Grid2
+                container
+                size={2.5}
+                gap={2}
+                justifyContent="flex-end"
+                alignItems="flex-start"
+              >
+                {storeSelector}
+                <Button
+                  variant="contained"
+                  onClick={() => switchAccount()}
+                  color="error"
+                >
+                  تبديل المستخدم
+                </Button>
+                {profile?.user.paths.includes("/notifications") && (
+                  <NotificationBell />
+                )}
+                <IconButton
+                  onClick={() => {
+                    window.electron.ipcRenderer.invoke("open-new-window");
+                  }}
+                  color="primary"
+                >
+                  <AddIcon />
+                </IconButton>
+              </Grid2>
             </Grid2>
-          </Grid2>
+          )}
         </Toolbar>
       </AppBar>
+
+      <Drawer
+        anchor="right"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+      >
+        <Box sx={{ width: 270, display: "flex", flexDirection: "column" }}>
+          <List sx={{ ".active > .MuiButtonBase-root": { bgcolor: "action.selected" } }}>
+            {navItems.map(({ page, path }) => (
+              <NavLink
+                key={path}
+                to={path}
+                style={{ textDecoration: "none", color: "inherit" }}
+              >
+                <ListItemButton onClick={() => setDrawerOpen(false)}>
+                  <ListItemText primary={page} />
+                </ListItemButton>
+              </NavLink>
+            ))}
+          </List>
+          <Divider />
+          <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+            {storeSelector}
+            <Button
+              variant="contained"
+              color="error"
+              onClick={() => {
+                setDrawerOpen(false);
+                switchAccount();
+              }}
+            >
+              تبديل المستخدم
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<AddIcon />}
+              onClick={() => {
+                setDrawerOpen(false);
+                window.electron.ipcRenderer.invoke("open-new-window");
+              }}
+            >
+              نافذة جديدة
+            </Button>
+          </Box>
+        </Box>
+      </Drawer>
+
       <ViewContainer
         sx={{
           height: `calc(100vh - ${(topNavRef.current?.clientHeight || 0) + 140}px)`,

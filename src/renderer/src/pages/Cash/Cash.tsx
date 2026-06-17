@@ -715,42 +715,52 @@ const Cash = () => {
                 />
               </Grid2>
               {addingParty && (
-                <Grid2 container size={12} gap={3}>
-                  <TextField
-                    label="اسم الطرف الثانى"
-                    value={newParty.name}
-                    onChange={(e) =>
-                      setNewParty({ ...newParty, name: e.target.value })
-                    }
-                  />
-                  <TextField
-                    label="رقم الهاتف"
-                    value={newParty.phone}
-                    onChange={(e) =>
-                      setNewParty({ ...newParty, phone: e.target.value })
-                    }
-                  />
-                  <TextField
-                    label="العنوان"
-                    value={newParty.address}
-                    onChange={(e) =>
-                      setNewParty({ ...newParty, address: e.target.value })
-                    }
-                  />
-                  <FormControl>
-                    <InputLabel>النوع</InputLabel>
-                    <Select
-                      label="النوع"
-                      value={newParty.type}
+                <Grid2 container size={12} spacing={2}>
+                  <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+                    <TextField
+                      fullWidth
+                      label="اسم الطرف الثانى"
+                      value={newParty.name}
                       onChange={(e) =>
-                        setNewParty({ ...newParty, type: e.target.value })
+                        setNewParty({ ...newParty, name: e.target.value })
                       }
-                      sx={{ width: 200 }}
-                    >
-                      <MenuItem value="عميل">عميل</MenuItem>
-                      <MenuItem value="مورد">مورد</MenuItem>
-                    </Select>
-                  </FormControl>
+                    />
+                  </Grid2>
+                  <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+                    <TextField
+                      fullWidth
+                      label="رقم الهاتف"
+                      value={newParty.phone}
+                      onChange={(e) =>
+                        setNewParty({ ...newParty, phone: e.target.value })
+                      }
+                    />
+                  </Grid2>
+                  <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+                    <TextField
+                      fullWidth
+                      label="العنوان"
+                      value={newParty.address}
+                      onChange={(e) =>
+                        setNewParty({ ...newParty, address: e.target.value })
+                      }
+                    />
+                  </Grid2>
+                  <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+                    <FormControl fullWidth>
+                      <InputLabel>النوع</InputLabel>
+                      <Select
+                        label="النوع"
+                        value={newParty.type}
+                        onChange={(e) =>
+                          setNewParty({ ...newParty, type: e.target.value })
+                        }
+                      >
+                        <MenuItem value="عميل">عميل</MenuItem>
+                        <MenuItem value="مورد">مورد</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid2>
                 </Grid2>
               )}
             </Grid2>

@@ -23,3 +23,4 @@ openstore-data
 printer_settings.json
 settings.json
 /OpenStore
+server/static

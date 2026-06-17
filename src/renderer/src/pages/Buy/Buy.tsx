@@ -17,9 +17,17 @@ import {
   MenuItem,
   Checkbox,
   Box,
+  IconButton,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import ExpirationModal from "../Shared/ExpirationModal";
 import { useCallback, useState, useContext, useRef, useEffect } from "react";
-import { Party, Product, SCProduct } from "../utils/types";
+import { Party, Product, SCProduct, BatchInfo } from "../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
@@ -39,12 +47,134 @@ import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
 import BatchPrintDialog from "./Components/BatchPrintDialog";
 import BulkEditDialog from "./Components/BulkEditDialog";
 
+// Mobile-friendly buy-cart row: a stacked card instead of the 9-column table.
+const MobileBuyCartItem = ({
+  product,
+  setShoppingCart,
+  isSelected,
+  onSelectionChange,
+}: {
+  product: SCProduct;
+  setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
+  isSelected: boolean;
+  onSelectionChange: (selected: boolean) => void;
+}) => {
+  const [expOpen, setExpOpen] = useState(false);
+  const update = (patch: Partial<SCProduct>) =>
+    setShoppingCart((prev) =>
+      prev.map((i) => (i.id === product.id ? { ...i, ...patch } : i)),
+    );
+  const remove = () =>
+    setShoppingCart((prev) => prev.filter((i) => i.id !== product.id));
+  const hasBatches = !!product.batches && product.batches.length > 0;
+
+  return (
+    <Card variant="outlined" sx={{ p: 1.5, mb: 1.5 }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+        <Checkbox
+          sx={{ p: 0.5 }}
+          checked={isSelected}
+          onChange={(e) => onSelectionChange(e.target.checked)}
+        />
+        <Typography sx={{ fontWeight: 600, flex: 1, wordBreak: "break-word" }}>
+          {product.name}
+        </Typography>
+        <IconButton color="error" size="small" onClick={remove} aria-label="حذف">
+          <DeleteOutlineIcon />
+        </IconButton>
+      </Box>
+
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
+        <IconButton
+          size="small"
+          onClick={() => update({ quantity: Math.max(0, product.quantity - 1) })}
+        >
+          <RemoveIcon fontSize="small" />
+        </IconButton>
+        <TextField
+          type="number"
+          size="small"
+          label="الكمية"
+          value={product.quantity}
+          onChange={(e) => update({ quantity: parseInt(e.target.value) || 0 })}
+          sx={{ width: 90 }}
+          slotProps={{ htmlInput: { inputMode: "numeric" } }}
+        />
+        <IconButton
+          size="small"
+          onClick={() => update({ quantity: product.quantity + 1 })}
+        >
+          <AddIcon fontSize="small" />
+        </IconButton>
+      </Box>
+
+      <Box sx={{ display: "flex", gap: 1, mt: 1.5 }}>
+        <TextField
+          fullWidth
+          size="small"
+          type="number"
+          label="سعر الشراء"
+          value={product.wholesale_price}
+          onChange={(e) =>
+            update({ wholesale_price: parseFloat(e.target.value) || 0 })
+          }
+          slotProps={{ htmlInput: { inputMode: "decimal" } }}
+        />
+        <TextField
+          fullWidth
+          size="small"
+          type="number"
+          label="سعر البيع"
+          value={product.price}
+          onChange={(e) => update({ price: parseFloat(e.target.value) || 0 })}
+          slotProps={{ htmlInput: { inputMode: "decimal" } }}
+        />
+      </Box>
+
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mt: 1.5,
+        }}
+      >
+        <Button
+          size="small"
+          variant={hasBatches ? "contained" : "outlined"}
+          color={hasBatches ? "success" : "primary"}
+          startIcon={<CalendarMonthIcon />}
+          onClick={() => setExpOpen(true)}
+        >
+          صلاحية
+        </Button>
+        <Typography sx={{ fontWeight: 600 }}>
+          الإجمالي: {product.wholesale_price * product.quantity}
+        </Typography>
+      </Box>
+
+      {expOpen && (
+        <ExpirationModal
+          open={expOpen}
+          onClose={() => setExpOpen(false)}
+          product={product}
+          onSave={(batches: BatchInfo[]) =>
+            update({ batches: batches.length > 0 ? batches : undefined })
+          }
+        />
+      )}
+    </Card>
+  );
+};
+
 const Buy = () => {
   const {
     products,
     updateProducts,
     isLoading: isProductsLoading,
   } = useProducts();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const [shoppingCart, setShoppingCart] = usePersistentCart(
     "Buy",
@@ -283,8 +413,8 @@ const Buy = () => {
               </Typography>
             </Grid2>
 
-            <Grid2 size={12} container>
-              <Grid2 size={3}>
+            <Grid2 size={12} container spacing={2}>
+              <Grid2 size={{ xs: 6, sm: 3 }}>
                 <FormControl fullWidth>
                   <InputLabel size="small">نوع الفاتورة</InputLabel>
                   <Select
@@ -301,7 +431,7 @@ const Buy = () => {
                   </Select>
                 </FormControl>
               </Grid2>
-              <Grid2 size={3}>
+              <Grid2 size={{ xs: 6, sm: 3 }}>
                 <TextField
                   size="small"
                   label="الخصم"
@@ -311,17 +441,18 @@ const Buy = () => {
                   fullWidth
                 />
               </Grid2>{" "}
-              <Grid2 size={3}>
+              <Grid2 size={{ xs: 6, sm: 3 }}>
                 <Button
                   variant="contained"
                   onClick={() => submitBill(shoppingCart, discount)}
                   disabled={isSubmitDisabled}
                   fullWidth
+                  sx={{ height: 40 }}
                 >
                   {isSubmitting ? "جاري الحفظ..." : "اضافة فاتورة"}
                 </Button>
               </Grid2>
-              <Grid2 size={3}>
+              <Grid2 size={{ xs: 6, sm: 3 }}>
                 <Typography variant="h6" align="center">
                   الاجمالي:{" "}
                   {shoppingCart.reduce(
@@ -400,28 +531,37 @@ const Buy = () => {
               />
             </Grid2>
             {addingParty && (
-              <Grid2 container size={12} gap={3}>
-                <TextField
-                  label="اسم المورد"
-                  value={newParty.name}
-                  onChange={(e) =>
-                    setNewParty({ ...newParty, name: e.target.value })
-                  }
-                />
-                <TextField
-                  label="رقم الهاتف"
-                  value={newParty.phone}
-                  onChange={(e) =>
-                    setNewParty({ ...newParty, phone: e.target.value })
-                  }
-                />
-                <TextField
-                  label="العنوان"
-                  value={newParty.address}
-                  onChange={(e) =>
-                    setNewParty({ ...newParty, address: e.target.value })
-                  }
-                />
+              <Grid2 container size={12} spacing={2}>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="اسم المورد"
+                    value={newParty.name}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, name: e.target.value })
+                    }
+                  />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="رقم الهاتف"
+                    value={newParty.phone}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, phone: e.target.value })
+                    }
+                  />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="العنوان"
+                    value={newParty.address}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, address: e.target.value })
+                    }
+                  />
+                </Grid2>
               </Grid2>
             )}
           </Grid2>
@@ -435,6 +575,7 @@ const Buy = () => {
               p: 2,
               display: "flex",
               alignItems: "center",
+              flexWrap: "wrap",
               gap: 2,
               borderBottom: 1,
               borderColor: "divider",
@@ -461,22 +602,50 @@ const Buy = () => {
             )}
           </Box>
 
-          <TableContainer
-            ref={cartTableRef}
-            sx={{
-              height: "50vh",
-              overflowY: "auto",
-            }}
-          >
-            <Table
-              stickyHeader
+          {isMobile ? (
+            <Box
+              ref={cartTableRef}
+              sx={{ maxHeight: "55vh", overflowY: "auto", p: 1.5 }}
+            >
+              {shoppingCart.length === 0 ? (
+                <Typography
+                  align="center"
+                  color="text.secondary"
+                  sx={{ py: 4 }}
+                >
+                  لا توجد منتجات في السلة
+                </Typography>
+              ) : (
+                shoppingCart.map((product) => (
+                  <MobileBuyCartItem
+                    key={product.id}
+                    product={product}
+                    setShoppingCart={setShoppingCart}
+                    isSelected={selectedProductIds.has(product.id)}
+                    onSelectionChange={(selected) =>
+                      handleSelectProduct(product.id, selected)
+                    }
+                  />
+                ))
+              )}
+            </Box>
+          ) : (
+            <TableContainer
+              ref={cartTableRef}
               sx={{
-                "& .MuiTableCell-head": {
-                  bgcolor: "background.paper",
-                },
+                height: "50vh",
+                overflowY: "auto",
               }}
             >
-              <TableHead>
+              <Table
+                stickyHeader
+                sx={{
+                  "& .MuiTableCell-head": {
+                    bgcolor: "background.paper",
+                  },
+                }}
+              >
+                <TableHead>
                 <TableRow>
                   <TableCell padding="checkbox">
                     <Checkbox
@@ -511,7 +680,8 @@ const Buy = () => {
                 ))}
               </TableBody>
             </Table>
-          </TableContainer>
+            </TableContainer>
+          )}
         </Card>
       </Grid2>
 

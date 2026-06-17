@@ -1,11 +1,18 @@
 import { Fab, styled } from "@mui/material";
 
 export const ViewContainer = styled("div")(({ theme }) => ({
-  margin: "30px",
+  // A DEFINITE viewport-based width (not auto) is essential: it anchors the
+  // layout so inner horizontal-scroll containers (e.g. wide tables in
+  // TableContainer) actually scroll instead of stretching the whole page and
+  // causing horizontal overflow on phones. box-sizing + padding (not margin)
+  // keeps the total width exactly 100vw; the body's overflow:hidden clips the
+  // desktop scrollbar gutter so there's no stray horizontal scrollbar.
+  width: "100vw",
+  boxSizing: "border-box",
+  padding: "30px",
   [theme.breakpoints.down("sm")]: {
-    margin: "16px",
+    padding: "16px",
   },
-  width: "98vw",
 }));
 
 export const ContentBox = styled("div")(({}) => ({

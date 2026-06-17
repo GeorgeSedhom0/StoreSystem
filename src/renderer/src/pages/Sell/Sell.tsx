@@ -26,8 +26,13 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { AutoAwesome as AutoAwesomeIcon } from "@mui/icons-material";
+import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Bill, Party, Product, SCProduct } from "../utils/types";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -55,12 +60,89 @@ import useBills from "./hooks/useBills";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
 
+// Mobile-friendly cart row: a stacked card instead of a wide table row, so a
+// phone user never has to scroll a 7-column table sideways to edit a sale.
+const MobileSellCartItem = ({
+  product,
+  setShoppingCart,
+}: {
+  product: SCProduct;
+  setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
+}) => {
+  const setQty = (q: number) =>
+    setShoppingCart((prev) =>
+      prev.map((i) => (i.id === product.id ? { ...i, quantity: q } : i)),
+    );
+  const remove = () =>
+    setShoppingCart((prev) => prev.filter((i) => i.id !== product.id));
+
+  return (
+    <Card variant="outlined" sx={{ p: 1.5, mb: 1.5 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 1,
+        }}
+      >
+        <Typography sx={{ fontWeight: 600, flex: 1, wordBreak: "break-word" }}>
+          {product.name}
+        </Typography>
+        <IconButton
+          color="error"
+          size="small"
+          onClick={remove}
+          aria-label="حذف"
+        >
+          <DeleteOutlineIcon />
+        </IconButton>
+      </Box>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
+        <IconButton
+          size="small"
+          onClick={() => setQty(Math.max(0, product.quantity - 1))}
+        >
+          <RemoveIcon fontSize="small" />
+        </IconButton>
+        <TextField
+          type="number"
+          size="small"
+          value={product.quantity}
+          onChange={(e) => setQty(parseInt(e.target.value) || 0)}
+          sx={{ width: 64 }}
+          slotProps={{
+            htmlInput: { style: { textAlign: "center" }, inputMode: "numeric" },
+          }}
+        />
+        <IconButton size="small" onClick={() => setQty(product.quantity + 1)}>
+          <AddIcon fontSize="small" />
+        </IconButton>
+        <Box sx={{ flex: 1 }} />
+        <Typography variant="body2" color="text.secondary">
+          السعر: {product.price}
+        </Typography>
+      </Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1 }}>
+        <Typography variant="body2" color="text.secondary">
+          متاح: {product.stock}
+        </Typography>
+        <Typography sx={{ fontWeight: 600 }}>
+          الإجمالي: {product.price * product.quantity}
+        </Typography>
+      </Box>
+    </Card>
+  );
+};
+
 const Sell = () => {
   const {
     products,
     isLoading: isProductsLoading,
     updateProducts,
   } = useProducts();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const [shoppingCart, setShoppingCart] = usePersistentCart(
     "Sell",
@@ -588,7 +670,7 @@ const Sell = () => {
               </Box>
             </Grid2>
 
-            <Grid2 size={2}>
+            <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
               <FormControl fullWidth>
                 <InputLabel>نوع الفاتورة</InputLabel>
                 <Select
@@ -608,7 +690,7 @@ const Sell = () => {
               </FormControl>
             </Grid2>
 
-            <Grid2 size={2}>
+            <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
               <TextField
                 label="الخصم"
                 type="number"
@@ -621,7 +703,7 @@ const Sell = () => {
               />
             </Grid2>
 
-            <Grid2 size={2}>
+            <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -632,7 +714,7 @@ const Sell = () => {
               </Button>
             </Grid2>
 
-            <Grid2 size={4}>
+            <Grid2 size={{ xs: 12, sm: 8, md: 4 }}>
               <ButtonGroup fullWidth>
                 <Button
                   variant="contained"
@@ -651,7 +733,7 @@ const Sell = () => {
               </ButtonGroup>
             </Grid2>
 
-            <Grid2 size={2}>
+            <Grid2 size={{ xs: 12, sm: 4, md: 2 }}>
               <Typography variant="h6" align="center">
                 الاجمالي{": "}
                 {shoppingCart.reduce(
@@ -747,52 +829,67 @@ const Sell = () => {
             )}
 
             {addingParty && (
-              <Grid2 container size={12} gap={3}>
-                <TextField
-                  label="اسم العميل"
-                  value={newParty.name}
-                  onChange={(e) =>
-                    setNewParty({ ...newParty, name: e.target.value })
-                  }
-                />
-                <TextField
-                  label="رقم الهاتف"
-                  value={newParty.phone}
-                  onChange={(e) =>
-                    setNewParty({ ...newParty, phone: e.target.value })
-                  }
-                />
-                <TextField
-                  label="العنوان"
-                  value={newParty.address}
-                  onChange={(e) =>
-                    setNewParty({ ...newParty, address: e.target.value })
-                  }
-                />
-                <TextField
-                  label="الباركود (اختياري)"
-                  value={newParty.bar_code || ""}
-                  onChange={(e) =>
-                    setNewParty({ ...newParty, bar_code: e.target.value })
-                  }
-                  slotProps={{
-                    input: {
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            onClick={async () => {
-                              const barcode = await generateClientBarcode();
-                              setNewParty({ ...newParty, bar_code: barcode });
-                            }}
-                            title="توليد باركود تلقائي"
-                          >
-                            <AutoAwesomeIcon />
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+              <Grid2 container size={12} spacing={2}>
+                <Grid2 size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="اسم العميل"
+                    value={newParty.name}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, name: e.target.value })
+                    }
+                  />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="رقم الهاتف"
+                    value={newParty.phone}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, phone: e.target.value })
+                    }
+                  />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="العنوان"
+                    value={newParty.address}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, address: e.target.value })
+                    }
+                  />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="الباركود (اختياري)"
+                    value={newParty.bar_code || ""}
+                    onChange={(e) =>
+                      setNewParty({ ...newParty, bar_code: e.target.value })
+                    }
+                    slotProps={{
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              onClick={async () => {
+                                const barcode = await generateClientBarcode();
+                                setNewParty({
+                                  ...newParty,
+                                  bar_code: barcode,
+                                });
+                              }}
+                              title="توليد باركود تلقائي"
+                            >
+                              <AutoAwesomeIcon />
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      },
+                    }}
+                  />
+                </Grid2>
               </Grid2>
             )}
             {partyId && (
@@ -805,44 +902,71 @@ const Sell = () => {
       </Grid2>{" "}
       <Grid2 size={12}>
         <Card elevation={3}>
-          <TableContainer
-            ref={cartTableRef}
-            sx={{
-              height: "50vh",
-              overflowY: "auto",
-            }}
-          >
-            <Table
-              stickyHeader
-              sx={{
-                "& .MuiTableCell-head": {
-                  bgcolor: "background.paper",
-                },
-              }}
+          {isMobile ? (
+            <Box
+              ref={cartTableRef}
+              sx={{ maxHeight: "55vh", overflowY: "auto", p: 1.5 }}
             >
-              <TableHead>
-                <TableRow>
-                  <TableCell>المنتج</TableCell>
-                  <TableCell>الكمية</TableCell>
-                  <TableCell>السعر</TableCell>
-                  <TableCell>الاجمالي</TableCell>
-                  <TableCell>حذف</TableCell>
-                  <TableCell>الكمية المتاحة بالمخزن</TableCell>
-                  <TableCell>الصلاحية</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {shoppingCart.map((product) => (
-                  <ProductInCart
+              {shoppingCart.length === 0 ? (
+                <Typography
+                  align="center"
+                  color="text.secondary"
+                  sx={{ py: 4 }}
+                >
+                  لا توجد منتجات في السلة
+                </Typography>
+              ) : (
+                shoppingCart.map((product) => (
+                  <MobileSellCartItem
                     key={product.id}
                     product={product}
                     setShoppingCart={setShoppingCart}
-                    type="sell"
                   />
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                ))
+              )}
+            </Box>
+          ) : (
+            <TableContainer
+              ref={cartTableRef}
+              sx={{
+                height: "50vh",
+                overflowY: "auto",
+                overflowX: "auto",
+              }}
+            >
+              <Table
+                stickyHeader
+                sx={{
+                  minWidth: 650,
+                  "& .MuiTableCell-head": {
+                    bgcolor: "background.paper",
+                  },
+                }}
+              >
+                <TableHead>
+                  <TableRow>
+                    <TableCell>المنتج</TableCell>
+                    <TableCell>الكمية</TableCell>
+                    <TableCell>السعر</TableCell>
+                    <TableCell>الاجمالي</TableCell>
+                    <TableCell>حذف</TableCell>
+                    <TableCell>الكمية المتاحة بالمخزن</TableCell>
+                    <TableCell>الصلاحية</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {shoppingCart.map((product) => (
+                    <ProductInCart
+                      key={product.id}
+                      product={product}
+                      setShoppingCart={setShoppingCart}
+                      type="sell"
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </Card>
       </Grid2>
     </Grid2>

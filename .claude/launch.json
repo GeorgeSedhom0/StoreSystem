@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "C:\\Users\\geaor\\AppData\\Roaming\\fnm\\node-versions\\v22.11.0\\installation\\node.exe",
+      "runtimeArgs": [
+        "node_modules/vite/bin/vite.js",
+        "--config",
+        "vite.web.config.ts",
+        "--port",
+        "5173"
+      ],
+      "port": 5173
+    }
+  ]
+}

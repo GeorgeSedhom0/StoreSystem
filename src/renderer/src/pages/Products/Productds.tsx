@@ -391,7 +391,7 @@ const Products = () => {
                   }}
                 />
               </Grid2>
-              <Grid2 size={6}>
+              <Grid2 size={{ xs: 12, sm: 6 }}>
                 <Autocomplete
                   multiple
                   options={availableCategories}
@@ -412,7 +412,7 @@ const Products = () => {
                   }
                 />
               </Grid2>
-              <Grid2 size={3}>
+              <Grid2 size={{ xs: 6, sm: 3 }}>
                 <FormControl fullWidth>
                   <InputLabel>تصفية المخزون</InputLabel>
                   <Select
@@ -428,14 +428,15 @@ const Products = () => {
                   </Select>
                 </FormControl>
               </Grid2>
-              <Grid2 size={3}>
+              <Grid2 size={{ xs: 6, sm: 3 }}>
                 <Button
                   onClick={handleExportToExcel}
                   variant="outlined"
                   startIcon={<Download />}
                   fullWidth
+                  sx={{ height: "100%" }}
                 >
-                  تصدير إلى Excel
+                  تصدير Excel
                 </Button>
               </Grid2>
             </Grid2>
@@ -479,7 +480,7 @@ const Products = () => {
             </Box>
 
             <TableContainer component={Paper}>
-              <Table stickyHeader>
+              <Table stickyHeader sx={{ minWidth: 750 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>

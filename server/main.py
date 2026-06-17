@@ -2977,3 +2977,21 @@ def get_bill_pair_status(
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# ─── Serve the built web UI (SPA) ──────────────────────────────────────────
+# When a web build exists in ./static, serve it at "/" so phone/desktop browsers
+# on the same network (e.g. via Tailscale -> http(s)://<server-ip>:8000) get the
+# app directly. The frontend uses HashRouter, so a single index.html handles
+# every client-side route and no server-side URL rewriting is needed.
+#
+# Mounted LAST, after every API route above, so the API always takes precedence;
+# the mount only serves index.html and static assets for non-API paths.
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(_STATIC_DIR) and os.path.isfile(
+    os.path.join(_STATIC_DIR, "index.html")
+):
+    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="web")
+    logging.info("Serving web UI from %s", _STATIC_DIR)

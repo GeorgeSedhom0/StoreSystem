@@ -21,35 +21,44 @@ const Installments = ({
 }) => {
   return (
     <>
-      <Grid2 container size={12} gap={3}>
-        <TextField
-          label="عدد الاقساط"
-          type="number"
-          value={installments}
-          onChange={(e) => setInstallments(parseInt(e.target.value) || 1)}
-          size="small"
-        />
-        <TextField
-          label="الفترة بين الاقساط"
-          type="number"
-          value={installmentInterval}
-          onChange={(e) =>
-            setInstallmentInterval(parseInt(e.target.value) || 30)
-          }
-          size="small"
-        />
-        <TextField
-          label="المقدم"
-          type="number"
-          value={paid}
-          onChange={(e) => setPaid(parseFloat(e.target.value) || 0)}
-          size="small"
-          slotProps={{
-            input: {
-              inputMode: "decimal",
-            },
-          }}
-        />
+      <Grid2 container size={12} spacing={2}>
+        <Grid2 size={{ xs: 6, sm: 4 }}>
+          <TextField
+            fullWidth
+            label="عدد الاقساط"
+            type="number"
+            value={installments}
+            onChange={(e) => setInstallments(parseInt(e.target.value) || 1)}
+            size="small"
+          />
+        </Grid2>
+        <Grid2 size={{ xs: 6, sm: 4 }}>
+          <TextField
+            fullWidth
+            label="الفترة بين الاقساط"
+            type="number"
+            value={installmentInterval}
+            onChange={(e) =>
+              setInstallmentInterval(parseInt(e.target.value) || 30)
+            }
+            size="small"
+          />
+        </Grid2>
+        <Grid2 size={{ xs: 6, sm: 4 }}>
+          <TextField
+            fullWidth
+            label="المقدم"
+            type="number"
+            value={paid}
+            onChange={(e) => setPaid(parseFloat(e.target.value) || 0)}
+            size="small"
+            slotProps={{
+              input: {
+                inputMode: "decimal",
+              },
+            }}
+          />
+        </Grid2>
       </Grid2>
       <Grid2 size={12}>
         <Typography variant="h6">

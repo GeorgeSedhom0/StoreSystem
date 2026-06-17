@@ -281,15 +281,28 @@ const PaymentSplit = ({
         width: "100%",
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 1,
+          rowGap: 1,
+          mb: 2,
+        }}
+      >
         <PaymentsIcon color="primary" />
         <Typography variant="subtitle1" fontWeight={600}>
           طرق الدفع
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: { xs: "none", sm: "inline" } }}
+        >
           (يمكنك كتابة نسبة مئوية مثل %50)
         </Typography>
-        <Box sx={{ ml: "auto", display: "flex", gap: 1 }}>
+        <Box sx={{ ml: "auto", display: "flex", flexWrap: "wrap", gap: 1 }}>
           {lines.length > 1 && (
             <Chip
               icon={<CallSplitIcon />}
@@ -329,10 +342,21 @@ const PaymentSplit = ({
           return (
             <Box
               key={line.method_id}
-              sx={{ display: "flex", alignItems: "center", gap: 1.5 }}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 1.5,
+                rowGap: 1,
+              }}
             >
               {/* Method label / selector */}
-              <Box sx={{ flex: "0 0 24%", minWidth: 0 }}>
+              <Box
+                sx={{
+                  flex: { xs: "1 1 100%", sm: "0 0 24%" },
+                  minWidth: 0,
+                }}
+              >
                 {isDefault ? (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     <Typography fontWeight={600} noWrap>
