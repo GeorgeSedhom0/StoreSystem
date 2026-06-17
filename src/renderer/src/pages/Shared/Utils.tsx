@@ -4,14 +4,23 @@ export const ViewContainer = styled("div")(({ theme }) => ({
   // A DEFINITE viewport-based width (not auto) is essential: it anchors the
   // layout so inner horizontal-scroll containers (e.g. wide tables in
   // TableContainer) actually scroll instead of stretching the whole page and
-  // causing horizontal overflow on phones. box-sizing + padding (not margin)
-  // keeps the total width exactly 100vw; the body's overflow:hidden clips the
-  // desktop scrollbar gutter so there's no stray horizontal scrollbar.
+  // causing horizontal overflow on phones. width:100vw + box-sizing + LEFT/RIGHT
+  // padding keeps the total width exactly 100vw (body overflow:hidden clips the
+  // desktop scrollbar gutter). The horizontal inset uses padding; the vertical
+  // spacing uses margin (margins don't affect width) — these vertical margins
+  // are also counted in Layout's `100vh - …140px` height calc, so removing them
+  // would leave vertical slack that the body's centering shows as a top gap.
   width: "100vw",
   boxSizing: "border-box",
-  padding: "30px",
+  marginTop: "30px",
+  marginBottom: "30px",
+  paddingLeft: "30px",
+  paddingRight: "30px",
   [theme.breakpoints.down("sm")]: {
-    padding: "16px",
+    marginTop: "16px",
+    marginBottom: "16px",
+    paddingLeft: "16px",
+    paddingRight: "16px",
   },
 }));
 
