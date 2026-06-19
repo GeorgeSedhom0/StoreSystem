@@ -235,7 +235,7 @@ def create_all_tables(cur):
     )
     """)
     cur.execute("""
-    INSERT INTO db_meta (key, value) VALUES ('version', '19')
+    INSERT INTO db_meta (key, value) VALUES ('version', '20')
     """)
 
     # Create the payment_methods table (dynamic, user-managed payment methods)
@@ -461,7 +461,8 @@ def create_all_tables(cur):
         amount FLOAT,
         bonus FLOAT,
         deductions FLOAT,
-        time TIMESTAMP
+        time TIMESTAMP,
+        payment_method_id BIGINT REFERENCES payment_methods(id)
     )
     """)
 
@@ -703,14 +704,16 @@ def create_all_triggers(cur):
             amount,
             type,
             description,
-            party_id
+            party_id,
+            payment_method_id
         ) VALUES (
             emp_store_id,
             NEW.time,
             -NEW.amount - NEW.bonus + NEW.deductions,
             'out',
             'راتب ' || employee_name || ' بمبلغ ' || NEW.amount || ' ومكافأة ' || NEW.bonus || ' وخصم ' || NEW.deductions,
-            NULL
+            NULL,
+            NEW.payment_method_id
         );
         RETURN NEW;
     END;

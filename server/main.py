@@ -2620,7 +2620,7 @@ def add_cash_flow(
 
 
 # The latest DB schema version this backend expects (bump with each update_db_N).
-LATEST_DB_VERSION = 19
+LATEST_DB_VERSION = 20
 
 
 @app.get("/db-version")
