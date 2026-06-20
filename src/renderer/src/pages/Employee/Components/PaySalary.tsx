@@ -5,6 +5,9 @@ import {
   DialogTitle,
   FormControl,
   Grid2,
+  InputLabel,
+  MenuItem,
+  Select,
   TextField,
 } from "@mui/material";
 import { Employee } from "../../utils/types";
@@ -15,17 +18,20 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import { AlertMsg } from "../../Shared/AlertMessage";
+import usePaymentMethods from "../../Shared/hooks/usePaymentMethods";
 
 const postNewSalary = async ({
   id,
   bonus,
   deductions,
   date,
+  paymentMethodId,
 }: {
   id: number;
   bonus: number;
   deductions: number;
   date: dayjs.Dayjs;
+  paymentMethodId: number | "";
 }) => {
   const formData = new FormData();
 
@@ -34,6 +40,9 @@ const postNewSalary = async ({
   formData.append("deductions", deductions.toString());
   formData.append("month", month.toString());
   formData.append("time", date.toISOString());
+  if (paymentMethodId !== "") {
+    formData.append("payment_method_id", paymentMethodId.toString());
+  }
 
   await axios.post(`/employees/${id}/pay-salary`, formData);
 };
@@ -50,6 +59,8 @@ const PaySalary = ({
   const [bonus, setBonus] = useState(0);
   const [deductions, setDeductions] = useState(0);
   const [date, setDate] = useState(dayjs());
+  const [paymentMethodId, setPaymentMethodId] = useState<number | "">("");
+  const { paymentMethods } = usePaymentMethods();
 
   const { mutate: paySalary } = useMutation({
     mutationFn: postNewSalary,
@@ -105,13 +116,40 @@ const PaySalary = ({
                 openTo="month"
               />
             </LocalizationProvider>
+            <FormControl fullWidth>
+              <InputLabel>الحساب</InputLabel>
+              <Select
+                label="الحساب"
+                value={paymentMethodId}
+                onChange={(e) =>
+                  setPaymentMethodId(
+                    e.target.value === "" ? "" : Number(e.target.value),
+                  )
+                }
+              >
+                <MenuItem value="">
+                  <em>نقدي (افتراضي)</em>
+                </MenuItem>
+                {paymentMethods.map((m) => (
+                  <MenuItem key={m.id} value={m.id}>
+                    {m.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Grid2>
         </FormControl>
       </DialogContent>
       <DialogActions>
         <Button
           onClick={() => {
-            paySalary({ id: employee.id, bonus, deductions, date });
+            paySalary({
+              id: employee.id,
+              bonus,
+              deductions,
+              date,
+              paymentMethodId,
+            });
           }}
         >
           دفع

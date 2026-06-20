@@ -18,6 +18,10 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  FormControlLabel,
+  Switch,
+  Chip,
+  Box,
 } from "@mui/material";
 import { useCallback, useState, useContext, useRef, useEffect } from "react";
 import { Product, SCProduct, StoreData } from "../utils/types";
@@ -29,9 +33,18 @@ import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
 import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
 import useProducts from "../Shared/hooks/useProducts";
+import usePaymentMethods from "../Shared/hooks/usePaymentMethods";
+import useAccounts from "../Shared/hooks/useAccounts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { useQuery } from "@tanstack/react-query";
 import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("ar-EG", {
+    style: "currency",
+    currency: "EGP",
+    minimumFractionDigits: 2,
+  }).format(value || 0);
 
 const getStoresData = async () => {
   const { data } = await axios.get<StoreData[]>("/admin/stores-data");
@@ -69,6 +82,13 @@ const MoveProducts = () => {
   const cartTableRef = useRef<HTMLDivElement>(null);
 
   const { storeId } = useContext(StoreContext);
+  const { paymentMethods } = usePaymentMethods();
+  const { storeBalances } = useAccounts(storeId);
+
+  // Account selection (which account receives at source / pays at destination)
+  const [sourceMethodId, setSourceMethodId] = useState<number | "">("");
+  const [destMethodId, setDestMethodId] = useState<number | "">("");
+  const [settleFromDebt, setSettleFromDebt] = useState<boolean>(false);
 
   // Get stores data for dropdown
   const { data: storesData, isLoading: isStoresLoading } = useQuery({
@@ -79,6 +99,39 @@ const MoveProducts = () => {
   // Filter out the current store from the destination options
   const destinationStores =
     storesData?.filter((store) => store.id !== storeId) || [];
+
+  // Default the accounts like-for-like, restoring the remembered choice per pair
+  useEffect(() => {
+    if (!destinationStoreId || paymentMethods.length === 0) return;
+    const key = `moveAcct_${storeId}_${destinationStoreId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const { s, d } = JSON.parse(saved);
+        if (paymentMethods.some((m) => m.id === s)) setSourceMethodId(s);
+        if (paymentMethods.some((m) => m.id === d)) setDestMethodId(d);
+        return;
+      } catch {
+        // fall through to defaults
+      }
+    }
+    const def = paymentMethods[0].id;
+    setSourceMethodId(def);
+    setDestMethodId(def);
+  }, [destinationStoreId, paymentMethods, storeId]);
+
+  const destBalance = storeBalances.find(
+    (b) => b.store_id === destinationStoreId,
+  );
+
+  // Only offer accounts that belong to the relevant store (or are unowned like
+  // cash). Off-store accounts must not be used for inter-store moves.
+  const sourceMethods = paymentMethods.filter(
+    (m) => m.home_store_id == null || m.home_store_id === storeId,
+  );
+  const destMethods = paymentMethods.filter(
+    (m) => m.home_store_id == null || m.home_store_id === destinationStoreId,
+  );
 
   const addToCart = useCallback((product: Product | null) => {
     if (!product) return;
@@ -174,8 +227,19 @@ const MoveProducts = () => {
           params: {
             source_store_id: storeId,
             destination_store_id: destinationStoreId,
+            source_payment_method_id:
+              sourceMethodId === "" ? undefined : sourceMethodId,
+            destination_payment_method_id:
+              destMethodId === "" ? undefined : destMethodId,
+            settle_from_debt: settleFromDebt,
           },
         });
+
+        // Remember the account choice for this store-pair
+        localStorage.setItem(
+          `moveAcct_${storeId}_${destinationStoreId}`,
+          JSON.stringify({ s: sourceMethodId, d: destMethodId }),
+        );
 
         setShoppingCart([]);
         await updateProducts();
@@ -195,7 +259,15 @@ const MoveProducts = () => {
         submissionInProgress.current = false;
       }
     },
-    [destinationStoreId, storeId, updateProducts, isSubmitting],
+    [
+      destinationStoreId,
+      storeId,
+      updateProducts,
+      isSubmitting,
+      sourceMethodId,
+      destMethodId,
+      settleFromDebt,
+    ],
   );
 
   const handleStartFromBill = async () => {
@@ -392,6 +464,79 @@ const MoveProducts = () => {
                 جنيه
               </Typography>
             </Grid2>
+
+            {/* Money / accounts row */}
+            {destinationStoreId !== null && paymentMethods.length > 0 && (
+              <>
+                <Grid2 size={4}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>حساب الاستلام (هذا المتجر)</InputLabel>
+                    <Select
+                      label="حساب الاستلام (هذا المتجر)"
+                      value={sourceMethodId}
+                      onChange={(e) => setSourceMethodId(Number(e.target.value))}
+                      disabled={settleFromDebt}
+                    >
+                      {sourceMethods.map((m) => (
+                        <MenuItem key={m.id} value={m.id}>
+                          {m.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid2>
+
+                <Grid2 size={4}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>حساب الدفع (المتجر الوجهة)</InputLabel>
+                    <Select
+                      label="حساب الدفع (المتجر الوجهة)"
+                      value={destMethodId}
+                      onChange={(e) => setDestMethodId(Number(e.target.value))}
+                      disabled={settleFromDebt}
+                    >
+                      {destMethods.map((m) => (
+                        <MenuItem key={m.id} value={m.id}>
+                          {m.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid2>
+
+                <Grid2 size={4}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={settleFromDebt}
+                          onChange={(e) => setSettleFromDebt(e.target.checked)}
+                        />
+                      }
+                      label="تسوية من الرصيد (بدون نقد)"
+                    />
+                    {destBalance && Math.abs(destBalance.balance) > 0.001 && (
+                      <Chip
+                        size="small"
+                        color={destBalance.balance > 0 ? "error" : "success"}
+                        label={
+                          destBalance.balance > 0
+                            ? `مدين لهم: ${formatCurrency(destBalance.balance)}`
+                            : `لك عندهم: ${formatCurrency(-destBalance.balance)}`
+                        }
+                      />
+                    )}
+                  </Box>
+                </Grid2>
+              </>
+            )}
 
             <Grid2 size={12}>
               <ProductAutocomplete

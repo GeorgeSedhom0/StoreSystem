@@ -235,7 +235,7 @@ def create_all_tables(cur):
     )
     """)
     cur.execute("""
-    INSERT INTO db_meta (key, value) VALUES ('version', '19')
+    INSERT INTO db_meta (key, value) VALUES ('version', '23')
     """)
 
     # Create the payment_methods table (dynamic, user-managed payment methods)
@@ -245,6 +245,7 @@ def create_all_tables(cur):
         name VARCHAR NOT NULL,
         is_default BOOLEAN DEFAULT FALSE,
         is_deleted BOOLEAN DEFAULT FALSE,
+        home_store_id BIGINT REFERENCES store_data(id),
         created_at TIMESTAMP DEFAULT NOW()
     )
     """)
@@ -461,7 +462,8 @@ def create_all_tables(cur):
         amount FLOAT,
         bonus FLOAT,
         deductions FLOAT,
-        time TIMESTAMP
+        time TIMESTAMP,
+        payment_method_id BIGINT REFERENCES payment_methods(id)
     )
     """)
 
@@ -507,6 +509,22 @@ def create_all_tables(cur):
         CREATE INDEX idx_product_batches_store_product ON product_batches(store_id, product_id);
         CREATE INDEX idx_product_batches_expiration ON product_batches(expiration_date);
         CREATE INDEX idx_product_batches_store_expiration ON product_batches(store_id, expiration_date);
+    """)
+
+    # Performance indexes (kept in sync with update_db_21.py).
+    # Hot paths: running-total triggers on cash_flow / products_flow, the account
+    # ledger window, and the bills <-> lines / cash joins used everywhere.
+    cur.execute("""
+        CREATE INDEX idx_cash_flow_store_time ON cash_flow (store_id, time, id);
+        CREATE INDEX idx_cash_flow_store_bill ON cash_flow (store_id, bill_id);
+        CREATE INDEX idx_cash_flow_party ON cash_flow (party_id);
+        CREATE INDEX idx_bills_store_time ON bills (store_id, time);
+        CREATE INDEX idx_bills_party ON bills (party_id);
+        CREATE INDEX idx_products_flow_store_bill ON products_flow (store_id, bill_id);
+        CREATE INDEX idx_products_flow_store_product_time ON products_flow (store_id, product_id, time, id);
+        CREATE INDEX idx_account_transactions_ledger ON account_transactions (store_id, payment_method_id, time, id);
+        CREATE INDEX idx_installments_flow_installment ON installments_flow (installment_id);
+        CREATE INDEX idx_salaries_employee ON salaries (employee_id);
     """)
 
 
@@ -703,14 +721,16 @@ def create_all_triggers(cur):
             amount,
             type,
             description,
-            party_id
+            party_id,
+            payment_method_id
         ) VALUES (
             emp_store_id,
             NEW.time,
             -NEW.amount - NEW.bonus + NEW.deductions,
             'out',
             'راتب ' || employee_name || ' بمبلغ ' || NEW.amount || ' ومكافأة ' || NEW.bonus || ' وخصم ' || NEW.deductions,
-            NULL
+            NULL,
+            NEW.payment_method_id
         );
         RETURN NEW;
     END;

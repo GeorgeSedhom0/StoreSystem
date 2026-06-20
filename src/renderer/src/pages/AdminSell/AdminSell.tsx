@@ -546,6 +546,7 @@ const AdminSell = () => {
         dialogOpen={shiftDialog}
         setDialogOpen={setShiftDialog}
         shift={shift}
+        admin
       />
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 3 }}>
@@ -670,6 +671,7 @@ const AdminSell = () => {
                   methods={paymentMethods}
                   lines={paymentLines}
                   setLines={setPaymentLines}
+                  currentStoreId={storeId}
                 />
               </Grid2>
             )}

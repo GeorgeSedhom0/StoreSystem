@@ -229,6 +229,7 @@ def pay_salary(
     deductions: float = Form(...),
     month: int = Form(...),
     time: datetime = Form(...),
+    payment_method_id: Optional[int] = Form(None),
     current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     try:
@@ -247,11 +248,11 @@ def pay_salary(
             cur.execute(
                 """
                 INSERT INTO salaries
-                    (employee_id, amount, bonus, deductions, time)
-                VALUES (%s, %s, %s, %s, %s)
+                    (employee_id, amount, bonus, deductions, time, payment_method_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (employee_id, salary, bonus, deductions, time),
+                (employee_id, salary, bonus, deductions, time, payment_method_id),
             )
             salary_id = cur.fetchone()
             if salary_id:

@@ -52,6 +52,7 @@ export interface PaymentMethod {
   id: number;
   name: string;
   is_default?: boolean;
+  home_store_id?: number | null;
 }
 
 export interface PaymentLine {
@@ -73,6 +74,7 @@ export interface AccountTransaction {
   time: string;
   amount: number;
   source: string;
+  balance_after: number;
   description: string | null;
   cash_flow_type: string | null;
   party_name: string | null;

@@ -19,18 +19,18 @@ const addPaymentMethod = async (name: string) => {
 const updatePaymentMethod = async ({
   id,
   name,
+  homeStoreId,
 }: {
   id: number;
   name: string;
+  homeStoreId?: number | null;
 }) => {
   await axios.put("/payment-methods", null, {
-    params: { id, name },
-  });
-};
-
-const deletePaymentMethod = async (id: number) => {
-  await axios.delete("/payment-methods", {
-    params: { id },
+    params: {
+      id,
+      name,
+      home_store_id: homeStoreId == null ? undefined : homeStoreId,
+    },
   });
 };
 
@@ -88,22 +88,6 @@ const usePaymentMethods = (setMsg?: Dispatch<SetStateAction<AlertMsg>>) => {
       },
     });
 
-  const { mutate: deletePaymentMethodMutation, isPending: deletePaymentMethodLoading } =
-    useMutation({
-      mutationFn: deletePaymentMethod,
-      onSuccess: () => {
-        notify({ type: "success", text: "تم حذف طريقة الدفع بنجاح" });
-        refetchPaymentMethods();
-      },
-      onError: (error: any) => {
-        notify({
-          type: "error",
-          text:
-            error?.response?.data?.detail || "حدث خطأ اثناء حذف طريقة الدفع",
-        });
-      },
-    });
-
   return {
     paymentMethods,
     refetchPaymentMethods,
@@ -113,8 +97,6 @@ const usePaymentMethods = (setMsg?: Dispatch<SetStateAction<AlertMsg>>) => {
     addPaymentMethodLoading,
     updatePaymentMethodMutation,
     updatePaymentMethodLoading,
-    deletePaymentMethodMutation,
-    deletePaymentMethodLoading,
   };
 };
 

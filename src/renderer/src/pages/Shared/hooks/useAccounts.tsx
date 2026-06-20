@@ -16,14 +16,36 @@ const getAccounts = async (storeId: number) => {
   return data;
 };
 
+export interface StoreBalance {
+  store_id: number;
+  name: string;
+  balance: number; // > 0 => this store owes the other; < 0 => the other owes this store
+}
+
+const getStoreBalances = async (storeId: number) => {
+  const { data } = await axios.get<StoreBalance[]>("/store-balances", {
+    params: { store_id: storeId },
+  });
+  return data;
+};
+
 export const getAccountTransactions = async (
   storeId: number,
   paymentMethodId: number,
-): Promise<AccountTransaction[]> => {
-  const { data } = await axios.get<AccountTransaction[]>(
-    "/account-transactions",
-    { params: { store_id: storeId, payment_method_id: paymentMethodId } },
-  );
+  limit: number,
+  offset: number,
+): Promise<{ transactions: AccountTransaction[]; total: number }> => {
+  const { data } = await axios.get<{
+    transactions: AccountTransaction[];
+    total: number;
+  }>("/account-transactions", {
+    params: {
+      store_id: storeId,
+      payment_method_id: paymentMethodId,
+      limit,
+      offset,
+    },
+  });
   return data;
 };
 
@@ -152,6 +174,50 @@ const useAccounts = (
     onError: onErr("تعذر تنفيذ التحويل"),
   });
 
+  const { data: storeBalances = [], refetch: refetchStoreBalances } = useQuery({
+    queryKey: ["store-balances", storeId],
+    queryFn: () => getStoreBalances(storeId),
+    initialData: [],
+  });
+
+  const storeTransfer = useMutation({
+    mutationFn: async ({
+      fromStoreId,
+      toStoreId,
+      amount,
+      fromPaymentMethodId,
+      toPaymentMethodId,
+      description,
+    }: {
+      fromStoreId: number;
+      toStoreId: number;
+      amount: number;
+      fromPaymentMethodId?: number | "";
+      toPaymentMethodId?: number | "";
+      description?: string;
+    }) => {
+      await axios.post("/store-transfer", null, {
+        params: {
+          from_store_id: fromStoreId,
+          to_store_id: toStoreId,
+          amount,
+          from_payment_method_id:
+            fromPaymentMethodId === "" ? undefined : fromPaymentMethodId,
+          to_payment_method_id:
+            toPaymentMethodId === "" ? undefined : toPaymentMethodId,
+          description,
+          time: new Date().toLocaleString(),
+        },
+      });
+    },
+    onSuccess: () => {
+      notify({ type: "success", text: "تم تنفيذ التحويل بين المتاجر بنجاح" });
+      refetchAccounts();
+      refetchStoreBalances();
+    },
+    onError: onErr("تعذر تنفيذ التحويل بين المتاجر"),
+  });
+
   return {
     accounts: data.accounts,
     total: data.total,
@@ -161,6 +227,9 @@ const useAccounts = (
     payout,
     reconcile,
     transfer,
+    storeBalances,
+    refetchStoreBalances,
+    storeTransfer,
   };
 };
 

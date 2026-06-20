@@ -11,6 +11,7 @@ snapshots stay meaningful even after a method is removed.
 
 import logging
 from os import getenv
+from typing import Optional
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -84,7 +85,7 @@ def get_payment_methods(current_user: dict = Depends(get_current_user)):
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
-                SELECT id, name, is_default
+                SELECT id, name, is_default, home_store_id
                 FROM payment_methods
                 WHERE is_deleted = FALSE
                 ORDER BY is_default DESC, id ASC
@@ -97,7 +98,11 @@ def get_payment_methods(current_user: dict = Depends(get_current_user)):
 
 
 @router.post("/payment-methods")
-def add_payment_method(name: str, current_user: dict = Depends(get_current_user)):
+def add_payment_method(
+    name: str,
+    home_store_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+):
     """Create a new payment method."""
     clean_name = (name or "").strip()
     if not clean_name:
@@ -122,14 +127,16 @@ def add_payment_method(name: str, current_user: dict = Depends(get_current_user)
                 "SELECT COUNT(*) AS count FROM payment_methods WHERE is_deleted = FALSE"
             )
             is_default = cur.fetchone()["count"] == 0
+            # The default (cash) method is never tied to a single store
+            home = None if is_default else home_store_id
 
             cur.execute(
                 """
-                INSERT INTO payment_methods (name, is_default, is_deleted)
-                VALUES (%s, %s, FALSE)
+                INSERT INTO payment_methods (name, is_default, is_deleted, home_store_id)
+                VALUES (%s, %s, FALSE, %s)
                 RETURNING id
                 """,
-                (clean_name, is_default),
+                (clean_name, is_default, home),
             )
             return {"id": cur.fetchone()["id"]}
     except HTTPException:
@@ -141,9 +148,12 @@ def add_payment_method(name: str, current_user: dict = Depends(get_current_user)
 
 @router.put("/payment-methods")
 def update_payment_method(
-    id: int, name: str, current_user: dict = Depends(get_current_user)
+    id: int,
+    name: str,
+    home_store_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
 ):
-    """Rename a payment method."""
+    """Rename a payment method and/or set the store its account lives in."""
     clean_name = (name or "").strip()
     if not clean_name:
         raise HTTPException(status_code=400, detail="الاسم مطلوب")
@@ -163,13 +173,15 @@ def update_payment_method(
                     status_code=400, detail="طريقة الدفع موجودة بالفعل"
                 )
 
+            # The default (cash) method can never be tied to a single store
             cur.execute(
                 """
                 UPDATE payment_methods
-                SET name = %s
+                SET name = %s,
+                    home_store_id = CASE WHEN is_default THEN NULL ELSE %s END
                 WHERE id = %s AND is_deleted = FALSE
                 """,
-                (clean_name, id),
+                (clean_name, home_store_id, id),
             )
             if cur.rowcount == 0:
                 raise HTTPException(
@@ -180,70 +192,4 @@ def update_payment_method(
         raise
     except Exception as e:
         logging.error(f"Error updating payment method: {e}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@router.delete("/payment-methods")
-def delete_payment_method(id: int, current_user: dict = Depends(get_current_user)):
-    """
-    Soft-delete a payment method.
-
-    Guards:
-    - The last remaining active method cannot be deleted (there must always be
-      at least one method to default new bills to).
-    - When the default method is deleted, another active method is promoted.
-    """
-    try:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT id, is_default FROM payment_methods
-                WHERE id = %s AND is_deleted = FALSE
-                """,
-                (id,),
-            )
-            target = cur.fetchone()
-            if not target:
-                raise HTTPException(
-                    status_code=404, detail="طريقة الدفع غير موجودة"
-                )
-
-            cur.execute(
-                "SELECT COUNT(*) AS count FROM payment_methods WHERE is_deleted = FALSE"
-            )
-            if cur.fetchone()["count"] <= 1:
-                raise HTTPException(
-                    status_code=400,
-                    detail="لا يمكن حذف طريقة الدفع الوحيدة المتبقية",
-                )
-
-            cur.execute(
-                """
-                UPDATE payment_methods
-                SET is_deleted = TRUE, is_default = FALSE
-                WHERE id = %s
-                """,
-                (id,),
-            )
-
-            # Promote a new default if we just removed the default one
-            if target["is_default"]:
-                cur.execute(
-                    """
-                    UPDATE payment_methods
-                    SET is_default = TRUE
-                    WHERE id = (
-                        SELECT id FROM payment_methods
-                        WHERE is_deleted = FALSE
-                        ORDER BY id ASC
-                        LIMIT 1
-                    )
-                    """
-                )
-
-            return {"message": "Payment method deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error deleting payment method: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e

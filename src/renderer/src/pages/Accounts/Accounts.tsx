@@ -21,6 +21,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Typography,
@@ -33,7 +34,7 @@ import {
   SwapHoriz as SwapIcon,
   FactCheck as ReconcileIcon,
 } from "@mui/icons-material";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -67,12 +68,70 @@ const Accounts = () => {
     payout,
     reconcile,
     transfer,
+    storeBalances,
+    storeTransfer,
   } = useAccounts(storeId, setMsg);
 
   const activeAccounts = accounts.filter((a) => !a.is_deleted);
 
+  // Inter-store settle dialog
+  const [settleStore, setSettleStore] = useState<{
+    store_id: number;
+    name: string;
+    balance: number;
+  } | null>(null);
+  const [settleDir, setSettleDir] = useState<"pay" | "receive">("pay");
+  const [settleAmount, setSettleAmount] = useState<number>(0);
+  const [settleMyMethod, setSettleMyMethod] = useState<number | "">("");
+  const [settleTheirMethod, setSettleTheirMethod] = useState<number | "">("");
+
+  const openSettle = (sb: {
+    store_id: number;
+    name: string;
+    balance: number;
+  }) => {
+    setSettleStore(sb);
+    // balance > 0 => I owe them => default to paying them
+    setSettleDir(sb.balance >= 0 ? "pay" : "receive");
+    setSettleAmount(Math.abs(sb.balance));
+    setSettleMyMethod(activeAccounts[0]?.id ?? "");
+    setSettleTheirMethod(activeAccounts[0]?.id ?? "");
+  };
+
+  const submitSettle = () => {
+    if (!settleStore) return;
+    const me = storeId;
+    const other = settleStore.store_id;
+    const payload =
+      settleDir === "pay"
+        ? {
+            fromStoreId: me,
+            toStoreId: other,
+            fromPaymentMethodId: settleMyMethod,
+            toPaymentMethodId: settleTheirMethod,
+          }
+        : {
+            fromStoreId: other,
+            toStoreId: me,
+            fromPaymentMethodId: settleTheirMethod,
+            toPaymentMethodId: settleMyMethod,
+          };
+    storeTransfer.mutate(
+      {
+        ...payload,
+        amount: settleAmount,
+        description: "تسوية حساب بين المتاجر",
+      },
+      { onSuccess: () => setSettleStore(null) },
+    );
+  };
+
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const selectedAccount = accounts.find((a) => a.id === selectedId) || null;
+
+  // Ledger pagination
+  const [ledgerPage, setLedgerPage] = useState(0);
+  const [ledgerRowsPerPage, setLedgerRowsPerPage] = useState(25);
 
   // Dialog state
   const [mode, setMode] = useState<DialogMode>(null);
@@ -81,22 +140,32 @@ const Accounts = () => {
   const [amount, setAmount] = useState<number>(0);
   const [description, setDescription] = useState<string>("");
 
-  const { data: ledger = [], isFetching: isLedgerLoading } = useQuery({
-    queryKey: ["account-transactions", storeId, selectedId],
-    queryFn: () => getAccountTransactions(storeId, selectedId as number),
+  const { data: ledgerData, isFetching: isLedgerLoading } = useQuery({
+    queryKey: [
+      "account-transactions",
+      storeId,
+      selectedId,
+      ledgerPage,
+      ledgerRowsPerPage,
+    ],
+    queryFn: () =>
+      getAccountTransactions(
+        storeId,
+        selectedId as number,
+        ledgerRowsPerPage,
+        ledgerPage * ledgerRowsPerPage,
+      ),
     enabled: selectedId !== null,
+    placeholderData: (prev) => prev,
   });
 
-  // Running balance per ledger row (rows are newest-first)
-  const ledgerWithBalance = useMemo(() => {
-    if (!selectedAccount) return [];
-    let running = selectedAccount.balance;
-    return ledger.map((row) => {
-      const balanceAfter = running;
-      running = Math.round((running - row.amount) * 100) / 100;
-      return { ...row, balanceAfter };
-    });
-  }, [ledger, selectedAccount]);
+  const ledger = ledgerData?.transactions ?? [];
+  const ledgerTotal = ledgerData?.total ?? 0;
+
+  const selectAccount = (id: number) => {
+    setSelectedId((cur) => (cur === id ? null : id));
+    setLedgerPage(0);
+  };
 
   const openDialog = (m: DialogMode, presetMethod?: number) => {
     setMode(m);
@@ -259,11 +328,7 @@ const Accounts = () => {
                   selectedId === account.id ? "primary.main" : "transparent",
               }}
             >
-              <CardActionArea
-                onClick={() =>
-                  setSelectedId(selectedId === account.id ? null : account.id)
-                }
-              >
+              <CardActionArea onClick={() => selectAccount(account.id)}>
                 <CardContent>
                   <Box
                     sx={{
@@ -302,6 +367,74 @@ const Accounts = () => {
           </Grid2>
         ))}
       </Grid2>
+
+      {/* Inter-store balances */}
+      {storeBalances.length > 0 && (
+        <Paper
+          elevation={1}
+          sx={{
+            p: 3,
+            mb: 3,
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+            الأرصدة بين المتاجر
+          </Typography>
+          <Grid2 container spacing={2}>
+            {storeBalances.map((sb) => {
+              const owe = sb.balance > 0.001; // we owe them
+              const owed = sb.balance < -0.001; // they owe us
+              return (
+                <Grid2 size={{ xs: 12, sm: 6, md: 4 }} key={sb.store_id}>
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderRadius: 2,
+                      border: "1px solid",
+                      borderColor: owe
+                        ? "error.light"
+                        : owed
+                          ? "success.light"
+                          : "divider",
+                    }}
+                  >
+                    <Typography variant="subtitle1" fontWeight={600} noWrap>
+                      {sb.name}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color={
+                        owe
+                          ? "error.main"
+                          : owed
+                            ? "success.main"
+                            : "text.secondary"
+                      }
+                      sx={{ mb: 1 }}
+                    >
+                      {owe
+                        ? `أنت مدين لهم بـ ${formatCurrency(sb.balance)}`
+                        : owed
+                          ? `هم مدينون لك بـ ${formatCurrency(-sb.balance)}`
+                          : "لا يوجد رصيد مستحق"}
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => openSettle(sb)}
+                    >
+                      تسوية / تحويل
+                    </Button>
+                  </Box>
+                </Grid2>
+              );
+            })}
+          </Grid2>
+        </Paper>
+      )}
 
       {/* Selected account ledger */}
       {selectedAccount && (
@@ -359,7 +492,7 @@ const Accounts = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {ledgerWithBalance.map((row) => (
+                {ledger.map((row) => (
                   <TableRow key={row.id} hover>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>
                       {row.time}
@@ -384,11 +517,11 @@ const Accounts = () => {
                       {formatCurrency(row.amount)}
                     </TableCell>
                     <TableCell align="right">
-                      {formatCurrency(row.balanceAfter)}
+                      {formatCurrency(row.balance_after)}
                     </TableCell>
                   </TableRow>
                 ))}
-                {!isLedgerLoading && ledgerWithBalance.length === 0 && (
+                {!isLedgerLoading && ledger.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} align="center">
                       لا توجد حركات على هذا الحساب
@@ -398,6 +531,22 @@ const Accounts = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          <TablePagination
+            rowsPerPageOptions={[25, 50, 100]}
+            component="div"
+            count={ledgerTotal}
+            rowsPerPage={ledgerRowsPerPage}
+            page={ledgerPage}
+            onPageChange={(_e, newPage) => setLedgerPage(newPage)}
+            onRowsPerPageChange={(e) => {
+              setLedgerRowsPerPage(parseInt(e.target.value, 10));
+              setLedgerPage(0);
+            }}
+            labelRowsPerPage="عدد الصفوف:"
+            labelDisplayedRows={({ from, to, count }) =>
+              `${from}-${to} من ${count}`
+            }
+          />
         </Paper>
       )}
 
@@ -490,6 +639,95 @@ const Accounts = () => {
               (mode !== "reconcile" && amount <= 0) ||
               (mode === "transfer" &&
                 (toMethodId === "" || toMethodId === methodId))
+            }
+          >
+            تأكيد
+          </LoadingButton>
+        </DialogActions>
+      </Dialog>
+
+      {/* Inter-store settle dialog */}
+      <Dialog
+        open={settleStore !== null}
+        onClose={() => setSettleStore(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>تسوية / تحويل مع {settleStore?.name}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>الاتجاه</InputLabel>
+              <Select
+                label="الاتجاه"
+                value={settleDir}
+                onChange={(e) =>
+                  setSettleDir(e.target.value as "pay" | "receive")
+                }
+              >
+                <MenuItem value="pay">أدفع لهم</MenuItem>
+                <MenuItem value="receive">يدفعون لي</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              fullWidth
+              size="small"
+              type="number"
+              label="المبلغ"
+              value={settleAmount}
+              onChange={(e) => setSettleAmount(parseFloat(e.target.value) || 0)}
+              inputMode="decimal"
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">جنيه</InputAdornment>
+                  ),
+                },
+              }}
+            />
+
+            <FormControl fullWidth size="small">
+              <InputLabel>حسابي</InputLabel>
+              <Select
+                label="حسابي"
+                value={settleMyMethod}
+                onChange={(e) => setSettleMyMethod(Number(e.target.value))}
+              >
+                {activeAccounts.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>
+                    {a.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth size="small">
+              <InputLabel>حسابهم</InputLabel>
+              <Select
+                label="حسابهم"
+                value={settleTheirMethod}
+                onChange={(e) => setSettleTheirMethod(Number(e.target.value))}
+              >
+                {activeAccounts.map((a) => (
+                  <MenuItem key={a.id} value={a.id}>
+                    {a.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setSettleStore(null)}>إلغاء</Button>
+          <LoadingButton
+            variant="contained"
+            loading={storeTransfer.isPending}
+            onClick={submitSettle}
+            disabled={
+              settleAmount <= 0 ||
+              settleMyMethod === "" ||
+              settleTheirMethod === ""
             }
           >
             تأكيد

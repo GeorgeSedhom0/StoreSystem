@@ -2,9 +2,13 @@ import {
   Box,
   Chip,
   Divider,
+  FormControl,
   Grid2,
   IconButton,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   TextField,
   Tooltip,
   Typography,
@@ -14,17 +18,29 @@ import {
   Payments as PaymentsIcon,
   Add as AddIcon,
   Save as SaveIcon,
-  Delete as DeleteIcon,
 } from "@mui/icons-material";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import usePaymentMethods from "../../Shared/hooks/usePaymentMethods";
+
+interface StoreInfo {
+  id: number;
+  name: string;
+}
+
+const getStores = async () => {
+  const { data } = await axios.get<StoreInfo[]>("/admin/stores-data");
+  return data;
+};
 
 const PaymentMethods = () => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [newName, setNewName] = useState("");
-  // Local edit buffer for renaming, keyed by method id
+  // Local edit buffers, keyed by method id
   const [editNames, setEditNames] = useState<Record<number, string>>({});
+  const [editHome, setEditHome] = useState<Record<number, number | "">>({});
 
   const {
     paymentMethods,
@@ -33,16 +49,31 @@ const PaymentMethods = () => {
     addPaymentMethodLoading,
     updatePaymentMethodMutation,
     updatePaymentMethodLoading,
-    deletePaymentMethodMutation,
-    deletePaymentMethodLoading,
   } = usePaymentMethods(setMsg);
 
-  // Keep the edit buffer in sync with the fetched list
+  const { data: stores = [] } = useQuery({
+    queryKey: ["stores-data"],
+    queryFn: getStores,
+    initialData: [],
+  });
+
+  const storeName = (id: number) =>
+    stores.find((s) => s.id === id)?.name || `متجر ${id}`;
+
+  // Keep the edit buffers in sync with the fetched list
   useEffect(() => {
     setEditNames((prev) => {
       const next: Record<number, string> = {};
       for (const m of paymentMethods) {
         next[m.id] = prev[m.id] !== undefined ? prev[m.id] : m.name;
+      }
+      return next;
+    });
+    setEditHome((prev) => {
+      const next: Record<number, number | ""> = {};
+      for (const m of paymentMethods) {
+        next[m.id] =
+          prev[m.id] !== undefined ? prev[m.id] : (m.home_store_id ?? "");
       }
       return next;
     });
@@ -86,8 +117,9 @@ const PaymentMethods = () => {
           </Typography>
         </Box>
         <Typography variant="body1" color="text.secondary">
-          يمكنك إضافة طرق دفع جديدة أو تعديل أسمائها أو حذفها. تُستخدم طرق الدفع
-          عند البيع والمرتجع لتقسيم قيمة الفاتورة بين أكثر من طريقة.
+          يمكنك إضافة طرق دفع جديدة أو تعديل أسمائها. يمكنك أيضًا تحديد المتجر
+          الذي يملك حساب طريقة الدفع فعليًا (مثل محفظة إلكترونية لمتجر معيّن) — عند
+          استخدامها من متجر آخر يتم تحويل المبلغ تلقائيًا إلى المتجر المالك.
         </Typography>
       </Paper>
 
@@ -150,7 +182,12 @@ const PaymentMethods = () => {
         <Grid2 container spacing={2}>
           {paymentMethods.map((method) => {
             const buffer = editNames[method.id] ?? method.name;
-            const changed = buffer.trim() !== method.name && buffer.trim() !== "";
+            const homeBuffer = editHome[method.id] ?? "";
+            const currentHome = method.home_store_id ?? "";
+            const nameChanged =
+              buffer.trim() !== method.name && buffer.trim() !== "";
+            const homeChanged = homeBuffer !== currentHome;
+            const changed = (nameChanged || homeChanged) && buffer.trim() !== "";
             return (
               <Grid2 size={12} key={method.id}>
                 <Box
@@ -158,6 +195,7 @@ const PaymentMethods = () => {
                     display: "flex",
                     gap: 1,
                     alignItems: "center",
+                    flexWrap: "wrap",
                     p: 1.5,
                     borderRadius: 2,
                     border: "1px solid",
@@ -166,6 +204,7 @@ const PaymentMethods = () => {
                 >
                   <TextField
                     size="small"
+                    label="الاسم"
                     value={buffer}
                     onChange={(e) =>
                       setEditNames((prev) => ({
@@ -173,12 +212,38 @@ const PaymentMethods = () => {
                         [method.id]: e.target.value,
                       }))
                     }
-                    sx={{ flex: 1 }}
+                    sx={{ flex: 1, minWidth: 160 }}
                   />
-                  {method.is_default && (
-                    <Chip label="افتراضي" size="small" color="primary" />
+                  {method.is_default ? (
+                    <Chip label="نقدي / افتراضي" size="small" color="primary" />
+                  ) : (
+                    <FormControl size="small" sx={{ minWidth: 200 }}>
+                      <InputLabel>المتجر المالك للحساب</InputLabel>
+                      <Select
+                        label="المتجر المالك للحساب"
+                        value={homeBuffer}
+                        onChange={(e) =>
+                          setEditHome((prev) => ({
+                            ...prev,
+                            [method.id]:
+                              e.target.value === ""
+                                ? ""
+                                : Number(e.target.value),
+                          }))
+                        }
+                      >
+                        <MenuItem value="">
+                          <em>مستقل لكل متجر</em>
+                        </MenuItem>
+                        {stores.map((s) => (
+                          <MenuItem key={s.id} value={s.id}>
+                            {s.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
                   )}
-                  <Tooltip title="حفظ الاسم">
+                  <Tooltip title="حفظ">
                     <span>
                       <IconButton
                         color="primary"
@@ -187,6 +252,7 @@ const PaymentMethods = () => {
                           updatePaymentMethodMutation({
                             id: method.id,
                             name: buffer.trim(),
+                            homeStoreId: homeBuffer === "" ? null : homeBuffer,
                           })
                         }
                       >
@@ -194,29 +260,16 @@ const PaymentMethods = () => {
                       </IconButton>
                     </span>
                   </Tooltip>
-                  <Tooltip title="حذف">
-                    <span>
-                      <IconButton
-                        color="error"
-                        disabled={
-                          deletePaymentMethodLoading ||
-                          paymentMethods.length <= 1
-                        }
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `هل أنت متأكد من حذف طريقة الدفع "${method.name}"؟`,
-                            )
-                          ) {
-                            deletePaymentMethodMutation(method.id);
-                          }
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
                 </Box>
+                {!method.is_default && method.home_store_id != null && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ ml: 1 }}
+                  >
+                    الحساب يخص: {storeName(method.home_store_id)}
+                  </Typography>
+                )}
               </Grid2>
             );
           })}

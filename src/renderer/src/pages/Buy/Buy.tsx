@@ -18,9 +18,12 @@ import {
   Checkbox,
   Box,
   IconButton,
+  Switch,
+  FormControlLabel,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import { useQuery } from "@tanstack/react-query";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -220,6 +223,32 @@ const Buy = () => {
 
   const { storeId } = useContext(StoreContext);
 
+  // Another store paying for (part of) this buy bill -> inter-store debt
+  const { data: storesData = [] } = useQuery({
+    queryKey: ["stores-data"],
+    queryFn: async () => {
+      const { data } = await axios.get<{ id: number; name: string }[]>(
+        "/admin/stores-data",
+      );
+      return data;
+    },
+    initialData: [],
+  });
+  const otherStores = storesData.filter((s) => s.id !== storeId);
+  // Accounts of this store (or unowned). Off-store accounts can't pay a buy.
+  const buyMethods = paymentMethods.filter(
+    (m) => m.home_store_id == null || m.home_store_id === storeId,
+  );
+  const [payByEnabled, setPayByEnabled] = useState(false);
+  const [payByStoreId, setPayByStoreId] = useState<number | "">("");
+  const [payByAmount, setPayByAmount] = useState<number>(0);
+  const [payByMyMethod, setPayByMyMethod] = useState<number | "">("");
+  const [payByTheirMethod, setPayByTheirMethod] = useState<number | "">("");
+  // Accounts of the paying store (or unowned), for the funding panel.
+  const payerMethods = paymentMethods.filter(
+    (m) => m.home_store_id == null || m.home_store_id === payByStoreId,
+  );
+
   const addToCart = useCallback((product: Product | null) => {
     if (!product) return;
     setShoppingCart((prev) => {
@@ -330,12 +359,25 @@ const Buy = () => {
             0,
           ) - discount;
 
+        // When another store funds this buy, the bill is paid from the account
+        // they transfer the money into, so lock the buy's payment to it.
+        const buyPayments =
+          payByEnabled && payByMyMethod !== ""
+            ? [
+                {
+                  method_id: payByMyMethod,
+                  name: paymentMethods.find((m) => m.id === payByMyMethod)?.name,
+                  amount: billTotal,
+                },
+              ]
+            : buildPayments(billTotal, paymentMethods, paymentLines);
+
         const bill = {
           time: new Date().toLocaleString(),
           discount,
           total: billTotal,
           products_flow: shoppingCart,
-          payments: buildPayments(billTotal, paymentMethods, paymentLines),
+          payments: buyPayments,
         };
 
         let newPartyId = partyId;
@@ -361,12 +403,38 @@ const Buy = () => {
           },
         });
 
+        // Another store funded (part of) this buy -> record an inter-store loan
+        // (that store -> this store). Builds a debt this store owes them.
+        if (
+          payByEnabled &&
+          payByStoreId !== "" &&
+          payByAmount > 0 &&
+          moveType === "buy"
+        ) {
+          await axios.post("/store-transfer", null, {
+            params: {
+              from_store_id: payByStoreId,
+              to_store_id: storeId,
+              amount: payByAmount,
+              from_payment_method_id:
+                payByTheirMethod === "" ? undefined : payByTheirMethod,
+              to_payment_method_id:
+                payByMyMethod === "" ? undefined : payByMyMethod,
+              description: "تمويل فاتورة شراء من متجر آخر",
+              time: new Date().toLocaleString(),
+            },
+          });
+        }
+
         setShoppingCart([]);
         await updateProducts();
         setDiscount(0);
         setMoveType("buy");
         setPartyId(null);
         setPaymentLines([]);
+        setPayByEnabled(false);
+        setPayByStoreId("");
+        setPayByAmount(0);
         setMsg({
           type: "success",
           text: "تم اضافة الفاتورة بنجاح",
@@ -393,6 +461,11 @@ const Buy = () => {
       isSubmitting,
       paymentMethods,
       paymentLines,
+      payByEnabled,
+      payByStoreId,
+      payByAmount,
+      payByMyMethod,
+      payByTheirMethod,
     ],
   );
 
@@ -465,7 +538,7 @@ const Buy = () => {
               </Grid2>
             </Grid2>
 
-            {paymentMethods.length > 0 && (
+            {paymentMethods.length > 0 && !payByEnabled && (
               <Grid2 size={12}>
                 <PaymentSplit
                   total={
@@ -475,10 +548,144 @@ const Buy = () => {
                       0,
                     ) - discount
                   }
-                  methods={paymentMethods}
+                  methods={buyMethods}
                   lines={paymentLines}
                   setLines={setPaymentLines}
+                  currentStoreId={storeId}
                 />
+              </Grid2>
+            )}
+
+            {payByEnabled && (
+              <Grid2 size={12}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="طريقة دفع الفاتورة"
+                  value={
+                    paymentMethods.find((m) => m.id === payByMyMethod)?.name ||
+                    ""
+                  }
+                  disabled
+                  helperText="تُدفع الفاتورة تلقائيًا من الحساب الذي يحوّل إليه المتجر الدافع"
+                />
+              </Grid2>
+            )}
+
+            {/* Another store pays for this buy (inter-store debt) */}
+            {moveType === "buy" && otherStores.length > 0 && (
+              <Grid2 size={12}>
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    border: "1px solid",
+                    borderColor: payByEnabled ? "primary.light" : "divider",
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={payByEnabled}
+                        onChange={(e) => {
+                          setPayByEnabled(e.target.checked);
+                          if (e.target.checked) {
+                            setPayByStoreId(otherStores[0]?.id ?? "");
+                            setPayByAmount(
+                              shoppingCart.reduce(
+                                (acc, item) =>
+                                  acc + item.wholesale_price * item.quantity,
+                                0,
+                              ) - discount,
+                            );
+                            setPayByMyMethod(paymentMethods[0]?.id ?? "");
+                            setPayByTheirMethod(paymentMethods[0]?.id ?? "");
+                          }
+                        }}
+                      />
+                    }
+                    label="متجر آخر يدفع عن هذه الفاتورة (دين بين المتاجر)"
+                  />
+                  {payByEnabled && (
+                    <Grid2 container spacing={2} sx={{ mt: 0.5 }}>
+                      <Grid2 size={{ xs: 12, sm: 3 }}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>المتجر الدافع</InputLabel>
+                          <Select
+                            label="المتجر الدافع"
+                            value={payByStoreId}
+                            onChange={(e) =>
+                              setPayByStoreId(Number(e.target.value))
+                            }
+                          >
+                            {otherStores.map((s) => (
+                              <MenuItem key={s.id} value={s.id}>
+                                {s.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid2>
+                      <Grid2 size={{ xs: 12, sm: 3 }}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          type="number"
+                          label="المبلغ المدفوع"
+                          value={payByAmount}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            const max =
+                              shoppingCart.reduce(
+                                (acc, item) =>
+                                  acc + item.wholesale_price * item.quantity,
+                                0,
+                              ) - discount;
+                            setPayByAmount(Math.min(Math.max(v, 0), max));
+                          }}
+                          inputMode="decimal"
+                          helperText="بحد أقصى قيمة الفاتورة"
+                        />
+                      </Grid2>
+                      <Grid2 size={{ xs: 12, sm: 3 }}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>حساب المتجر الدافع</InputLabel>
+                          <Select
+                            label="حساب المتجر الدافع"
+                            value={payByTheirMethod}
+                            onChange={(e) =>
+                              setPayByTheirMethod(Number(e.target.value))
+                            }
+                          >
+                            {payerMethods.map((m) => (
+                              <MenuItem key={m.id} value={m.id}>
+                                {m.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid2>
+                      <Grid2 size={{ xs: 12, sm: 3 }}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>حسابي (الاستلام)</InputLabel>
+                          <Select
+                            label="حسابي (الاستلام)"
+                            value={payByMyMethod}
+                            onChange={(e) =>
+                              setPayByMyMethod(Number(e.target.value))
+                            }
+                          >
+                            {buyMethods.map((m) => (
+                              <MenuItem key={m.id} value={m.id}>
+                                {m.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid2>
+                    </Grid2>
+                  )}
+                </Box>
               </Grid2>
             )}
 

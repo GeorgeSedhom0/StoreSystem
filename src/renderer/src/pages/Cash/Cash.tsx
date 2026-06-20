@@ -74,6 +74,9 @@ const Cash = () => {
   const [moveType, setMoveType] = useState<"in" | "out">("in");
   const [description, setDescription] = useState("");
   const [accountId, setAccountId] = useState<number | "">("");
+  const [counterpartAccountId, setCounterpartAccountId] = useState<number | "">(
+    "",
+  );
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("day"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs().endOf("day"));
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
@@ -132,6 +135,13 @@ const Cash = () => {
   const { paymentMethods } = usePaymentMethods();
   const { accounts: accountBalances, total: accountsTotal } =
     useAccounts(storeId);
+
+  // When the selected party is another store, this is a cross-store transfer,
+  // so we let the user choose the account on the other store's side too.
+  const selectedParty = parties.find((p) => p.id === selectedPartyId);
+  // Store parties carry extra_info.store_id (which can legitimately be 0 for the
+  // warehouse), so check for presence rather than truthiness.
+  const isStoreParty = selectedParty?.extra_info?.store_id != null;
 
   const {
     data: rawCashFlow,
@@ -381,6 +391,10 @@ const Cash = () => {
             party_id: newPartyId,
             time: new Date().toLocaleString(),
             payment_method_id: accountId === "" ? null : accountId,
+            counterpart_payment_method_id:
+              isStoreParty && counterpartAccountId !== ""
+                ? counterpartAccountId
+                : null,
           },
         },
       );
@@ -390,6 +404,7 @@ const Cash = () => {
       setMoveType("in");
       setSelectedPartyId(null);
       setAccountId("");
+      setCounterpartAccountId("");
       setMsg({ type: "success", text: "تمت إضافة سجل التدفق النقدي بنجاح" });
     } catch (error) {
       setMsg({ type: "error", text: "لم تتم الإضافة بنجاح" });
@@ -590,6 +605,32 @@ const Cash = () => {
                       ))}
                     </Select>
                   </FormControl>
+                  {isStoreParty && (
+                    <FormControl>
+                      <InputLabel>حساب المتجر الآخر</InputLabel>
+                      <Select
+                        label="حساب المتجر الآخر"
+                        value={counterpartAccountId}
+                        onChange={(e) =>
+                          setCounterpartAccountId(
+                            e.target.value === ""
+                              ? ""
+                              : Number(e.target.value),
+                          )
+                        }
+                        sx={{ minWidth: 160 }}
+                      >
+                        <MenuItem value="">
+                          <em>نقدي (افتراضي)</em>
+                        </MenuItem>
+                        {paymentMethods.map((m) => (
+                          <MenuItem key={m.id} value={m.id}>
+                            {m.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
                   <TextField
                     label="الوصف"
                     value={description}

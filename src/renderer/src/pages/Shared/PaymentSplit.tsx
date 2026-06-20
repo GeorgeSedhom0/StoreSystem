@@ -117,6 +117,8 @@ interface PaymentSplitProps {
   methods: PaymentMethod[];
   lines: PaymentLineState[];
   setLines: Dispatch<SetStateAction<PaymentLineState[]>>;
+  /** When set, methods homed at a different store are labelled as off-store. */
+  currentStoreId?: number;
 }
 
 const PaymentSplit = ({
@@ -124,7 +126,13 @@ const PaymentSplit = ({
   methods,
   lines,
   setLines,
+  currentStoreId,
 }: PaymentSplitProps) => {
+  const methodLabel = (m: PaymentMethod) =>
+    m.home_store_id != null && m.home_store_id !== currentStoreId
+      ? `${m.name} — متجر آخر`
+      : m.name;
+
   // In-progress text per method id, so "50%" and partial entries can be typed.
   const [rawInputs, setRawInputs] = useState<Record<number, string>>({});
   const defaultMethod = methods[0];
@@ -376,7 +384,7 @@ const PaymentSplit = ({
                     >
                       {selectableForLine.map((m) => (
                         <MenuItem key={m.id} value={m.id}>
-                          {m.name}
+                          {methodLabel(m)}
                         </MenuItem>
                       ))}
                     </Select>

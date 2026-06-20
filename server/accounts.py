@@ -140,30 +140,77 @@ def get_account_transactions(
     payment_method_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
     current_user: dict = Depends(get_current_user),
 ):
-    """Ledger for a single account, newest first, with a running balance."""
+    """
+    Paginated ledger for a single account, newest first. The running balance is
+    computed in SQL over the whole account (so it stays correct across pages and
+    date filters). Returns {transactions, total}.
+    """
+    # Cap the page size to avoid pulling the whole (potentially huge) ledger
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             cur.execute(
                 """
+                WITH ledger AS (
+                    SELECT
+                        at.id,
+                        at.time,
+                        at.amount,
+                        at.source,
+                        at.cash_flow_id,
+                        at.store_id,
+                        SUM(at.amount) OVER (
+                            ORDER BY at.time, at.id
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                        ) AS balance_after
+                    FROM account_transactions at
+                    WHERE at.store_id = %s
+                      AND at.payment_method_id = %s
+                )
                 SELECT
-                    at.id,
-                    TO_CHAR(at.time, 'YYYY-MM-DD HH24:MI:SS') AS time,
-                    at.amount,
-                    at.source,
+                    l.id,
+                    TO_CHAR(l.time, 'YYYY-MM-DD HH24:MI:SS') AS time,
+                    l.amount,
+                    l.source,
+                    l.balance_after,
                     cf.description,
                     cf.type AS cash_flow_type,
                     ap.name AS party_name
-                FROM account_transactions at
+                FROM ledger l
                 LEFT JOIN cash_flow cf
-                    ON cf.id = at.cash_flow_id AND cf.store_id = at.store_id
+                    ON cf.id = l.cash_flow_id AND cf.store_id = l.store_id
                 LEFT JOIN assosiated_parties ap ON cf.party_id = ap.id
+                WHERE (%s IS NULL OR l.time >= %s::timestamp)
+                  AND (%s IS NULL OR l.time <= %s::timestamp)
+                ORDER BY l.time DESC, l.id DESC
+                LIMIT %s OFFSET %s
+                """,
+                (
+                    store_id,
+                    payment_method_id,
+                    start_date,
+                    start_date,
+                    end_date,
+                    end_date,
+                    limit,
+                    offset,
+                ),
+            )
+            transactions = cur.fetchall()
+
+            cur.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM account_transactions at
                 WHERE at.store_id = %s
                   AND at.payment_method_id = %s
                   AND (%s IS NULL OR at.time >= %s::timestamp)
                   AND (%s IS NULL OR at.time <= %s::timestamp)
-                ORDER BY at.time DESC, at.id DESC
                 """,
                 (
                     store_id,
@@ -174,10 +221,56 @@ def get_account_transactions(
                     end_date,
                 ),
             )
-            rows = cur.fetchall()
-            return rows
+            total = cur.fetchone()["total"]
+            return {"transactions": transactions, "total": total}
     except Exception as e:
         logging.error(f"Error getting account transactions: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/store-balances")
+def get_store_balances(
+    store_id: int, current_user: dict = Depends(get_current_user)
+):
+    """
+    Inter-store running balances for this store against every other store.
+
+    Only non-bill cross-store money transfers count (goods sales are excluded),
+    so this reflects loans / forwarded payments / settlements — the "who owes
+    whom". balance > 0 => this store owes the other; balance < 0 => the other
+    owes this store.
+    """
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT
+                    sd.id AS store_id,
+                    sd.name,
+                    COALESCE(SUM(cf.amount), 0) AS balance
+                FROM store_data sd
+                JOIN assosiated_parties ap
+                    ON ap.extra_info->>'store_id' = sd.id::text
+                LEFT JOIN cash_flow cf
+                    ON cf.store_id = %s
+                   AND cf.party_id = ap.id
+                   AND cf.bill_id IS NULL
+                WHERE sd.id <> %s
+                GROUP BY sd.id, sd.name
+                ORDER BY sd.id
+                """,
+                (store_id, store_id),
+            )
+            return [
+                {
+                    "store_id": r["store_id"],
+                    "name": r["name"],
+                    "balance": float(r["balance"] or 0),
+                }
+                for r in cur.fetchall()
+            ]
+    except Exception as e:
+        logging.error(f"Error getting store balances: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 

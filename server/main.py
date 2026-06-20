@@ -323,6 +323,59 @@ def _get_store_party_id(cur, store_id: int) -> Optional[int]:
     return result["id"] if result else None
 
 
+def _create_cross_store_transfer(
+    cur,
+    from_store_id: int,
+    to_store_id: int,
+    amount: float,
+    description: str,
+    from_method_id: Optional[int] = None,
+    to_method_id: Optional[int] = None,
+    time: Optional[str] = None,
+) -> None:
+    """
+    Record a paired, non-bill money transfer between two in-db stores.
+
+    `from_store` pays out and `to_store` receives. Each row is tagged with the
+    counterpart store's party and the chosen account, so the accounts mirror
+    attributes it correctly and the inter-store balance (which sums non-bill
+    cross-store cash_flow) stays accurate.
+    """
+    if amount is None or amount <= 0 or from_store_id == to_store_id:
+        return
+
+    t = time or datetime.now().isoformat()
+    from_side_party = _get_store_party_id(cur, to_store_id)
+    to_side_party = _get_store_party_id(cur, from_store_id)
+
+    # Both stores must have an associated party, otherwise the transfer would be
+    # one-sided / untraceable. Fail loudly rather than corrupt the ledger.
+    if from_side_party is None or to_side_party is None:
+        raise HTTPException(
+            status_code=400,
+            detail="تعذّر إيجاد بيانات أحد المتجرين لإتمام التحويل بينهما",
+        )
+
+    cur.execute(
+        """
+        INSERT INTO cash_flow (
+            store_id, time, amount, type, description, party_id, payment_method_id
+        )
+        VALUES (%s, %s, %s, 'out', %s, %s, %s)
+        """,
+        (from_store_id, t, -amount, description, from_side_party, from_method_id),
+    )
+    cur.execute(
+        """
+        INSERT INTO cash_flow (
+            store_id, time, amount, type, description, party_id, payment_method_id
+        )
+        VALUES (%s, %s, %s, 'in', %s, %s, %s)
+        """,
+        (to_store_id, t, amount, description, to_side_party, to_method_id),
+    )
+
+
 def _normalize_bill_pair_sides(
     left_bill_id: int,
     left_store_id: int,
@@ -1159,6 +1212,59 @@ def update_bill(
 
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # Guard: bills with cross-store side effects cannot be edited/deleted,
+            # because their satellite transfers (move settlement, off-store payment
+            # forwarding) are not linked to the bill and would be left dangling.
+            # The user must post a reversing transaction instead. `sync_pair=False`
+            # marks the internal paired-bill recursion, which we never reach for a
+            # blocked bill anyway, but we still skip the guard for it defensively.
+            if sync_pair and bill.id and bill.id > 0:
+                cur.execute(
+                    """
+                    SELECT 1 FROM bills_pairs
+                    WHERE (left_bill_id = %s AND left_store_id = %s)
+                       OR (right_bill_id = %s AND right_store_id = %s)
+                    LIMIT 1
+                    """,
+                    (bill.id, store_id, bill.id, store_id),
+                )
+                if cur.fetchone():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="لا يمكن تعديل أو حذف فاتورة مرتبطة بنقل بين المتاجر. "
+                        "أنشئ فاتورة/حركة عكسية بدلاً من ذلك.",
+                    )
+
+                cur.execute(
+                    "SELECT payments FROM bills WHERE id = %s AND store_id = %s",
+                    (bill.id, store_id),
+                )
+                existing_row = cur.fetchone()
+                existing_payments = existing_row["payments"] if existing_row else None
+                if existing_payments:
+                    payment_method_ids = [
+                        p.get("method_id")
+                        for p in existing_payments
+                        if p.get("method_id")
+                    ]
+                    if payment_method_ids:
+                        cur.execute(
+                            """
+                            SELECT 1 FROM payment_methods
+                            WHERE id = ANY(%s)
+                              AND home_store_id IS NOT NULL
+                              AND home_store_id <> %s
+                            LIMIT 1
+                            """,
+                            (payment_method_ids, store_id),
+                        )
+                        if cur.fetchone():
+                            raise HTTPException(
+                                status_code=400,
+                                detail="لا يمكن تعديل أو حذف فاتورة استُخدم فيها حساب "
+                                "يخص متجرًا آخر. أنشئ فاتورة/حركة عكسية بدلاً من ذلك.",
+                            )
+
             pair_reference = _lock_paired_bill_prices(cur, bill, store_id)
 
             bill.total = -bill.total if bill.type in ["buy", "return"] else bill.total
@@ -1385,17 +1491,51 @@ def update_bill(
                             )
 
             # Continue with normal bill update logic
-            # Update the bill details
+            # Update the bill details. Also rescale the payments split so it keeps
+            # summing to the new total (preserving each method's ratio). This keeps
+            # everything that reads bills.payments — shift dialog, analytics,
+            # printed bill — correct after an edit. A zero total clears the split.
+            new_abs_total = abs(bill.total)
             cur.execute(
                 """
                 UPDATE bills
                 SET
                     discount = %s,
-                    total = %s
+                    total = %s,
+                    payments = CASE
+                        WHEN %s = 0 THEN NULL
+                        WHEN payments IS NULL THEN NULL
+                        ELSE (
+                            SELECT jsonb_agg(
+                                jsonb_set(
+                                    elem,
+                                    '{amount}',
+                                    to_jsonb(ROUND(
+                                        (
+                                            (
+                                                (elem->>'amount')::numeric
+                                                / NULLIF((
+                                                    SELECT SUM((e2->>'amount')::numeric)
+                                                    FROM jsonb_array_elements(payments) e2
+                                                ), 0)
+                                            ) * %s
+                                        )::numeric, 2))
+                                )
+                            )
+                            FROM jsonb_array_elements(payments) elem
+                        )
+                    END
                 WHERE id = %s AND store_id = %s
                 RETURNING *
                 """,
-                (bill.discount, bill.total, bill.id, store_id),
+                (
+                    bill.discount,
+                    bill.total,
+                    new_abs_total,
+                    new_abs_total,
+                    bill.id,
+                    store_id,
+                ),
             )
             negative_bill_id = f"-{bill.id}"
 
@@ -1487,6 +1627,8 @@ def update_bill(
                     )
 
         return JSONResponse(content={"message": "Bill updated successfully"})
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1556,6 +1698,7 @@ def _add_bill_internal(
     installment_interval: Optional[int] = None,
     current_user: Optional[dict] = None,
     background_tasks: Optional[BackgroundTasks] = None,
+    forward_off_store: bool = True,
 ):
     """
     Add a bill to the database
@@ -1823,6 +1966,59 @@ def _add_bill_internal(
                     (bill_id, store_id, paid, installments, installment_interval),
                 )
 
+            # Off-store payment forwarding: if a sell/return was paid via an
+            # account that physically lives in another store, forward that
+            # portion there. Sell -> the money landed in the home store's wallet
+            # (this store -> home). Return -> the home store covered the refund
+            # (home -> this store). Net effect keeps each store's books balanced
+            # and records the inter-store balance.
+            if forward_off_store and move_type in ("sell", "return") and payments_json:
+                payment_lines = json.loads(payments_json)
+                method_ids = [
+                    line["method_id"]
+                    for line in payment_lines
+                    if line.get("method_id")
+                ]
+                if method_ids:
+                    cur.execute(
+                        "SELECT id, home_store_id FROM payment_methods WHERE id = ANY(%s)",
+                        (method_ids,),
+                    )
+                    home_by_method = {
+                        row["id"]: row["home_store_id"] for row in cur.fetchall()
+                    }
+                    for line in payment_lines:
+                        mid = line.get("method_id")
+                        amt = float(line.get("amount") or 0)
+                        home_store = home_by_method.get(mid)
+                        if not mid or not home_store or home_store == store_id:
+                            continue
+                        if amt <= 0:
+                            continue
+                        method_name = line.get("name", "")
+                        if move_type == "sell":
+                            _create_cross_store_transfer(
+                                cur,
+                                store_id,
+                                home_store,
+                                amt,
+                                f"تحصيل ({method_name}) لحساب متجر آخر",
+                                mid,
+                                mid,
+                                bill.time,
+                            )
+                        else:  # return: the home store's account funded the refund
+                            _create_cross_store_transfer(
+                                cur,
+                                home_store,
+                                store_id,
+                                amt,
+                                f"رد ({method_name}) من حساب متجر آخر",
+                                mid,
+                                mid,
+                                bill.time,
+                            )
+
             # get the inserted bill to return it
             cur.execute(
                 """
@@ -1949,6 +2145,9 @@ def move_products(
     source_store_id: int,
     destination_store_id: int,
     background_tasks: BackgroundTasks,
+    source_payment_method_id: Optional[int] = None,
+    destination_payment_method_id: Optional[int] = None,
+    settle_from_debt: bool = False,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -1967,6 +2166,10 @@ def move_products(
     Returns:
         Dict: A message indicating the result of the operation
     """
+    if source_store_id == destination_store_id:
+        raise HTTPException(
+            status_code=400, detail="لا يمكن نقل المنتجات لنفس المتجر"
+        )
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             # Get store information for notifications
@@ -2207,10 +2410,27 @@ def move_products(
 
                 transfer_allocations[product_flow.id] = allocations
 
+        transfer_amount = abs(bill.total)
+        source_payments = (
+            [PaymentLine(method_id=source_payment_method_id, amount=transfer_amount)]
+            if source_payment_method_id is not None
+            else None
+        )
+        destination_payments = (
+            [
+                PaymentLine(
+                    method_id=destination_payment_method_id, amount=transfer_amount
+                )
+            ]
+            if destination_payment_method_id is not None
+            else None
+        )
+
         source_transfer_bill = Bill(
             time=bill.time,
             discount=bill.discount,
             total=bill.total,
+            payments=source_payments,
             products_flow=[
                 ProductFlow(
                     id=product_flow.id,
@@ -2227,6 +2447,7 @@ def move_products(
             time=bill.time,
             discount=bill.discount,
             total=bill.total,
+            payments=destination_payments,
             products_flow=[
                 ProductFlow(
                     id=product_flow.id,
@@ -2246,13 +2467,16 @@ def move_products(
             ],
         )
 
-        # Add sell bill to source store (with destination store as party)
+        # Add sell bill to source store (with destination store as party).
+        # forward_off_store=False: inter-store money is handled by move_products
+        # itself, so the off-store forwarding must not also fire here.
         source_bill_result = _add_bill_internal(
             source_transfer_bill,
             "sell",
             source_store_id,
             destination_party_id,  # Use destination store's associated party ID
             current_user=current_user,
+            forward_off_store=False,
         )
 
         # Add buy bill to destination store (with source store as party)
@@ -2262,6 +2486,7 @@ def move_products(
             destination_store_id,
             source_party_id,  # Use source store's associated party ID
             current_user=current_user,
+            forward_off_store=False,
         )
 
         source_bill_id = source_bill_result["bill"]["id"]
@@ -2276,6 +2501,21 @@ def move_products(
                 destination_store_id,
                 "move_products",
             )
+
+            # "Settle from debt" mode: no real money changes hands. Counter the
+            # bills' cash with a source->destination transfer, which nets the
+            # cash to zero and moves the inter-store balance instead.
+            if settle_from_debt and transfer_amount > 0:
+                _create_cross_store_transfer(
+                    cur,
+                    source_store_id,
+                    destination_store_id,
+                    transfer_amount,
+                    "تسوية نقل بضاعة (بدون نقد)",
+                    source_payment_method_id,
+                    destination_payment_method_id,
+                    bill.time,
+                )
 
         # Prepare products data for notification
         transfer_products = []
@@ -2554,6 +2794,7 @@ def add_cash_flow(
     party_id: Optional[int] = None,
     time: Optional[str] = None,
     payment_method_id: Optional[int] = None,
+    counterpart_payment_method_id: Optional[int] = None,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -2591,7 +2832,7 @@ def add_cash_flow(
             )
 
             party_store_id = _get_party_store_id(cur, party_id)
-            if party_store_id and party_store_id != store_id:
+            if party_store_id is not None and party_store_id != store_id:
                 reverse_type = "out" if move_type == "in" else "in"
                 reverse_signed_amount = amount if reverse_type == "in" else -amount
                 source_store_party_id = _get_store_party_id(cur, store_id)
@@ -2599,9 +2840,9 @@ def add_cash_flow(
                 cur.execute(
                     """
                     INSERT INTO cash_flow (
-                        store_id, time, amount, type, description, party_id
+                        store_id, time, amount, type, description, party_id, payment_method_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         party_store_id,
@@ -2610,6 +2851,7 @@ def add_cash_flow(
                         reverse_type,
                         f"{description}",
                         source_store_party_id,
+                        counterpart_payment_method_id,
                     ),
                 )
 
@@ -2619,8 +2861,46 @@ def add_cash_flow(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.post("/store-transfer")
+def store_transfer(
+    from_store_id: int,
+    to_store_id: int,
+    amount: float,
+    description: Optional[str] = None,
+    from_payment_method_id: Optional[int] = None,
+    to_payment_method_id: Optional[int] = None,
+    time: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Move money directly between two in-db stores (settle a debt, repay, or any
+    manual transfer). `from_store` pays out, `to_store` receives, each on the
+    chosen account. Feeds the inter-store balance.
+    """
+    if amount is None or amount <= 0:
+        raise HTTPException(status_code=400, detail="المبلغ يجب أن يكون أكبر من صفر")
+    if from_store_id == to_store_id:
+        raise HTTPException(status_code=400, detail="لا يمكن التحويل لنفس المتجر")
+    try:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            _create_cross_store_transfer(
+                cur,
+                from_store_id,
+                to_store_id,
+                amount,
+                description or "تحويل بين المتاجر",
+                from_payment_method_id,
+                to_payment_method_id,
+                time,
+            )
+            return {"message": "Store transfer recorded successfully"}
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 # The latest DB schema version this backend expects (bump with each update_db_N).
-LATEST_DB_VERSION = 19
+LATEST_DB_VERSION = 23
 
 
 @app.get("/db-version")
@@ -2709,11 +2989,25 @@ def last_shift(
 @app.get("/shift-total")
 def shift_total(
     store_id: int,
+    admin: bool = False,
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Get comprehensive shift data including sales, purchases, returns and cash flow
+    Get shift data. Two modes:
+    - admin=False (cashier / sell page): only customer sell+return bills, excluding
+      store-internal (cross-store) bills. Used for the sales-focused summary.
+    - admin=True (admin sell page): the full real breakdown — all bill types
+      (including buys) with no store-internal exclusion.
     """
+    # Cashier view is scoped to customer sales; admin view sees everything.
+    bill_type_filter = (
+        "" if admin else "AND bills.type IN ('sell', 'return')"
+    )
+    store_party_filter = (
+        ""
+        if admin
+        else "AND (bills.party_id IS NULL OR assosiated_parties.type != 'store')"
+    )
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             # Get current shift start time
@@ -2737,6 +3031,7 @@ def shift_total(
                     "net_cash_flow": 0,
                     "transaction_count": 0,
                     "payment_breakdown": [],
+                    "account_breakdown": [],
                     "shift_start": None,
                 }
 
@@ -2744,13 +3039,14 @@ def shift_total(
 
             # Get bill totals by type
             cur.execute(
-                """
+                f"""
                 SELECT bills.type, COALESCE(SUM(total), 0) AS total, COUNT(*) as count
                 FROM bills
                 LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
                 WHERE time >= %s
                 AND bills.store_id = %s
-                AND (bills.party_id IS NULL OR assosiated_parties.type != 'store')
+                {bill_type_filter}
+                {store_party_filter}
                 GROUP BY bills.type
                 """,
                 (shift_start_time, store_id),
@@ -2775,7 +3071,7 @@ def shift_total(
             # Get payment-method breakdown for sell/return bills in the shift.
             # Return amounts count negatively (money out). Store-internal parties excluded.
             cur.execute(
-                """
+                f"""
                 SELECT
                     elem->>'name' AS method,
                     COALESCE(SUM(
@@ -2789,7 +3085,7 @@ def shift_total(
                   AND bills.store_id = %s
                   AND bills.type IN ('sell', 'return')
                   AND bills.payments IS NOT NULL
-                  AND (bills.party_id IS NULL OR assosiated_parties.type != 'store')
+                  {store_party_filter}
                 GROUP BY elem->>'name'
                 ORDER BY total DESC
                 """,
@@ -2797,6 +3093,42 @@ def shift_total(
             )
             payment_breakdown = [
                 {"method": row["method"], "total": float(row["total"] or 0)}
+                for row in cur.fetchall()
+            ]
+
+            # Per-account breakdown over ALL transactions in the shift (not just
+            # bills) plus each account's current balance. This surfaces money that
+            # hit an account from non-bill sources (deposits, inter-store
+            # repayments, transfers...) and lets the user compare the expected
+            # balance against the real one.
+            cur.execute(
+                """
+                SELECT
+                    pm.id,
+                    pm.name,
+                    COALESCE(SUM(at.amount) FILTER (WHERE at.time >= %s), 0) AS shift_total,
+                    COALESCE(SUM(at.amount), 0) AS balance
+                FROM payment_methods pm
+                LEFT JOIN account_transactions at
+                    ON at.payment_method_id = pm.id AND at.store_id = %s
+                WHERE pm.is_deleted = FALSE
+                   OR EXISTS (
+                        SELECT 1 FROM account_transactions at2
+                        WHERE at2.payment_method_id = pm.id AND at2.store_id = %s
+                   )
+                GROUP BY pm.id, pm.name, pm.is_default
+                HAVING COALESCE(SUM(at.amount), 0) <> 0
+                    OR COALESCE(SUM(at.amount) FILTER (WHERE at.time >= %s), 0) <> 0
+                ORDER BY pm.is_default DESC, pm.id ASC
+                """,
+                (shift_start_time, store_id, store_id, shift_start_time),
+            )
+            account_breakdown = [
+                {
+                    "method": row["name"],
+                    "shift_total": float(row["shift_total"] or 0),
+                    "balance": float(row["balance"] or 0),
+                }
                 for row in cur.fetchall()
             ]
 
@@ -2837,6 +3169,7 @@ def shift_total(
             "cash_out": cash_out,
             "net_cash_flow": net_cash_flow,
             "payment_breakdown": payment_breakdown,
+            "account_breakdown": account_breakdown,
             "shift_start": shift_start_time.isoformat() if shift_start_time else None,
         }
     except Exception as e:

@@ -758,6 +758,7 @@ const Sell = () => {
                   methods={paymentMethods}
                   lines={paymentLines}
                   setLines={setPaymentLines}
+                  currentStoreId={storeId}
                 />
               </Grid2>
             )}
