@@ -38,6 +38,14 @@ import useAccounts from "../Shared/hooks/useAccounts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { useQuery } from "@tanstack/react-query";
 import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
+import {
+  usePosUi,
+  posCardSizes,
+  posActionsCardSx,
+  posCartCardSx,
+  posCartScrollSx,
+  splitField,
+} from "../Shared/PosLayout";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("ar-EG", {
@@ -84,6 +92,9 @@ const MoveProducts = () => {
   const { storeId } = useContext(StoreContext);
   const { paymentMethods } = usePaymentMethods();
   const { storeBalances } = useAccounts(storeId);
+
+  const { density } = usePosUi("MoveProducts");
+  const cardSizes = posCardSizes(density.isSplit);
 
   // Account selection (which account receives at source / pays at destination)
   const [sourceMethodId, setSourceMethodId] = useState<number | "">("");
@@ -353,7 +364,7 @@ const MoveProducts = () => {
   };
 
   return (
-    <Grid2 container spacing={3}>
+    <Grid2 container spacing={density.spacing} alignItems="flex-start">
       <AlertMessage message={msg} setMessage={setMsg} />{" "}
       <LoadingScreen
         loading={
@@ -394,9 +405,9 @@ const MoveProducts = () => {
           </Button>
         </DialogActions>
       </Dialog>
-      <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 3 }}>
-          <Grid2 container spacing={3} alignItems="center">
+      <Grid2 size={cardSizes.actions}>
+        <Card elevation={3} sx={posActionsCardSx(density)}>
+          <Grid2 container spacing={density.spacing} alignItems="center">
             <Grid2 size={12}>
               <Typography variant="h6">نقل المنتجات بين المتاجر</Typography>
               <Typography variant="subtitle1">
@@ -404,7 +415,7 @@ const MoveProducts = () => {
               </Typography>
             </Grid2>
 
-            <Grid2 size={4}>
+            <Grid2 size={splitField(density.isSplit, 4, 12)}>
               <FormControl fullWidth>
                 <InputLabel size="small">المتجر الوجهة</InputLabel>
                 <Select
@@ -425,7 +436,7 @@ const MoveProducts = () => {
               </FormControl>
             </Grid2>
 
-            <Grid2 size={2}>
+            <Grid2 size={splitField(density.isSplit, 2, 6)}>
               <Button
                 variant="contained"
                 color="secondary"
@@ -436,7 +447,7 @@ const MoveProducts = () => {
               </Button>
             </Grid2>
 
-            <Grid2 size={2}>
+            <Grid2 size={splitField(density.isSplit, 2, 6)}>
               <Button
                 variant="contained"
                 onClick={() => submitBill(shoppingCart)}
@@ -452,7 +463,7 @@ const MoveProducts = () => {
               </Button>
             </Grid2>
 
-            <Grid2 size={4}>
+            <Grid2 size={splitField(density.isSplit, 4, 12)}>
               <Typography variant="h6" align="center">
                 الاجمالي:{" "}
                 {shoppingCart
@@ -468,7 +479,7 @@ const MoveProducts = () => {
             {/* Money / accounts row */}
             {destinationStoreId !== null && paymentMethods.length > 0 && (
               <>
-                <Grid2 size={4}>
+                <Grid2 size={splitField(density.isSplit, 4, 12)}>
                   <FormControl fullWidth size="small">
                     <InputLabel>حساب الاستلام (هذا المتجر)</InputLabel>
                     <Select
@@ -486,7 +497,7 @@ const MoveProducts = () => {
                   </FormControl>
                 </Grid2>
 
-                <Grid2 size={4}>
+                <Grid2 size={splitField(density.isSplit, 4, 12)}>
                   <FormControl fullWidth size="small">
                     <InputLabel>حساب الدفع (المتجر الوجهة)</InputLabel>
                     <Select
@@ -504,7 +515,7 @@ const MoveProducts = () => {
                   </FormControl>
                 </Grid2>
 
-                <Grid2 size={4}>
+                <Grid2 size={splitField(density.isSplit, 4, 12)}>
                   <Box
                     sx={{
                       display: "flex",
@@ -547,12 +558,12 @@ const MoveProducts = () => {
           </Grid2>
         </Card>
       </Grid2>{" "}
-      <Grid2 size={12}>
-        <Card elevation={3}>
+      <Grid2 size={cardSizes.cart}>
+        <Card elevation={3} sx={posCartCardSx(density)}>
           <TableContainer
             ref={cartTableRef}
             sx={{
-              height: "50vh",
+              ...posCartScrollSx(density),
               overflowY: "auto",
             }}
           >

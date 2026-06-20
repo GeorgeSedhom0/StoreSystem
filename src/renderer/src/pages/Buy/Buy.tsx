@@ -49,6 +49,15 @@ import { StoreContext } from "@renderer/StoreDataProvider";
 import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
 import BatchPrintDialog from "./Components/BatchPrintDialog";
 import BulkEditDialog from "./Components/BulkEditDialog";
+import {
+  usePosUi,
+  resolveVisibility,
+  posCardSizes,
+  posActionsCardSx,
+  posCartCardSx,
+  posCartScrollSx,
+  splitField,
+} from "../Shared/PosLayout";
 
 // Mobile-friendly buy-cart row: a stacked card instead of the 9-column table.
 const MobileBuyCartItem = ({
@@ -220,6 +229,13 @@ const Buy = () => {
   const { parties, addPartyMutationAsync } = useParties(setMsg);
   const { paymentMethods } = usePaymentMethods();
   const [paymentLines, setPaymentLines] = useState<PaymentLineState[]>([]);
+
+  const { density, partiesPolicy, paymentsPolicy } = usePosUi("Buy");
+  const cardSizes = posCardSizes(density.isSplit);
+  const pairInputs = density.isCompact && !density.isSplit;
+  // Buy has no on-page toggles; honour only a "never" policy (else keep showing).
+  const showPay = resolveVisibility(paymentsPolicy, true);
+  const showSupplier = resolveVisibility(partiesPolicy, true);
 
   const { storeId } = useContext(StoreContext);
 
@@ -474,12 +490,12 @@ const Buy = () => {
     shoppingCart.length === 0 || isSubmitting || submissionInProgress.current;
 
   return (
-    <Grid2 container spacing={3}>
+    <Grid2 container spacing={density.spacing} alignItems="flex-start">
       <AlertMessage message={msg} setMessage={setMsg} />
       <LoadingScreen loading={isProductsLoading || isSubmitting} />
-      <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 3 }}>
-          <Grid2 container spacing={3} alignItems="center">
+      <Grid2 size={cardSizes.actions}>
+        <Card elevation={3} sx={posActionsCardSx(density)}>
+          <Grid2 container spacing={density.spacing} alignItems="center">
             <Grid2 size={12}>
               <Typography variant="h6">
                 اختار منتج ليتم اضافته الى الفاتورة
@@ -487,7 +503,7 @@ const Buy = () => {
             </Grid2>
 
             <Grid2 size={12} container spacing={2}>
-              <Grid2 size={{ xs: 6, sm: 3 }}>
+              <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 6)}>
                 <FormControl fullWidth>
                   <InputLabel size="small">نوع الفاتورة</InputLabel>
                   <Select
@@ -504,7 +520,7 @@ const Buy = () => {
                   </Select>
                 </FormControl>
               </Grid2>
-              <Grid2 size={{ xs: 6, sm: 3 }}>
+              <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 6)}>
                 <TextField
                   size="small"
                   label="الخصم"
@@ -514,7 +530,7 @@ const Buy = () => {
                   fullWidth
                 />
               </Grid2>{" "}
-              <Grid2 size={{ xs: 6, sm: 3 }}>
+              <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 12)}>
                 <Button
                   variant="contained"
                   onClick={() => submitBill(shoppingCart, discount)}
@@ -525,7 +541,7 @@ const Buy = () => {
                   {isSubmitting ? "جاري الحفظ..." : "اضافة فاتورة"}
                 </Button>
               </Grid2>
-              <Grid2 size={{ xs: 6, sm: 3 }}>
+              <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 12)}>
                 <Typography variant="h6" align="center">
                   الاجمالي:{" "}
                   {shoppingCart.reduce(
@@ -538,7 +554,7 @@ const Buy = () => {
               </Grid2>
             </Grid2>
 
-            {paymentMethods.length > 0 && !payByEnabled && (
+            {showPay && paymentMethods.length > 0 && !payByEnabled && (
               <Grid2 size={12}>
                 <PaymentSplit
                   total={
@@ -552,6 +568,7 @@ const Buy = () => {
                   lines={paymentLines}
                   setLines={setPaymentLines}
                   currentStoreId={storeId}
+                  dense={density.isCompact}
                 />
               </Grid2>
             )}
@@ -577,7 +594,7 @@ const Buy = () => {
               <Grid2 size={12}>
                 <Box
                   sx={{
-                    p: 2,
+                    p: density.isCompact ? 1 : 2,
                     borderRadius: 2,
                     border: "1px solid",
                     borderColor: payByEnabled ? "primary.light" : "divider",
@@ -689,13 +706,14 @@ const Buy = () => {
               </Grid2>
             )}
 
-            <Grid2 size={12}>
+            <Grid2 size={pairInputs && showSupplier ? { xs: 12, sm: 6 } : 12}>
               <ProductAutocomplete
                 onProductSelect={addToCart}
                 products={products}
               />
             </Grid2>
-            <Grid2 size={12}>
+            {showSupplier && (
+            <Grid2 size={pairInputs ? { xs: 12, sm: 6 } : 12}>
               <Autocomplete
                 options={
                   [
@@ -737,7 +755,8 @@ const Buy = () => {
                 )}
               />
             </Grid2>
-            {addingParty && (
+            )}
+            {showSupplier && addingParty && (
               <Grid2 container size={12} spacing={2}>
                 <Grid2 size={{ xs: 12, sm: 4 }}>
                   <TextField
@@ -774,22 +793,23 @@ const Buy = () => {
           </Grid2>
         </Card>
       </Grid2>{" "}
-      <Grid2 size={12}>
-        <Card elevation={3}>
+      <Grid2 size={cardSizes.cart}>
+        <Card elevation={3} sx={posCartCardSx(density)}>
           {/* Quick Actions Toolbar */}
           <Box
             sx={{
-              p: 2,
+              p: density.isCompact ? 1 : 2,
               display: "flex",
               alignItems: "center",
               flexWrap: "wrap",
-              gap: 2,
+              gap: density.isCompact ? 1 : 2,
               borderBottom: 1,
               borderColor: "divider",
             }}
           >
             <Button
               variant="contained"
+              size={density.isCompact ? "small" : "medium"}
               onClick={() => setBatchPrintOpen(true)}
               disabled={shoppingCart.length === 0}
             >
@@ -797,6 +817,7 @@ const Buy = () => {
             </Button>
             <Button
               variant="outlined"
+              size={density.isCompact ? "small" : "medium"}
               onClick={() => setBulkEditOpen(true)}
               disabled={selectedProductIds.size === 0}
             >
@@ -812,7 +833,7 @@ const Buy = () => {
           {isMobile ? (
             <Box
               ref={cartTableRef}
-              sx={{ maxHeight: "55vh", overflowY: "auto", p: 1.5 }}
+              sx={{ ...posCartScrollSx(density), overflowY: "auto", p: 1.5 }}
             >
               {shoppingCart.length === 0 ? (
                 <Typography
@@ -840,7 +861,7 @@ const Buy = () => {
             <TableContainer
               ref={cartTableRef}
               sx={{
-                height: "50vh",
+                ...posCartScrollSx(density),
                 overflowY: "auto",
               }}
             >

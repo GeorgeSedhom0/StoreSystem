@@ -45,6 +45,26 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import useParties from "../Shared/hooks/useParties";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { buildBillsReportHtml, exportPdfDocument } from "../utils/a4Reports";
+import StatCard from "../Shared/StatCard";
+import ExportPdfMenu from "../Shared/ExportPdfMenu";
+
+const BILL_TYPE_LABELS: Record<string, string> = {
+  sell: "نقدي",
+  BNPL: "آجل",
+  return: "مرتجع",
+  reserve: "حجز",
+  installment: "تقسيط",
+  buy: "شراء",
+  "buy-return": "مرتجع شراء",
+};
+
+const egp = (v: number) =>
+  new Intl.NumberFormat("ar-EG", {
+    style: "currency",
+    currency: "EGP",
+    minimumFractionDigits: 0,
+  }).format(v || 0);
 
 const getProds = async (storeId: number) => {
   const { data } = await axios.get<DBProducts>("/products", {
@@ -97,7 +117,7 @@ const BillsAdmin = () => {
   const [billIdInput, setBillIdInput] = useState("");
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
 
-  const { storeId } = useContext(StoreContext);
+  const { storeId, store } = useContext(StoreContext);
 
   const { data: products } = useQuery({
     queryKey: ["products", storeId],
@@ -318,6 +338,57 @@ const BillsAdmin = () => {
     );
   }, [showExpandedBill]);
 
+  const handleExportToPdf = async (mode: "summary" | "full") => {
+    try {
+      const reportBills =
+        showExpandedBill || hasActiveBillIdSearch
+          ? filteredBills.filter((_, i) => i % 2 === 0)
+          : filteredBills;
+
+      const typesLabel = hasActiveBillIdSearch
+        ? "بحث برقم الفاتورة"
+        : filters.map((f) => BILL_TYPE_LABELS[f] || f).join("، ") || "الكل";
+      const partyLabel =
+        parties.find((p) => p.id === selectedPartyId)?.name ||
+        (selectedPartyId ? "طرف غير معروف" : "كل الأطراف");
+      const productLabel =
+        selectedProduct.length > 0
+          ? selectedProduct.map((p) => p.name).join("، ")
+          : "الكل";
+
+      const html = buildBillsReportHtml({
+        store,
+        mode,
+        startDate: hasActiveBillIdSearch
+          ? "-"
+          : startDate.format("YYYY/MM/DD HH:mm"),
+        endDate: hasActiveBillIdSearch
+          ? "-"
+          : endDate.format("YYYY/MM/DD HH:mm"),
+        typesLabel,
+        partyLabel,
+        productLabel,
+        totalTransactions: statistics.totalTransactions,
+        totalAmount: statistics.totalAmount,
+        totalSalesAmount: statistics.totalSalesAmount,
+        averageDiscount: statistics.averageDiscount,
+        bills: reportBills,
+      });
+
+      const result = await exportPdfDocument({
+        fileName: `bills-admin-${mode}-${startDate.format("YYYY-MM-DD")}.pdf`,
+        html,
+        landscape: mode === "summary",
+      });
+      if (result?.cancelled) return;
+      if (!result?.success) throw new Error(result?.error || "export failed");
+      setMsg({ type: "success", text: "تم تصدير تقرير الفواتير PDF بنجاح" });
+    } catch (error) {
+      console.error("Bills PDF export failed:", error);
+      setMsg({ type: "error", text: "فشل تصدير تقرير الفواتير PDF" });
+    }
+  };
+
   const loading = isShiftLoading || isBillsLoading;
 
   return (
@@ -325,127 +396,39 @@ const BillsAdmin = () => {
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 container spacing={3}>
         {/* Statistics Cards */}
-        <Grid2 size={12}>
-          <Card elevation={3} sx={{ p: 2, mt: 2 }}>
-            <Grid2 container spacing={2}>
-              <Grid2 size={{ xs: 12, sm: 3 }}>
-                <Card
-                  sx={{
-                    p: 2,
-                    textAlign: "center",
-                    bgcolor: "primary.light",
-                    color: "primary.contrastText",
-                    boxShadow: 2,
-                    borderRadius: 2,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                  }}
-                >
-                  <ReceiptIcon sx={{ fontSize: 32, mb: 1 }} />
-                  <Typography
-                    variant="caption"
-                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "0.9rem" }}
-                  >
-                    عدد الفواتير
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    {statistics.totalTransactions}
-                  </Typography>
-                </Card>
-              </Grid2>
-              <Grid2 size={{ xs: 12, sm: 3 }}>
-                <Card
-                  sx={{
-                    p: 2,
-                    textAlign: "center",
-                    bgcolor: "success.light",
-                    color: "success.contrastText",
-                    boxShadow: 2,
-                    borderRadius: 2,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                  }}
-                >
-                  <TrendingUpIcon sx={{ fontSize: 32, mb: 1 }} />
-                  <Typography
-                    variant="caption"
-                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "0.9rem" }}
-                  >
-                    إجمالي الفواتير
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    {new Intl.NumberFormat("ar-EG", {
-                      style: "currency",
-                      currency: "EGP",
-                      minimumFractionDigits: 0,
-                    }).format(statistics.totalAmount)}
-                  </Typography>
-                </Card>
-              </Grid2>
-              <Grid2 size={{ xs: 12, sm: 3 }}>
-                <Card
-                  sx={{
-                    p: 2,
-                    textAlign: "center",
-                    bgcolor: "info.light",
-                    color: "info.contrastText",
-                    boxShadow: 2,
-                    borderRadius: 2,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                  }}
-                >
-                  <ShoppingCartIcon sx={{ fontSize: 32, mb: 1 }} />
-                  <Typography
-                    variant="caption"
-                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "0.9rem" }}
-                  >
-                    إجمالي المبيعات (مدفوع وغير مدفوع)
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    {new Intl.NumberFormat("ar-EG", {
-                      style: "currency",
-                      currency: "EGP",
-                      minimumFractionDigits: 0,
-                    }).format(statistics.totalSalesAmount)}
-                  </Typography>
-                </Card>
-              </Grid2>
-              <Grid2 size={{ xs: 12, sm: 3 }}>
-                <Card
-                  sx={{
-                    p: 2,
-                    textAlign: "center",
-                    bgcolor: "warning.light",
-                    color: "warning.contrastText",
-                    boxShadow: 2,
-                    borderRadius: 2,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                  }}
-                >
-                  <PercentIcon sx={{ fontSize: 32, mb: 1 }} />
-                  <Typography
-                    variant="caption"
-                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "0.9rem" }}
-                  >
-                    متوسط الخصم للفاتورة
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    {new Intl.NumberFormat("ar-EG", {
-                      style: "currency",
-                      currency: "EGP",
-                      minimumFractionDigits: 0,
-                    }).format(statistics.averageDiscount)}
-                  </Typography>
-                </Card>
-              </Grid2>
-            </Grid2>
-          </Card>
+        <Grid2 container size={12} spacing={2}>
+          <Grid2 size={{ xs: 6, sm: 3 }}>
+            <StatCard
+              color="primary"
+              icon={<ReceiptIcon />}
+              label="عدد الفواتير"
+              value={statistics.totalTransactions}
+            />
+          </Grid2>
+          <Grid2 size={{ xs: 6, sm: 3 }}>
+            <StatCard
+              color="success"
+              icon={<TrendingUpIcon />}
+              label="إجمالي الفواتير"
+              value={egp(statistics.totalAmount)}
+            />
+          </Grid2>
+          <Grid2 size={{ xs: 6, sm: 3 }}>
+            <StatCard
+              color="info"
+              icon={<ShoppingCartIcon />}
+              label="إجمالي المبيعات"
+              value={egp(statistics.totalSalesAmount)}
+            />
+          </Grid2>
+          <Grid2 size={{ xs: 6, sm: 3 }}>
+            <StatCard
+              color="warning"
+              icon={<PercentIcon />}
+              label="متوسط الخصم"
+              value={egp(statistics.averageDiscount)}
+            />
+          </Grid2>
         </Grid2>
 
         <Grid2 size={12}>
@@ -456,7 +439,14 @@ const BillsAdmin = () => {
                   <Grid2>
                     <Typography variant="h4">الفواتير</Typography>
                   </Grid2>
-                  <Grid2>
+                  <Grid2
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <FormControlLabel
                       control={<Switch id="showExpandedBillSwitch" />}
                       checked={hasActiveBillIdSearch || showExpandedBill}
@@ -468,6 +458,7 @@ const BillsAdmin = () => {
                         setShowExpandedBill(isChecked);
                       }}
                     />
+                    <ExportPdfMenu onExport={handleExportToPdf} size="small" />
                   </Grid2>
                 </Grid2>
                 <Typography variant="body1">

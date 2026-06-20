@@ -18,7 +18,7 @@ import {
   Payments as PaymentsIcon,
   CallSplit as CallSplitIcon,
 } from "@mui/icons-material";
-import { Dispatch, SetStateAction, useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useMemo, useState } from "react";
 import { PaymentMethod } from "./../utils/types";
 
 /** One line of the payment split: a method and the amount assigned to it. */
@@ -119,6 +119,8 @@ interface PaymentSplitProps {
   setLines: Dispatch<SetStateAction<PaymentLineState[]>>;
   /** When set, methods homed at a different store are labelled as off-store. */
   currentStoreId?: number;
+  /** Tighter spacing + no helper caption, for the compact POS layout. */
+  dense?: boolean;
 }
 
 const PaymentSplit = ({
@@ -127,6 +129,7 @@ const PaymentSplit = ({
   lines,
   setLines,
   currentStoreId,
+  dense = false,
 }: PaymentSplitProps) => {
   const methodLabel = (m: PaymentMethod) =>
     m.home_store_id != null && m.home_store_id !== currentStoreId
@@ -144,13 +147,25 @@ const PaymentSplit = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total, methods]);
 
+  // Render from a balanced view of the lines. The effect above re-balances
+  // `lines` one tick after `total` changes (e.g. a product is added/removed),
+  // and for that single frame the raw `lines` sum no longer matches the new
+  // total — which used to flash the warning border/“remaining” text red. By
+  // deriving what we display from `normalize(lines, total, methods)` every
+  // render, the displayed split is always consistent with the current total
+  // and the flicker is gone. Editing still mutates the real `lines` state.
+  const balancedLines = useMemo(
+    () => (defaultMethod ? normalize(lines, total, methods) : lines),
+    [lines, total, methods, defaultMethod],
+  );
+
   if (!defaultMethod) return null;
 
   const defaultId = defaultMethod.id;
-  const sum = lines.reduce((acc, l) => acc + l.amount, 0);
+  const sum = balancedLines.reduce((acc, l) => acc + l.amount, 0);
   const remaining = round2(total - sum);
 
-  const usedIds = new Set(lines.map((l) => l.method_id));
+  const usedIds = new Set(balancedLines.map((l) => l.method_id));
   const availableMethods = methods.filter(
     (m) => m.id !== defaultId && !usedIds.has(m.id),
   );
@@ -281,8 +296,8 @@ const PaymentSplit = ({
   return (
     <Box
       sx={{
-        p: 2,
-        mt: 1,
+        p: dense ? 1 : 2,
+        mt: dense ? 0 : 1,
         borderRadius: 2,
         border: "1px solid",
         borderColor: Math.abs(remaining) > 0.01 ? "warning.main" : "divider",
@@ -296,26 +311,32 @@ const PaymentSplit = ({
           flexWrap: "wrap",
           gap: 1,
           rowGap: 1,
-          mb: 2,
+          mb: dense ? 1 : 2,
         }}
       >
-        <PaymentsIcon color="primary" />
-        <Typography variant="subtitle1" fontWeight={600}>
+        <PaymentsIcon color="primary" fontSize={dense ? "small" : "medium"} />
+        <Typography
+          variant={dense ? "body2" : "subtitle1"}
+          fontWeight={600}
+        >
           طرق الدفع
         </Typography>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: { xs: "none", sm: "inline" } }}
-        >
-          (يمكنك كتابة نسبة مئوية مثل %50)
-        </Typography>
+        {!dense && (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: { xs: "none", sm: "inline" } }}
+          >
+            (يمكنك كتابة نسبة مئوية مثل %50)
+          </Typography>
+        )}
         <Box sx={{ ml: "auto", display: "flex", flexWrap: "wrap", gap: 1 }}>
-          {lines.length > 1 && (
+          {balancedLines.length > 1 && (
             <Chip
               icon={<CallSplitIcon />}
               label="توزيع بالتساوي"
               variant="outlined"
+              size={dense ? "small" : "medium"}
               onClick={evenSplit}
               clickable
             />
@@ -326,6 +347,7 @@ const PaymentSplit = ({
               label="إضافة طريقة دفع"
               color="primary"
               variant="outlined"
+              size={dense ? "small" : "medium"}
               onClick={addLine}
               clickable
             />
@@ -333,8 +355,8 @@ const PaymentSplit = ({
         </Box>
       </Box>
 
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-        {lines.map((line) => {
+      <Box sx={{ display: "flex", flexDirection: "column", gap: dense ? 1 : 1.5 }}>
+        {balancedLines.map((line) => {
           const isDefault = line.method_id === defaultId;
           const method = methods.find((m) => m.id === line.method_id);
           const selectableForLine = methods.filter(

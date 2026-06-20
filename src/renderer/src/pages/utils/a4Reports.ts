@@ -1,4 +1,4 @@
-import type { CashFlow, StoreData } from "./types";
+import type { Bill, CashFlow, StoreData } from "./types";
 
 export interface PdfExportPayload {
   fileName: string;
@@ -807,5 +807,474 @@ export const buildInstallmentsReportHtml = ({
       },
     ],
     content: cards,
+  });
+};
+
+const BILL_TYPE_LABELS: Record<string, string> = {
+  sell: "نقدي",
+  BNPL: "آجل",
+  return: "مرتجع",
+  reserve: "حجز",
+  installment: "تقسيط",
+  buy: "شراء",
+  "buy-return": "مرتجع شراء",
+};
+
+const billTypeLabel = (type: string) => BILL_TYPE_LABELS[type] || type;
+
+const emptyRow = (cols: number, text: string) =>
+  `<tr><td colspan="${cols}" class="align-center empty-state">${escapeHtml(text)}</td></tr>`;
+
+/** A simple titled table panel from headers + pre-rendered <tr> rows. */
+const tablePanel = (
+  title: string,
+  headers: { label: string; width?: string; align?: string }[],
+  rowsHtml: string,
+  note?: string,
+) => `
+  <div class="panel">
+    <div class="section-title-row">
+      <h2>${escapeHtml(title)}</h2>
+      ${note ? `<div class="section-note">${escapeHtml(note)}</div>` : ""}
+    </div>
+    <table>
+      <thead>
+        <tr>
+          ${headers
+            .map(
+              (h) =>
+                `<th${h.width ? ` style="width:${h.width};"` : ""}${
+                  h.align ? ` class="align-${h.align}"` : ""
+                }>${escapeHtml(h.label)}</th>`,
+            )
+            .join("")}
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </div>
+`;
+
+// ─── Income report (Analytics → التقرير المالى) ────────────────────────────
+export const buildIncomeReportHtml = ({
+  store,
+  startDate,
+  endDate,
+  methodLabel,
+  cashIn,
+  cashOut,
+  netCash,
+  profit,
+  dailyCashflow,
+  dailyProfit,
+  paymentBreakdown,
+}: {
+  store: Pick<StoreData, "name" | "address" | "phone">;
+  startDate: string;
+  endDate: string;
+  methodLabel: string;
+  cashIn: number;
+  cashOut: number;
+  netCash: number;
+  profit: number;
+  dailyCashflow: [string, number, number, number][];
+  dailyProfit: [string, number][];
+  paymentBreakdown: { method: string; total: number; bills_count: number }[];
+}) => {
+  const paymentTotal = paymentBreakdown.reduce((acc, m) => acc + m.total, 0);
+  const paymentRows = paymentBreakdown.length
+    ? paymentBreakdown
+        .map(
+          (m) => `
+            <tr>
+              <td>${escapeHtml(m.method)}</td>
+              <td>${escapeHtml(formatCurrency(m.total))}</td>
+              <td class="align-center">${escapeHtml(m.bills_count)}</td>
+              <td class="align-center">${
+                paymentTotal > 0
+                  ? Math.round((m.total / paymentTotal) * 100)
+                  : 0
+              }%</td>
+            </tr>`,
+        )
+        .join("")
+    : emptyRow(4, "لا توجد بيانات تحصيل");
+
+  const cashflowRows = dailyCashflow.length
+    ? dailyCashflow
+        .map(
+          ([date, cin, cout, net]) => `
+            <tr>
+              <td>${escapeHtml(date)}</td>
+              <td>${escapeHtml(formatCurrency(cin))}</td>
+              <td>${escapeHtml(formatCurrency(cout))}</td>
+              <td>${escapeHtml(formatCurrency(net))}</td>
+            </tr>`,
+        )
+        .join("")
+    : emptyRow(4, "لا توجد حركات في المدة المحددة");
+
+  const profitRows = dailyProfit.length
+    ? dailyProfit
+        .map(
+          ([date, value]) => `
+            <tr>
+              <td>${escapeHtml(date)}</td>
+              <td>${escapeHtml(formatCurrency(value))}</td>
+            </tr>`,
+        )
+        .join("")
+    : emptyRow(2, "لا توجد أرباح في المدة المحددة");
+
+  return buildReportDocument({
+    title: "التقرير المالي",
+    store,
+    meta: [
+      { label: "من", value: startDate },
+      { label: "إلى", value: endDate },
+      { label: "طريقة حساب الأرباح", value: methodLabel },
+    ],
+    summary: [
+      { label: "إجمالي الإيرادات", value: formatCurrency(cashIn), tone: "success" },
+      { label: "إجمالي المصروفات", value: formatCurrency(cashOut), tone: "danger" },
+      {
+        label: "صافي النقد",
+        value: formatCurrency(netCash),
+        tone: netCash >= 0 ? "default" : "warning",
+      },
+      { label: "إجمالي الأرباح", value: formatCurrency(profit), tone: "default" },
+    ],
+    content: `
+      ${tablePanel(
+        "التحصيل حسب طريقة الدفع",
+        [
+          { label: "طريقة الدفع", width: "34%" },
+          { label: "الإجمالي", width: "30%" },
+          { label: "عدد الفواتير", width: "18%", align: "center" },
+          { label: "النسبة", width: "18%", align: "center" },
+        ],
+        paymentRows,
+      )}
+      ${tablePanel(
+        "التدفق النقدي اليومي",
+        [
+          { label: "التاريخ", width: "28%" },
+          { label: "الإيرادات", width: "24%" },
+          { label: "المصروفات", width: "24%" },
+          { label: "الصافي", width: "24%" },
+        ],
+        cashflowRows,
+        `${dailyCashflow.length} يوم`,
+      )}
+      ${tablePanel(
+        "الأرباح اليومية",
+        [
+          { label: "التاريخ", width: "60%" },
+          { label: "الربح", width: "40%" },
+        ],
+        profitRows,
+        `${dailyProfit.length} يوم`,
+      )}
+    `,
+  });
+};
+
+// ─── Detailed report (Analytics → تفصيلى) ──────────────────────────────────
+export const buildDetailedReportHtml = ({
+  store,
+  startDate,
+  endDate,
+  cards,
+  topProducts,
+  clientCategories,
+  clients,
+  paymentBreakdown,
+}: {
+  store: Pick<StoreData, "name" | "address" | "phone">;
+  startDate: string;
+  endDate: string;
+  cards: {
+    total_sales: number;
+    total_profit_fifo: number;
+    total_profit_net: number;
+    bills_count: number;
+    avg_bill_total: number;
+    avg_discount: number;
+  };
+  topProducts: {
+    name: string;
+    total_units_sold: number;
+    total_sales_value: number;
+    total_profit_fifo: number;
+    realized_margin_pct: number;
+  }[];
+  clientCategories: {
+    new: { count: number; total_sales: number };
+    returning_lt5: { count: number; total_sales: number };
+    loyal_gte5: { count: number; total_sales: number };
+  };
+  clients: {
+    name: string;
+    phone: string;
+    total: number;
+    bills_count: number;
+    category: string;
+  }[];
+  paymentBreakdown: { method: string; total: number; bills_count: number }[];
+}) => {
+  const clientCategoryLabel = (c: string) =>
+    c === "new"
+      ? "جديد"
+      : c === "returning_lt5"
+        ? "متكرر"
+        : c === "loyal_gte5"
+          ? "وفيّ"
+          : c;
+
+  const topProductRows = topProducts.length
+    ? topProducts
+        .map(
+          (p) => `
+            <tr>
+              <td>${escapeHtml(p.name)}</td>
+              <td class="align-center">${escapeHtml(p.total_units_sold)}</td>
+              <td>${escapeHtml(formatCurrency(p.total_sales_value))}</td>
+              <td>${escapeHtml(formatCurrency(p.total_profit_fifo))}</td>
+              <td class="align-center">${escapeHtml(p.realized_margin_pct?.toFixed(1) ?? "0")}%</td>
+            </tr>`,
+        )
+        .join("")
+    : emptyRow(5, "لا توجد مبيعات في المدة المحددة");
+
+  const clientRows = clients.length
+    ? clients
+        .map(
+          (c) => `
+            <tr>
+              <td>${escapeHtml(c.name || "غير معروف")}</td>
+              <td>${escapeHtml(c.phone || "-")}</td>
+              <td>${escapeHtml(formatCurrency(c.total))}</td>
+              <td class="align-center">${escapeHtml(c.bills_count)}</td>
+              <td class="align-center">${escapeHtml(clientCategoryLabel(c.category))}</td>
+            </tr>`,
+        )
+        .join("")
+    : emptyRow(5, "لا يوجد عملاء في المدة المحددة");
+
+  const paymentTotal = paymentBreakdown.reduce((acc, m) => acc + m.total, 0);
+  const paymentRows = paymentBreakdown.length
+    ? paymentBreakdown
+        .map(
+          (m) => `
+            <tr>
+              <td>${escapeHtml(m.method)}</td>
+              <td>${escapeHtml(formatCurrency(m.total))}</td>
+              <td class="align-center">${escapeHtml(m.bills_count)}</td>
+              <td class="align-center">${
+                paymentTotal > 0 ? Math.round((m.total / paymentTotal) * 100) : 0
+              }%</td>
+            </tr>`,
+        )
+        .join("")
+    : emptyRow(4, "لا توجد بيانات تحصيل");
+
+  const categoryPanel = `
+    <div class="panel">
+      <div class="section-title-row"><h2>تصنيف العملاء</h2></div>
+      <div class="two-column-grid">
+        <div class="mini-stat">
+          <div class="label">عملاء جدد</div>
+          <div class="value">${clientCategories.new.count} — ${escapeHtml(formatCurrency(clientCategories.new.total_sales))}</div>
+        </div>
+        <div class="mini-stat">
+          <div class="label">عملاء متكررون</div>
+          <div class="value">${clientCategories.returning_lt5.count} — ${escapeHtml(formatCurrency(clientCategories.returning_lt5.total_sales))}</div>
+        </div>
+        <div class="mini-stat">
+          <div class="label">عملاء أوفياء</div>
+          <div class="value">${clientCategories.loyal_gte5.count} — ${escapeHtml(formatCurrency(clientCategories.loyal_gte5.total_sales))}</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return buildReportDocument({
+    title: "التقرير التفصيلي",
+    store,
+    meta: [
+      { label: "من", value: startDate },
+      { label: "إلى", value: endDate },
+    ],
+    summary: [
+      { label: "إجمالي المبيعات", value: formatCurrency(cards.total_sales), tone: "success" },
+      { label: "صافي الربح", value: formatCurrency(cards.total_profit_net), tone: "default" },
+      { label: "عدد الفواتير", value: String(cards.bills_count), tone: "default" },
+      { label: "متوسط الفاتورة", value: formatCurrency(cards.avg_bill_total), tone: "default" },
+    ],
+    content: `
+      ${categoryPanel}
+      ${tablePanel(
+        "أكثر المنتجات مبيعاً",
+        [
+          { label: "المنتج", width: "34%" },
+          { label: "الكمية", width: "13%", align: "center" },
+          { label: "قيمة المبيعات", width: "20%" },
+          { label: "الربح", width: "18%" },
+          { label: "الهامش", width: "15%", align: "center" },
+        ],
+        topProductRows,
+        `${topProducts.length} منتج`,
+      )}
+      ${tablePanel(
+        "العملاء",
+        [
+          { label: "العميل", width: "28%" },
+          { label: "الهاتف", width: "20%" },
+          { label: "الإجمالي", width: "22%" },
+          { label: "عدد الفواتير", width: "15%", align: "center" },
+          { label: "التصنيف", width: "15%", align: "center" },
+        ],
+        clientRows,
+        `${clients.length} عميل`,
+      )}
+      ${tablePanel(
+        "التحصيل حسب طريقة الدفع",
+        [
+          { label: "طريقة الدفع", width: "34%" },
+          { label: "الإجمالي", width: "30%" },
+          { label: "عدد الفواتير", width: "18%", align: "center" },
+          { label: "النسبة", width: "18%", align: "center" },
+        ],
+        paymentRows,
+      )}
+    `,
+  });
+};
+
+// ─── Bills report (الفواتير) — summary or full ─────────────────────────────
+export const buildBillsReportHtml = ({
+  store,
+  mode,
+  startDate,
+  endDate,
+  typesLabel,
+  partyLabel,
+  productLabel,
+  totalTransactions,
+  totalAmount,
+  totalSalesAmount,
+  averageDiscount,
+  bills,
+}: {
+  store: Pick<StoreData, "name" | "address" | "phone">;
+  mode: "summary" | "full";
+  startDate: string;
+  endDate: string;
+  typesLabel: string;
+  partyLabel: string;
+  productLabel: string;
+  totalTransactions: number;
+  totalAmount: number;
+  totalSalesAmount: number;
+  averageDiscount: number;
+  bills: Bill[];
+}) => {
+  const summaryTable = tablePanel(
+    "قائمة الفواتير",
+    [
+      { label: "رقم", width: "10%", align: "center" },
+      { label: "الوقت", width: "22%" },
+      { label: "النوع", width: "12%", align: "center" },
+      { label: "الطرف الثاني", width: "22%" },
+      { label: "الخصم", width: "16%" },
+      { label: "الإجمالي", width: "18%" },
+    ],
+    bills.length
+      ? bills
+          .map(
+            (b) => `
+              <tr>
+                <td class="align-center">${escapeHtml(b.id)}</td>
+                <td>${escapeHtml(formatDateTime(b.time))}</td>
+                <td class="align-center">${escapeHtml(billTypeLabel(b.type))}</td>
+                <td>${escapeHtml(b.party_name || "بدون")}</td>
+                <td>${escapeHtml(formatCurrency(b.discount || 0))}</td>
+                <td>${escapeHtml(formatCurrency(b.total))}</td>
+              </tr>`,
+          )
+          .join("")
+      : emptyRow(6, "لا توجد فواتير مطابقة للفلاتر الحالية"),
+    `${bills.length} فاتورة`,
+  );
+
+  const fullCards = bills.length
+    ? bills
+        .map((b) => {
+          const productRows = b.products?.length
+            ? b.products
+                .map(
+                  (p) => `
+                    <tr>
+                      <td>${escapeHtml(p.name)}</td>
+                      <td class="align-center">${escapeHtml(Math.abs(p.amount))}</td>
+                      <td>${escapeHtml(formatCurrency(p.price))}</td>
+                      <td>${escapeHtml(formatCurrency(Math.abs(p.amount) * p.price))}</td>
+                    </tr>`,
+                )
+                .join("")
+            : emptyRow(4, "لا توجد منتجات");
+          return `
+            <div class="installment-card">
+              <div class="installment-head">
+                <div>
+                  <h2>فاتورة #${escapeHtml(b.id)}</h2>
+                  <div class="installment-subhead">
+                    ${escapeHtml(formatDateTime(b.time))} | ${escapeHtml(b.party_name || "بدون طرف ثاني")}
+                  </div>
+                </div>
+                <span class="tag tag-default">${escapeHtml(billTypeLabel(b.type))}</span>
+              </div>
+              <div class="two-column-grid">
+                <div class="mini-stat"><div class="label">الإجمالي</div><div class="value">${escapeHtml(formatCurrency(b.total))}</div></div>
+                <div class="mini-stat"><div class="label">الخصم</div><div class="value">${escapeHtml(formatCurrency(b.discount || 0))}</div></div>
+              </div>
+              ${
+                b.note
+                  ? `<p class="section-note">ملاحظة: ${escapeHtml(b.note)}</p>`
+                  : ""
+              }
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:46%;">الصنف</th>
+                    <th style="width:14%;" class="align-center">الكمية</th>
+                    <th style="width:20%;">السعر</th>
+                    <th style="width:20%;">الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody>${productRows}</tbody>
+              </table>
+            </div>`;
+        })
+        .join("")
+    : `<div class="panel"><div class="empty-state align-center">لا توجد فواتير مطابقة للفلاتر الحالية</div></div>`;
+
+  return buildReportDocument({
+    title: mode === "summary" ? "تقرير الفواتير (ملخص)" : "تقرير الفواتير (تفصيلي)",
+    store,
+    meta: [
+      { label: "من", value: startDate },
+      { label: "إلى", value: endDate },
+      { label: "الأنواع", value: typesLabel },
+      { label: "الطرف الثاني", value: partyLabel },
+      { label: "المنتج", value: productLabel },
+    ],
+    summary: [
+      { label: "عدد الفواتير", value: String(totalTransactions), tone: "default" },
+      { label: "إجمالي الفواتير", value: formatCurrency(totalAmount), tone: "success" },
+      { label: "إجمالي المبيعات", value: formatCurrency(totalSalesAmount), tone: "default" },
+      { label: "متوسط الخصم", value: formatCurrency(averageDiscount), tone: "warning" },
+    ],
+    content: mode === "summary" ? summaryTable : fullCards,
   });
 };

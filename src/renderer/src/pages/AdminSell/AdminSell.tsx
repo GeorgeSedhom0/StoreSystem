@@ -54,6 +54,15 @@ import { useShift } from "../Sell/hooks/useShifts";
 import useBills from "../Sell/hooks/useBills";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
+import {
+  usePosUi,
+  resolveVisibility,
+  posCardSizes,
+  posActionsCardSx,
+  posCartCardSx,
+  posCartScrollSx,
+  splitField,
+} from "../Shared/PosLayout";
 
 const AdminSell = () => {
   const {
@@ -125,6 +134,12 @@ const AdminSell = () => {
     useParties(setMsg);
 
   const { paymentMethods } = usePaymentMethods(setMsg);
+
+  const { density, partiesPolicy, paymentsPolicy } = usePosUi("AdminSell");
+  const cardSizes = posCardSizes(density.isSplit);
+  const pairInputs = density.isCompact && !density.isSplit;
+  const showParties = resolveVisibility(partiesPolicy, usingThirdParties);
+  const showPay = resolveVisibility(paymentsPolicy, showPaymentMethods);
 
   const usesPaymentMethods =
     billPayment === "sell" || billPayment === "return";
@@ -224,7 +239,7 @@ const AdminSell = () => {
     selectableParties,
     handleClientFound,
     setMsg,
-    usingThirdParties,
+    showParties,
   );
 
   // Core bill submission logic (without discount validation)
@@ -480,7 +495,7 @@ const AdminSell = () => {
     (addingParty && (!newParty.name || !newParty.phone));
 
   return (
-    <Grid2 container spacing={3}>
+    <Grid2 container spacing={density.spacing} alignItems="flex-start">
       <BillView
         bill={lastBill}
         open={lastBillOpen}
@@ -548,42 +563,59 @@ const AdminSell = () => {
         shift={shift}
         admin
       />
-      <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 3 }}>
-          <Grid2 container spacing={3} alignItems="center">
-            <Grid2 container size={12} justifyContent="space-between">
+      <Grid2 size={cardSizes.actions}>
+        <Card elevation={3} sx={posActionsCardSx(density)}>
+          <Grid2 container spacing={density.spacing} alignItems="center">
+            <Grid2
+              container
+              size={12}
+              justifyContent="space-between"
+              alignItems="center"
+              rowGap={1}
+            >
               <Button variant="contained" onClick={() => setShiftDialog(true)}>
                 الشيفتات
               </Button>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <FormControlLabel
-                  control={<Switch />}
-                  checked={showPaymentMethods}
-                  onChange={() => {
-                    localStorage.setItem(
-                      "showPaymentMethods",
-                      showPaymentMethods ? "" : "true",
-                    );
-                    setShowPaymentMethods((prev) => !prev);
-                  }}
-                  label="طرق الدفع"
-                />
-                <FormControlLabel
-                  control={<Switch />}
-                  checked={usingThirdParties}
-                  onChange={() => {
-                    localStorage.setItem(
-                      "usingThirdParties",
-                      usingThirdParties ? "" : "true",
-                    );
-                    setUsingThirdParties((prev) => !prev);
-                  }}
-                  label="اظهار العملاء"
-                />
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  flexWrap: "wrap",
+                }}
+              >
+                {paymentsPolicy === "ask" && (
+                  <FormControlLabel
+                    control={<Switch />}
+                    checked={showPaymentMethods}
+                    onChange={() => {
+                      localStorage.setItem(
+                        "showPaymentMethods",
+                        showPaymentMethods ? "" : "true",
+                      );
+                      setShowPaymentMethods((prev) => !prev);
+                    }}
+                    label="طرق الدفع"
+                  />
+                )}
+                {partiesPolicy === "ask" && (
+                  <FormControlLabel
+                    control={<Switch />}
+                    checked={usingThirdParties}
+                    onChange={() => {
+                      localStorage.setItem(
+                        "usingThirdParties",
+                        usingThirdParties ? "" : "true",
+                      );
+                      setUsingThirdParties((prev) => !prev);
+                    }}
+                    label="اظهار العملاء"
+                  />
+                )}
               </Box>
             </Grid2>
 
-            <Grid2 size={3}>
+            <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 6)}>
               <FormControl fullWidth>
                 <InputLabel>نوع الفاتورة</InputLabel>
                 <Select
@@ -603,7 +635,7 @@ const AdminSell = () => {
               </FormControl>
             </Grid2>
 
-            <Grid2 size={3}>
+            <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 6)}>
               <TextField
                 label="الخصم"
                 type="number"
@@ -616,7 +648,7 @@ const AdminSell = () => {
               />
             </Grid2>
 
-            <Grid2 size={3}>
+            <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 12)}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -627,7 +659,7 @@ const AdminSell = () => {
               </Button>
             </Grid2>
 
-            <Grid2 size={9}>
+            <Grid2 size={splitField(density.isSplit, { xs: 12, sm: 8, md: 4 }, 12)}>
               <ButtonGroup fullWidth>
                 <Button
                   variant="contained"
@@ -646,7 +678,7 @@ const AdminSell = () => {
               </ButtonGroup>
             </Grid2>
 
-            <Grid2 size={3}>
+            <Grid2 size={splitField(density.isSplit, { xs: 12, sm: 4, md: 2 }, 12)}>
               <Typography variant="h6" align="center">
                 الاجمالي{": "}
                 {shoppingCart.reduce(
@@ -657,7 +689,7 @@ const AdminSell = () => {
               </Typography>
               <Typography variant="body1" align="center"></Typography>
             </Grid2>
-            {showPaymentMethods &&
+            {showPay &&
               usesPaymentMethods &&
               paymentMethods.length > 0 && (
               <Grid2 size={12}>
@@ -672,6 +704,7 @@ const AdminSell = () => {
                   lines={paymentLines}
                   setLines={setPaymentLines}
                   currentStoreId={storeId}
+                  dense={density.isCompact}
                 />
               </Grid2>
             )}
@@ -688,14 +721,14 @@ const AdminSell = () => {
               />
             )}
 
-            <Grid2 size={12}>
+            <Grid2 size={pairInputs && showParties ? { xs: 12, sm: 6 } : 12}>
               <ProductAutocomplete
                 onProductSelect={addToCart}
                 products={products}
               />
             </Grid2>
-            {usingThirdParties && (
-              <Grid2 size={12}>
+            {showParties && (
+              <Grid2 size={pairInputs ? { xs: 12, sm: 6 } : 12}>
                 <Autocomplete
                   options={
                     [
@@ -799,12 +832,12 @@ const AdminSell = () => {
           </Grid2>
         </Card>
       </Grid2>{" "}
-      <Grid2 size={12}>
-        <Card elevation={3}>
+      <Grid2 size={cardSizes.cart}>
+        <Card elevation={3} sx={posCartCardSx(density)}>
           <TableContainer
             ref={cartTableRef}
             sx={{
-              height: "50vh",
+              ...posCartScrollSx(density),
               overflowY: "auto",
             }}
           >

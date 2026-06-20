@@ -15,7 +15,14 @@ import {
   TableContainer,
   TablePagination,
   Chip,
+  Button,
 } from "@mui/material";
+import { PictureAsPdf as PictureAsPdfIcon } from "@mui/icons-material";
+import {
+  buildDetailedReportHtml,
+  exportPdfDocument,
+} from "../../utils/a4Reports";
+import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
@@ -120,7 +127,8 @@ const DetailedAnalyticsTab = () => {
   );
   const [clientsPage, setClientsPage] = useState(0);
   const [clientsRowsPerPage, setClientsRowsPerPage] = useState(10);
-  const { storeId } = useContext(StoreContext);
+  const { storeId, store } = useContext(StoreContext);
+  const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
 
   const {
     palette: { mode },
@@ -442,13 +450,59 @@ const DetailedAnalyticsTab = () => {
     [data.clients.categories],
   );
 
+  const handleExportToPdf = async () => {
+    try {
+      const html = buildDetailedReportHtml({
+        store,
+        startDate: startDate.format("YYYY/MM/DD"),
+        endDate: endDate.format("YYYY/MM/DD"),
+        cards: data.cards,
+        topProducts: data.top_products,
+        clientCategories: data.clients.categories,
+        clients: data.clients.all_clients,
+        paymentBreakdown: data.payment_method_breakdown,
+      });
+      const result = await exportPdfDocument({
+        fileName: `detailed-${startDate.format("YYYY-MM-DD")}-${endDate.format("YYYY-MM-DD")}.pdf`,
+        html,
+        landscape: true,
+      });
+      if (result?.cancelled) return;
+      if (!result?.success) throw new Error(result?.error || "export failed");
+      setMsg({ type: "success", text: "تم تصدير التقرير التفصيلي PDF بنجاح" });
+    } catch (error) {
+      console.error("Detailed PDF export failed:", error);
+      setMsg({ type: "error", text: "فشل تصدير التقرير التفصيلي PDF" });
+    }
+  };
+
   return (
     <Grid2 container spacing={2}>
+      <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 size={12}>
         <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            التحليلات التفصيلية للمدة المحددة
-          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 2,
+              mb: 1,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography variant="h6">
+              التحليلات التفصيلية للمدة المحددة
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<PictureAsPdfIcon />}
+              onClick={handleExportToPdf}
+              disabled={isFetching}
+            >
+              تصدير PDF
+            </Button>
+          </Box>
           <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
             <LocalizationProvider
               dateAdapter={AdapterDayjs}

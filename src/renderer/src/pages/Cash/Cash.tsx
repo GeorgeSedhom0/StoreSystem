@@ -50,6 +50,7 @@ import useAccounts from "../Shared/hooks/useAccounts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { exportToExcel } from "../Analytics/utils";
 import { buildCashFlowReportHtml, exportPdfDocument } from "../utils/a4Reports";
+import StatCard from "../Shared/StatCard";
 
 const getCashFlow = async (
   startDate: Dayjs,
@@ -415,90 +416,32 @@ const Cash = () => {
       <AlertMessage message={msg} setMessage={setMsg} />
       <LoadingScreen loading={loading} />
       <Grid2 container spacing={3}>
-        {/* Statistics Cards - full width, own card */}
-        <Grid2 size={12}>
-          <Card elevation={3} sx={{ p: 2, mt: 2 }}>
-            <Grid2 container spacing={2}>
-              <Grid2 size={{ xs: 12, sm: 4 }}>
-                <Card
-                  sx={{
-                    p: 2,
-                    textAlign: "center",
-                    bgcolor: "success.light",
-                    color: "success.contrastText",
-                    boxShadow: 2,
-                    borderRadius: 2,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                  }}
-                >
-                  <TrendingUpIcon sx={{ fontSize: 32, mb: 1 }} />
-                  <Typography
-                    variant="caption"
-                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "1rem" }}
-                  >
-                    إجمالي الدخل
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    <FormatedNumber>{statistics.totalIn}</FormatedNumber>
-                  </Typography>
-                </Card>
-              </Grid2>
-              <Grid2 size={{ xs: 12, sm: 4 }}>
-                <Card
-                  sx={{
-                    p: 2,
-                    textAlign: "center",
-                    bgcolor: "error.light",
-                    color: "error.contrastText",
-                    boxShadow: 2,
-                    borderRadius: 2,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                  }}
-                >
-                  <TrendingDownIcon sx={{ fontSize: 32, mb: 1 }} />
-                  <Typography
-                    variant="caption"
-                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "1rem" }}
-                  >
-                    إجمالي الخروج
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    <FormatedNumber>{statistics.totalOut}</FormatedNumber>
-                  </Typography>
-                </Card>
-              </Grid2>
-              <Grid2 size={{ xs: 12, sm: 4 }}>
-                <Card
-                  sx={{
-                    p: 2,
-                    textAlign: "center",
-                    bgcolor: "primary.light",
-                    color: "primary.contrastText",
-                    boxShadow: 2,
-                    borderRadius: 2,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                  }}
-                >
-                  <AccountBalanceIcon sx={{ fontSize: 32, mb: 1 }} />
-                  <Typography
-                    variant="caption"
-                    sx={{ fontWeight: 600, mb: 0.5, fontSize: "1rem" }}
-                  >
-                    عدد المعاملات
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    {statistics.totalTransactions}
-                  </Typography>
-                </Card>
-              </Grid2>
-            </Grid2>
-          </Card>
+        {/* Statistics Cards */}
+        <Grid2 container size={12} spacing={2} sx={{ mt: 0 }}>
+          <Grid2 size={{ xs: 12, sm: 4 }}>
+            <StatCard
+              color="success"
+              icon={<TrendingUpIcon />}
+              label="إجمالي الدخل"
+              value={<FormatedNumber>{statistics.totalIn}</FormatedNumber>}
+            />
+          </Grid2>
+          <Grid2 size={{ xs: 12, sm: 4 }}>
+            <StatCard
+              color="error"
+              icon={<TrendingDownIcon />}
+              label="إجمالي الخروج"
+              value={<FormatedNumber>{statistics.totalOut}</FormatedNumber>}
+            />
+          </Grid2>
+          <Grid2 size={{ xs: 12, sm: 4 }}>
+            <StatCard
+              color="primary"
+              icon={<AccountBalanceIcon />}
+              label="عدد المعاملات"
+              value={statistics.totalTransactions}
+            />
+          </Grid2>
         </Grid2>
 
         {/* Account balances strip */}

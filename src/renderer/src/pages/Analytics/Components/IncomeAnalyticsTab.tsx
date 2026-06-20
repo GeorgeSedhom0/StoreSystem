@@ -8,7 +8,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Button,
 } from "@mui/material";
+import { PictureAsPdf as PictureAsPdfIcon } from "@mui/icons-material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
@@ -29,6 +31,8 @@ import CreditCardIcon from "@mui/icons-material/CreditCard";
 import PercentIcon from "@mui/icons-material/Percent";
 import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
+import { buildIncomeReportHtml, exportPdfDocument } from "../../utils/a4Reports";
+import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 
 interface PaymentMethodStat {
   method: string;
@@ -78,8 +82,38 @@ const IncomeAnalyticsTab = () => {
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("month"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
   const [method, setMethod] = useState<string>("simple");
-  const { storeId } = useContext(StoreContext);
+  const { storeId, store } = useContext(StoreContext);
   const { paymentMethods } = usePaymentMethods();
+  const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+
+  const handleExportToPdf = async () => {
+    try {
+      const html = buildIncomeReportHtml({
+        store,
+        startDate: startDate.format("YYYY/MM/DD"),
+        endDate: endDate.format("YYYY/MM/DD"),
+        methodLabel:
+          method === "fifo" ? "FIFO (الوارد أولاً يصرف أولاً)" : "السعر الثابت (البسيط)",
+        cashIn: data.cash_in,
+        cashOut: data.cash_out,
+        netCash: data.net_cash,
+        profit: data.profit,
+        dailyCashflow: data.daily_cashflow,
+        dailyProfit: data.daily_profit,
+        paymentBreakdown: data.payment_method_breakdown ?? [],
+      });
+      const result = await exportPdfDocument({
+        fileName: `income-${startDate.format("YYYY-MM-DD")}-${endDate.format("YYYY-MM-DD")}.pdf`,
+        html,
+      });
+      if (result?.cancelled) return;
+      if (!result?.success) throw new Error(result?.error || "export failed");
+      setMsg({ type: "success", text: "تم تصدير التقرير المالي PDF بنجاح" });
+    } catch (error) {
+      console.error("Income PDF export failed:", error);
+      setMsg({ type: "error", text: "فشل تصدير التقرير المالي PDF" });
+    }
+  };
 
   const {
     palette: { mode },
@@ -280,11 +314,31 @@ const IncomeAnalyticsTab = () => {
 
   return (
     <Grid2 container spacing={2}>
+      <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 size={12}>
         <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            تحليل الدخل والمصروفات فى المدة المحددة
-          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 2,
+              mb: 1,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography variant="h6">
+              تحليل الدخل والمصروفات فى المدة المحددة
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<PictureAsPdfIcon />}
+              onClick={handleExportToPdf}
+              disabled={isFetching}
+            >
+              تصدير PDF
+            </Button>
+          </Box>
 
           <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
             <LocalizationProvider

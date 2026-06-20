@@ -10,6 +10,7 @@ import Themes from "./Components/Themes";
 import PrinterSettings from "./Components/PrinterSettings";
 import Telegram from "./Components/Telegram";
 import PaymentMethods from "./Components/PaymentMethods";
+import Interface from "./Components/Interface";
 import {
   Settings as SettingsIcon,
   People as PeopleIcon,
@@ -137,7 +138,7 @@ const Settings = () => {
           <Tab
             icon={<PaletteIcon />}
             iconPosition="start"
-            label="الثيمات"
+            label="المظهر والواجهة"
             value="5"
           />{" "}
           <Tab
@@ -176,7 +177,12 @@ const Settings = () => {
             <Parties />
           </TabPanel>
           <TabPanel value="5" sx={{ p: 0 }}>
+            <Typography variant="h6" gutterBottom>
+              الثيمات
+            </Typography>
             <Themes />
+            <Divider sx={{ my: 4 }} />
+            <Interface />
           </TabPanel>{" "}
           <TabPanel value="6" sx={{ p: 0 }}>
             <PrinterSettings />
