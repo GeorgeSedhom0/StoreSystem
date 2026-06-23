@@ -422,16 +422,18 @@ const Cash = () => {
             <StatCard
               color="success"
               icon={<TrendingUpIcon />}
-              label="إجمالي الدخل"
+              label="إجمالي النقد الوارد"
               value={<FormatedNumber>{statistics.totalIn}</FormatedNumber>}
+              info="مجموع الحركات النقدية الواردة ضمن الفلتر الحالي (الفترة/الطرف/البحث). يشمل نقد الفواتير ومقدمات وأقساط التقسيط والإيداعات اليدوية."
             />
           </Grid2>
           <Grid2 size={{ xs: 12, sm: 4 }}>
             <StatCard
               color="error"
               icon={<TrendingDownIcon />}
-              label="إجمالي الخروج"
+              label="إجمالي النقد الصادر"
               value={<FormatedNumber>{statistics.totalOut}</FormatedNumber>}
+              info="مجموع الحركات النقدية الصادرة ضمن الفلتر الحالي (الفترة/الطرف/البحث). يشمل فواتير الشراء والمرتجعات والرواتب والسحوبات والمصاريف اليدوية."
             />
           </Grid2>
           <Grid2 size={{ xs: 12, sm: 4 }}>

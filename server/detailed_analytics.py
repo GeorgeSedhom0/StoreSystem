@@ -24,6 +24,8 @@ async def get_detailed_analytics(
     store_id: int,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    by_shift: bool = False,
+    party_id: Optional[int] = None,
     current_user: Dict = Depends(get_current_user),
 ):
     # Normalize input dates
@@ -36,36 +38,142 @@ async def get_detailed_analytics(
     end_dt = parse_date(end_date)
     end_dt_next = end_dt + timedelta(days=1)  # exclusive upper bound
 
-    # Cards: bills aggregates
-    def fetch_bills_aggregates() -> Dict:
+    # Cards: clear, separated money categories for the period.
+    def fetch_card_metrics() -> Dict:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            # (1) Bill-based sales & supplier purchases. Inter-store parties are
+            # excluded here — they're reported separately as inter-store transfers.
             cur.execute(
                 """
                 SELECT
-                    COUNT(*) FILTER (WHERE b.type IN ('sell','return')) AS bills_count,
                     COALESCE(SUM(b.total) FILTER (WHERE b.type IN ('sell','return')), 0) AS total_sales,
-                    COALESCE(AVG(b.discount) FILTER (WHERE b.type IN ('sell','return')), 0) AS avg_discount
+                    COALESCE(-SUM(b.total) FILTER (WHERE b.type IN ('buy','buy-return')), 0) AS purchases
                 FROM bills b
                 LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
                 WHERE b.store_id = %s
                   AND b.time >= %s AND b.time < %s
                   AND (b.party_id IS NULL OR ap.type != 'store')
+                  AND (%s IS NULL OR b.party_id = %s)
                 """,
-                (store_id, start_dt, end_dt_next),
+                (store_id, start_dt, end_dt_next, party_id, party_id),
             )
-            row = cur.fetchone() or {
-                "bills_count": 0,
-                "total_sales": 0,
-                "avg_discount": 0,
-            }
-            bills_count = int(row["bills_count"] or 0)
-            total_sales = float(row["total_sales"] or 0)
-            avg_bill_total = total_sales / bills_count if bills_count > 0 else 0.0
+            r1 = cur.fetchone() or {}
+
+            # (2) Deferred sales — outstanding value + expected profit, computed
+            # per bill from products_flow (BNPL/installment store total=0). Cost
+            # basis = the wholesale_price locked on the line at sale time, so the
+            # "expected profit" is the margin on those exact goods.
+            #   BNPL: type stays 'BNPL' only while unrealized (it flips to 'sell'
+            #   on payment), so these are exactly the not-yet-collected ones.
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(-SUM(pf.price * pf.amount) FILTER (WHERE b.type = 'BNPL'), 0) AS bnpl_outstanding,
+                    COALESCE(-SUM((pf.price - pf.wholesale_price) * pf.amount) FILTER (WHERE b.type = 'BNPL'), 0) AS bnpl_expected_profit,
+                    COALESCE(-SUM(pf.price * pf.amount) FILTER (WHERE b.type = 'installment'), 0) AS installment_principal,
+                    COALESCE(-SUM((pf.price - pf.wholesale_price) * pf.amount) FILTER (WHERE b.type = 'installment'), 0) AS installment_expected_profit
+                FROM products_flow pf
+                JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
+                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+                WHERE pf.store_id = %s AND b.id > 0
+                  AND b.time >= %s AND b.time < %s
+                  AND b.type IN ('BNPL', 'installment')
+                  AND (b.party_id IS NULL OR ap.type != 'store')
+                  AND (%s IS NULL OR b.party_id = %s)
+                """,
+                (store_id, start_dt, end_dt_next, party_id, party_id),
+            )
+            r2 = cur.fetchone() or {}
+
+            # (3) Installment cash collected to date (مقدم + قسط) against the
+            # installment bills that were CREATED in the period. principal =
+            # collected + remaining, so remaining is derived in Python.
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(cf.amount), 0) AS installment_collected
+                FROM cash_flow cf
+                JOIN bills b ON cf.bill_id = b.id AND cf.store_id = b.store_id
+                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
+                WHERE cf.store_id = %s
+                  AND cf.description IN ('مقدم', 'قسط')
+                  AND b.type = 'installment'
+                  AND b.time >= %s AND b.time < %s
+                  AND (b.party_id IS NULL OR ap.type != 'store')
+                  AND (%s IS NULL OR b.party_id = %s)
+                """,
+                (store_id, start_dt, end_dt_next, party_id, party_id),
+            )
+            r3 = cur.fetchone() or {}
+
+            # (4) Operating expenses: non-bill cash OUT that is NOT an inter-store
+            # transfer and NOT an owner withdrawal (salaries + manual expenses).
+            cur.execute(
+                """
+                SELECT COALESCE(-SUM(cf.amount), 0) AS operating_expenses
+                FROM cash_flow cf
+                LEFT JOIN assosiated_parties ap ON cf.party_id = ap.id
+                WHERE cf.store_id = %s AND cf.time >= %s AND cf.time < %s
+                  AND cf.amount < 0 AND cf.bill_id IS NULL
+                  AND (cf.party_id IS NULL OR ap.type NOT IN ('store', 'owner'))
+                  AND (%s IS NULL OR cf.party_id = %s)
+                """,
+                (store_id, start_dt, end_dt_next, party_id, party_id),
+            )
+            r4 = cur.fetchone() or {}
+
+            # (5) Inter-store and owner movements, kept apart from everything else.
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(SUM(cf.amount) FILTER (WHERE ap.type = 'store'), 0) AS interstore_net,
+                    COALESCE(SUM(cf.amount) FILTER (WHERE ap.type = 'owner' AND cf.amount > 0), 0) AS owner_in,
+                    COALESCE(-SUM(cf.amount) FILTER (WHERE ap.type = 'owner' AND cf.amount < 0), 0) AS owner_out,
+                    COALESCE(SUM(cf.amount) FILTER (WHERE ap.type = 'owner'), 0) AS owner_net
+                FROM cash_flow cf
+                JOIN assosiated_parties ap ON cf.party_id = ap.id
+                WHERE cf.store_id = %s AND cf.time >= %s AND cf.time < %s
+                  AND ap.type IN ('store', 'owner')
+                  AND (%s IS NULL OR cf.party_id = %s)
+                """,
+                (store_id, start_dt, end_dt_next, party_id, party_id),
+            )
+            r5 = cur.fetchone() or {}
+
+            # (6) Free cash: manual cash IN with no bill, not from another store
+            # and not from the owner — surplus found in the drawer. Pure profit.
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(cf.amount), 0) AS free_cash
+                FROM cash_flow cf
+                LEFT JOIN assosiated_parties ap ON cf.party_id = ap.id
+                WHERE cf.store_id = %s AND cf.time >= %s AND cf.time < %s
+                  AND cf.type = 'in' AND cf.amount > 0 AND cf.bill_id IS NULL
+                  AND (cf.party_id IS NULL OR ap.type NOT IN ('store', 'owner'))
+                  AND (%s IS NULL OR cf.party_id = %s)
+                """,
+                (store_id, start_dt, end_dt_next, party_id, party_id),
+            )
+            r6 = cur.fetchone() or {}
+
+            installment_principal = float(r2.get("installment_principal") or 0)
+            installment_collected = float(r3.get("installment_collected") or 0)
             return {
-                "bills_count": bills_count,
-                "total_sales": total_sales,
-                "avg_bill_total": avg_bill_total,
-                "avg_discount": float(row["avg_discount"] or 0),
+                "total_sales": float(r1.get("total_sales") or 0),
+                "purchases": float(r1.get("purchases") or 0),
+                "bnpl_outstanding": float(r2.get("bnpl_outstanding") or 0),
+                "bnpl_expected_profit": float(r2.get("bnpl_expected_profit") or 0),
+                "installment_principal": installment_principal,
+                "installment_collected": installment_collected,
+                "installment_remaining": installment_principal - installment_collected,
+                "installment_expected_profit": float(
+                    r2.get("installment_expected_profit") or 0
+                ),
+                "operating_expenses": float(r4.get("operating_expenses") or 0),
+                "free_cash": float(r6.get("free_cash") or 0),
+                "interstore_net": float(r5.get("interstore_net") or 0),
+                "owner_in": float(r5.get("owner_in") or 0),
+                "owner_out": float(r5.get("owner_out") or 0),
+                "owner_net": float(r5.get("owner_net") or 0),
             }
 
     # Products participating in sells in period (exclude internal store)
@@ -81,8 +189,9 @@ async def get_detailed_analytics(
                   AND b.type = 'sell' AND pf.amount < 0 AND b.id > 0
                   AND b.time >= %s AND b.time < %s
                   AND (b.party_id IS NULL OR ap.type != 'store')
+                  AND (%s IS NULL OR b.party_id = %s)
                 """,
-                (store_id, start_dt, end_dt_next),
+                (store_id, start_dt, end_dt_next, party_id, party_id),
             )
             return [int(r["product_id"]) for r in cur.fetchall()]
 
@@ -176,6 +285,7 @@ async def get_detailed_analytics(
             for fp in future_purchases
         ]
         daily_profit: Dict[str, float] = {}
+        profit_events: List[tuple] = []  # (timestamp, profit) per sale, for shift bucketing
         total_profit = 0.0
         total_sales_value = 0.0
         total_units_sold = 0.0
@@ -204,6 +314,12 @@ async def get_detailed_analytics(
             in_period = (start_dt <= dt) and (dt < end_dt_next)
 
             include_for_profit = btype == "sell" and party_type != "store" and in_period
+            # When a specific party is selected, only count that party's sales as
+            # profit; other sales still consume inventory so FIFO cost layers stay
+            # correct. With no party selected this equals include_for_profit.
+            counts_profit = include_for_profit and (
+                party_id is None or tr["party_id"] == party_id
+            )
 
             if btype == "buy" and amount > 0:
                 inv.append((w_cost, amount))
@@ -212,7 +328,7 @@ async def get_detailed_analytics(
 
             if btype == "sell" and amount < 0:
                 sell_qty = -amount
-                if include_for_profit:
+                if counts_profit:
                     total_sales_value += s_price * sell_qty
                     total_units_sold += sell_qty
                 else:
@@ -290,6 +406,7 @@ async def get_detailed_analytics(
 
                 total_profit += sale_profit
                 daily_profit[date_str] = daily_profit.get(date_str, 0.0) + sale_profit
+                profit_events.append((dt, sale_profit))
 
         avg_cost_per_unit = (
             (accumulated_cost_for_sold / total_units_sold)
@@ -299,17 +416,19 @@ async def get_detailed_analytics(
         return {
             "product_id": product_id,
             "daily_profit": daily_profit,
+            "profit_events": profit_events,
             "total_profit": total_profit,
             "total_sales_value": total_sales_value,
             "total_units_sold": total_units_sold,
             "avg_cost_per_unit": avg_cost_per_unit,
         }
 
-    def compute_fifo_once_and_aggregate():
+    def compute_fifo_once_and_aggregate(shift_windows: Optional[List] = None):
         product_ids = get_products_sold_in_period()
         meta = get_product_meta(product_ids)
 
         overall_daily_profit: Dict[str, float] = {}
+        all_profit_events: List[tuple] = []
         per_product: Dict[int, Dict] = {}
         total_profit_fifo = 0.0
 
@@ -319,15 +438,22 @@ async def get_detailed_analytics(
             total_profit_fifo += stats["total_profit"]
             for d, p in stats["daily_profit"].items():
                 overall_daily_profit[d] = overall_daily_profit.get(d, 0.0) + p
+            all_profit_events.extend(stats["profit_events"])
 
-        all_dates = pd.date_range(start=start_dt.date(), end=end_dt.date(), freq="D")
-        profit_series = [
-            [
-                d.strftime("%Y-%m-%d"),
-                float(overall_daily_profit.get(d.strftime("%Y-%m-%d"), 0.0)),
+        if shift_windows is not None:
+            # Bucket profit by shift (x-axis = shift end times)
+            profit_series = bucket_by_shift(all_profit_events, shift_windows)
+        else:
+            all_dates = pd.date_range(
+                start=start_dt.date(), end=end_dt.date(), freq="D"
+            )
+            profit_series = [
+                [
+                    d.strftime("%Y-%m-%d"),
+                    float(overall_daily_profit.get(d.strftime("%Y-%m-%d"), 0.0)),
+                ]
+                for d in all_dates
             ]
-            for d in all_dates
-        ]
 
         top = sorted(
             (
@@ -396,9 +522,10 @@ async def get_detailed_analytics(
                   AND b.time >= %s AND b.time < %s
                   AND b.party_id IS NOT NULL
                   AND ap.type != 'store'
+                  AND (%s IS NULL OR b.party_id = %s)
                 GROUP BY b.party_id, b.store_id, ap.name, ap.phone
                 """,
-                (start_dt, store_id, start_dt, end_dt_next),
+                (start_dt, store_id, start_dt, end_dt_next, party_id, party_id),
             )
             rows = cur.fetchall()
 
@@ -412,8 +539,8 @@ async def get_detailed_analytics(
         all_clients = []
 
         for r in rows:
-            party_id = r["party_id"]
-            if party_id is None:
+            row_party_id = r["party_id"]
+            if row_party_id is None:
                 continue
             total = float(r["period_total"] or 0)
             prior = int(r["prior_count"] or 0)
@@ -431,7 +558,7 @@ async def get_detailed_analytics(
 
             # Add to all clients list
             all_clients.append({
-                "party_id": party_id,
+                "party_id": row_party_id,
                 "name": r["party_name"] or "غير معروف",
                 "phone": r["party_phone"] or "",
                 "total": total,
@@ -471,10 +598,11 @@ async def get_detailed_analytics(
                   AND b.type IN ('sell', 'return')
                   AND b.payments IS NOT NULL
                   AND (b.party_id IS NULL OR ap.type != 'store')
+                  AND (%s IS NULL OR b.party_id = %s)
                 GROUP BY elem->>'name'
                 ORDER BY total DESC
                 """,
-                (store_id, start_dt, end_dt_next),
+                (store_id, start_dt, end_dt_next, party_id, party_id),
             )
             return [
                 {
@@ -490,14 +618,17 @@ async def get_detailed_analytics(
             cur.execute(
                 """
                 WITH date_series AS (
-                    SELECT generate_series(%s::date, %s::date, '1 day'::interval)::date AS day
+                    SELECT generate_series(%s::timestamp, %s::timestamp, '1 day'::interval)::date AS day
                 ), agg AS (
-                    SELECT DATE_TRUNC('day', time)::date AS day,
-                           SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END) AS cash_in,
-                           SUM(CASE WHEN type = 'out' THEN -amount ELSE 0 END) AS cash_out
-                    FROM cash_flow
-                    WHERE store_id = %s AND time >= %s AND time < %s
-                    GROUP BY DATE_TRUNC('day', time)::date
+                    SELECT DATE_TRUNC('day', cf.time)::date AS day,
+                           SUM(CASE WHEN cf.type = 'in' THEN cf.amount ELSE 0 END) AS cash_in,
+                           SUM(CASE WHEN cf.type = 'out' THEN -cf.amount ELSE 0 END) AS cash_out
+                    FROM cash_flow cf
+                    LEFT JOIN assosiated_parties ap ON cf.party_id = ap.id
+                    WHERE cf.store_id = %s AND cf.time >= %s AND cf.time < %s
+                      AND (cf.party_id IS NULL OR ap.type NOT IN ('store', 'owner'))
+                      AND (%s IS NULL OR cf.party_id = %s)
+                    GROUP BY DATE_TRUNC('day', cf.time)::date
                 )
                 SELECT ds.day, COALESCE(a.cash_in, 0) AS cash_in, COALESCE(a.cash_out, 0) AS cash_out
                 FROM date_series ds
@@ -510,6 +641,8 @@ async def get_detailed_analytics(
                     store_id,
                     start_dt,
                     end_dt_next,
+                    party_id,
+                    party_id,
                 ),
             )
             return [
@@ -526,13 +659,16 @@ async def get_detailed_analytics(
             cur.execute(
                 """
                 WITH date_series AS (
-                    SELECT generate_series(%s::date, %s::date, '1 day'::interval)::date AS day
+                    SELECT generate_series(%s::timestamp, %s::timestamp, '1 day'::interval)::date AS day
                 ), agg AS (
-                    SELECT DATE_TRUNC('day', time)::date AS day,
-                           SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END) AS cash_in
-                    FROM cash_flow
-                    WHERE store_id = %s AND time >= %s AND time < %s
-                    GROUP BY DATE_TRUNC('day', time)::date
+                    SELECT DATE_TRUNC('day', cf.time)::date AS day,
+                           SUM(CASE WHEN cf.type = 'in' THEN cf.amount ELSE 0 END) AS cash_in
+                    FROM cash_flow cf
+                    LEFT JOIN assosiated_parties ap ON cf.party_id = ap.id
+                    WHERE cf.store_id = %s AND cf.time >= %s AND cf.time < %s
+                      AND (cf.party_id IS NULL OR ap.type NOT IN ('store', 'owner'))
+                      AND (%s IS NULL OR cf.party_id = %s)
+                    GROUP BY DATE_TRUNC('day', cf.time)::date
                 )
                 SELECT ds.day, COALESCE(a.cash_in, 0) AS cash_in
                 FROM date_series ds
@@ -545,31 +681,14 @@ async def get_detailed_analytics(
                     store_id,
                     start_dt,
                     end_dt_next,
+                    party_id,
+                    party_id,
                 ),
             )
             return [
                 [r["day"].strftime("%Y-%m-%d"), float(r["cash_in"] or 0)]
                 for r in cur.fetchall()
             ]
-
-    def fetch_non_bill_cash_totals() -> Dict[str, float]:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT
-                    COALESCE(SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END), 0) AS non_bill_in,
-                    COALESCE(SUM(CASE WHEN type = 'out' THEN -amount ELSE 0 END), 0) AS non_bill_out
-                FROM cash_flow
-                WHERE store_id = %s AND bill_id IS NULL
-                  AND time >= %s AND time < %s
-                """,
-                (store_id, start_dt, end_dt_next),
-            )
-            row = cur.fetchone() or {"non_bill_in": 0, "non_bill_out": 0}
-            return {
-                "non_bill_in": float(row["non_bill_in"] or 0),
-                "non_bill_out": float(row["non_bill_out"] or 0),
-            }
 
     def compute_inventory_net_value_trend(by_shift: bool = False) -> List[List]:
         """
@@ -731,32 +850,104 @@ async def get_detailed_analytics(
 
         return series
 
+    def fetch_shift_windows() -> List[tuple]:
+        """Closed shifts whose end falls within the period, ordered by start.
+        Matches the x-axis points used by the inventory shift view so every
+        shift-mode chart on the page shares the same buckets."""
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT start_date_time, end_date_time
+                FROM shifts
+                WHERE store_id = %s
+                  AND end_date_time IS NOT NULL
+                  AND end_date_time >= %s
+                  AND end_date_time < %s
+                ORDER BY start_date_time ASC
+                """,
+                (store_id, start_dt, end_dt_next),
+            )
+            return [(r["start_date_time"], r["end_date_time"]) for r in cur.fetchall()]
+
+    def bucket_by_shift(events: List[tuple], shift_windows: List[tuple]) -> List[List]:
+        """Sum (timestamp, value) events into shift windows. Returns one
+        [shift_end_iso, total] point per shift, zero-filled, in order. Events
+        outside any in-range shift are dropped (same semantics as the inventory
+        shift view)."""
+        sums = {end: 0.0 for (_start, end) in shift_windows}
+        for t, v in events:
+            for (start, end) in shift_windows:
+                if start <= t <= end:
+                    sums[end] += v
+                    break
+        return [[end.isoformat(), float(sums[end])] for (_start, end) in shift_windows]
+
+    def fetch_raw_cash_rows() -> List[tuple]:
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            cur.execute(
+                """
+                SELECT cf.time, cf.type, cf.amount
+                FROM cash_flow cf
+                LEFT JOIN assosiated_parties ap ON cf.party_id = ap.id
+                WHERE cf.store_id = %s AND cf.time >= %s AND cf.time < %s
+                  AND (cf.party_id IS NULL OR ap.type NOT IN ('store', 'owner'))
+                  AND (%s IS NULL OR cf.party_id = %s)
+                """,
+                (store_id, start_dt, end_dt_next, party_id, party_id),
+            )
+            return [
+                (r["time"], r["type"], float(r["amount"] or 0))
+                for r in cur.fetchall()
+            ]
+
     # Build response
-    cards = fetch_bills_aggregates()
+    shift_windows = fetch_shift_windows() if by_shift else None
+
+    metrics = fetch_card_metrics()
     total_profit_fifo, daily_profit_series, top_products = (
-        compute_fifo_once_and_aggregate()
+        compute_fifo_once_and_aggregate(shift_windows)
     )
     clients = fetch_clients_analytics()
     payment_method_breakdown = fetch_payment_method_breakdown()
-    cash_flow_daily = fetch_cashflow_in_vs_out()
-    cash_in_series = fetch_cash_in_series_only()
-    non_bill_cash = fetch_non_bill_cash_totals()
     inventory_net_value_3m = compute_inventory_net_value_trend(by_shift=False)
     inventory_net_value_by_shift = compute_inventory_net_value_trend(by_shift=True)
+
+    if by_shift:
+        raw_cash = fetch_raw_cash_rows()
+        cash_in_events = [(t, amt) for (t, typ, amt) in raw_cash if typ == "in"]
+        cash_out_events = [(t, -amt) for (t, typ, amt) in raw_cash if typ == "out"]
+        cash_in_buckets = bucket_by_shift(cash_in_events, shift_windows)
+        cash_out_buckets = bucket_by_shift(cash_out_events, shift_windows)
+        cash_in_series = cash_in_buckets
+        cash_flow_daily = [
+            [cash_in_buckets[i][0], cash_in_buckets[i][1], cash_out_buckets[i][1]]
+            for i in range(len(cash_in_buckets))
+        ]
+    else:
+        cash_flow_daily = fetch_cashflow_in_vs_out()
+        cash_in_series = fetch_cash_in_series_only()
 
     response = {
         "period": {"start_date": start_date, "end_date": end_date},
         "cards": {
-            "total_sales": cards["total_sales"],
+            "total_sales": metrics["total_sales"],
+            "purchases": metrics["purchases"],
+            "operating_expenses": metrics["operating_expenses"],
+            "free_cash": metrics["free_cash"],
             "total_profit_fifo": total_profit_fifo,
-            "non_bill_cash_in": non_bill_cash["non_bill_in"],
-            "non_bill_cash_out": non_bill_cash["non_bill_out"],
-            "total_profit_net": total_profit_fifo
-            + non_bill_cash["non_bill_in"]
-            - non_bill_cash["non_bill_out"],
-            "bills_count": cards["bills_count"],
-            "avg_bill_total": cards["avg_bill_total"],
-            "avg_discount": cards.get("avg_discount", 0.0),
+            "net_profit": total_profit_fifo
+            - metrics["operating_expenses"]
+            + metrics["free_cash"],
+            "bnpl_outstanding": metrics["bnpl_outstanding"],
+            "bnpl_expected_profit": metrics["bnpl_expected_profit"],
+            "installment_principal": metrics["installment_principal"],
+            "installment_collected": metrics["installment_collected"],
+            "installment_remaining": metrics["installment_remaining"],
+            "installment_expected_profit": metrics["installment_expected_profit"],
+            "interstore_net": metrics["interstore_net"],
+            "owner_in": metrics["owner_in"],
+            "owner_out": metrics["owner_out"],
+            "owner_net": metrics["owner_net"],
         },
         "overview": {
             "cash_in_series": cash_in_series,

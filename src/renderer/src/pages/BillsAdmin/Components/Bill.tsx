@@ -1,4 +1,11 @@
-import { Button, ButtonGroup, TableCell, TableRow } from "@mui/material";
+import {
+  Button,
+  ButtonGroup,
+  TableCell,
+  TableRow,
+  Typography,
+  Tooltip,
+} from "@mui/material";
 import { useContext, useRef, useState } from "react";
 import BillView from "../../utils/BillView";
 import { printBill } from "../../utils/functions";
@@ -97,6 +104,30 @@ const Bill = ({ context, item: bill, ...props }: any) => {
           </TableCell>
           <TableCell>
             <FormatedNumber>{Math.abs(bill.total)}</FormatedNumber>
+            {bill.payments && bill.payments.length > 0 && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", lineHeight: 1.1 }}
+              >
+                {bill.payments.length === 1 ? (
+                  bill.payments[0].name
+                ) : (
+                  <Tooltip
+                    title={bill.payments
+                      .map(
+                        (p: { name: string; amount: number }) =>
+                          `${p.name}: ${Math.abs(p.amount).toLocaleString()}`,
+                      )
+                      .join("، ")}
+                  >
+                    <span style={{ cursor: "help" }}>
+                      متعدد ({bill.payments.length})
+                    </span>
+                  </Tooltip>
+                )}
+              </Typography>
+            )}
           </TableCell>
           <TableCell>
             <ButtonGroup

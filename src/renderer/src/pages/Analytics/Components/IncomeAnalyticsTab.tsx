@@ -149,7 +149,7 @@ const IncomeAnalyticsTab = () => {
         },
       },
       legend: {
-        data: ["الإيرادات", "المصروفات", "صافي"],
+        data: ["النقد الوارد", "النقد الصادر", "صافي"],
       },
       toolbox: {
         feature: {
@@ -163,7 +163,7 @@ const IncomeAnalyticsTab = () => {
             icon: `image://${tableIcon}`,
             onclick: () => {
               const exportData = [
-                ["التاريخ", "الإيرادات", "المصروفات", "صافي"],
+                ["التاريخ", "النقد الوارد", "النقد الصادر", "صافي"],
                 ...data.daily_cashflow.map(([date, cashIn, cashOut, net]) => [
                   date,
                   cashIn,
@@ -185,12 +185,12 @@ const IncomeAnalyticsTab = () => {
       },
       series: [
         {
-          name: "الإيرادات",
+          name: "النقد الوارد",
           type: "bar",
           data: data.daily_cashflow.map(([date, cashIn]) => [date, cashIn]),
         },
         {
-          name: "المصروفات",
+          name: "النقد الصادر",
           type: "bar",
           data: data.daily_cashflow.map(([date, _, cashOut]) => [
             date,
@@ -390,20 +390,22 @@ const IncomeAnalyticsTab = () => {
       <Grid2 container size={12} spacing={2}>
         <Grid2 size={3}>
           <AnalyticsCard
-            title="إجمالي الإيرادات"
+            title="إجمالي النقد الوارد"
             value={formatCurrency(data.cash_in)}
             color="success.main"
             loading={isFetching}
             icon={<TrendingUpIcon fontSize="large" color="success" />}
+            info="كل النقد الداخل خلال الفترة من جميع المصادر: مبيعات الفواتير ومقدمات وأقساط التقسيط والإيداعات اليدوية خارج الفواتير. ليس صافي المبيعات."
           />
         </Grid2>
         <Grid2 size={3}>
           <AnalyticsCard
-            title="إجمالي المصروفات"
+            title="إجمالي النقد الصادر"
             value={formatCurrency(data.cash_out)}
             color="error.main"
             loading={isFetching}
             icon={<TrendingDownIcon fontSize="large" color="error" />}
+            info="كل النقد الخارج خلال الفترة من جميع المصادر: فواتير الشراء والمرتجعات والرواتب والسحوبات والمصاريف اليدوية خارج الفواتير."
           />
         </Grid2>
         <Grid2 size={3}>
@@ -413,6 +415,7 @@ const IncomeAnalyticsTab = () => {
             color={data.net_cash >= 0 ? "primary.main" : "error.main"}
             loading={isFetching}
             icon={<AccountBalanceIcon fontSize="large" color="primary" />}
+            info="النقد الوارد − النقد الصادر خلال الفترة (صافي حركة النقد). ليس الربح، فهو يشمل تحركات نقدية غير مرتبطة بالربح كالإيداعات والسحوبات."
           />
         </Grid2>
         <Grid2 size={3}>
@@ -422,6 +425,7 @@ const IncomeAnalyticsTab = () => {
             color="info.main"
             loading={isFetching}
             icon={<ShowChartIcon fontSize="large" color="info" />}
+            info="ربح البضاعة المباعة (سعر البيع ناقص تكلفة الشراء) على فواتير البيع فقط، حسب طريقة الحساب المختارة أعلاه. لا يطرح المرتجعات ولا المصاريف خارج الفواتير."
           />
         </Grid2>
       </Grid2>
@@ -471,6 +475,7 @@ const IncomeAnalyticsTab = () => {
                 color="success.main"
                 loading={isFetching}
                 icon={<PaymentsIcon fontSize="large" color="success" />}
+                info="ما حُصِّل نقداً على فواتير البيع والمرتجع (صافي المرتجعات) عبر طريقة الدفع النقدية، خلال الفترة."
               />
             </Grid2>
             <Grid2 size={4}>
@@ -480,6 +485,7 @@ const IncomeAnalyticsTab = () => {
                 color="info.main"
                 loading={isFetching}
                 icon={<CreditCardIcon fontSize="large" color="info" />}
+                info="ما حُصِّل على فواتير البيع والمرتجع عبر طرق الدفع غير النقدية (بطاقات/تحويلات)، خلال الفترة."
               />
             </Grid2>
             <Grid2 size={4}>
@@ -489,6 +495,7 @@ const IncomeAnalyticsTab = () => {
                 color={digitalShare >= 50 ? "info.main" : "text.primary"}
                 loading={isFetching}
                 icon={<PercentIcon fontSize="large" color="info" />}
+                info="حصة المدفوعات غير النقدية من إجمالي التحصيل على فواتير البيع والمرتجع."
               />
             </Grid2>
           </Grid2>

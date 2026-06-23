@@ -1,4 +1,5 @@
-import { Card, Box, Typography } from "@mui/material";
+import { Card, Box, Typography, Tooltip } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { ReactNode } from "react";
 
 type StatColor =
@@ -17,11 +18,14 @@ const StatCard = ({
   label,
   value,
   color = "primary",
+  info,
 }: {
   icon: ReactNode;
   label: string;
   value: ReactNode;
   color?: StatColor;
+  /** Optional explanation of exactly what this number includes/excludes. */
+  info?: string;
 }) => (
   <Card
     sx={{
@@ -46,12 +50,19 @@ const StatCard = ({
       {icon}
     </Box>
     <Box sx={{ minWidth: 0 }}>
-      <Typography
-        variant="caption"
-        sx={{ fontWeight: 600, display: "block", lineHeight: 1.25, opacity: 0.95 }}
-      >
-        {label}
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        <Typography
+          variant="caption"
+          sx={{ fontWeight: 600, lineHeight: 1.25, opacity: 0.95 }}
+        >
+          {label}
+        </Typography>
+        {info && (
+          <Tooltip title={info} enterTouchDelay={0} arrow>
+            <InfoOutlinedIcon sx={{ fontSize: 14, opacity: 0.8, cursor: "help" }} />
+          </Tooltip>
+        )}
+      </Box>
       <Typography
         variant="h6"
         noWrap

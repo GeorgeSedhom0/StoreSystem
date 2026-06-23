@@ -16,6 +16,8 @@ import {
   TablePagination,
   Chip,
   Button,
+  Autocomplete,
+  TextField,
 } from "@mui/material";
 import { PictureAsPdf as PictureAsPdfIcon } from "@mui/icons-material";
 import {
@@ -32,11 +34,19 @@ import axios from "axios";
 import EChartsReact from "echarts-for-react";
 import { useTheme } from "@mui/material";
 import AnalyticsCard from "../../Shared/AnalyticsCard";
+import useParties from "../../Shared/hooks/useParties";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import PaidIcon from "@mui/icons-material/Paid";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
-import SummarizeIcon from "@mui/icons-material/Summarize";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
+import SavingsIcon from "@mui/icons-material/Savings";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import RedeemIcon from "@mui/icons-material/Redeem";
+import HourglassBottomIcon from "@mui/icons-material/HourglassBottom";
 import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
 
@@ -47,13 +57,21 @@ interface DetailedAnalyticsResponse {
   period: { start_date: string; end_date: string };
   cards: {
     total_sales: number;
+    purchases: number;
+    operating_expenses: number;
+    free_cash: number;
     total_profit_fifo: number;
-    non_bill_cash_in: number;
-    non_bill_cash_out: number;
-    total_profit_net: number;
-    bills_count: number;
-    avg_bill_total: number;
-    avg_discount: number;
+    net_profit: number;
+    bnpl_outstanding: number;
+    bnpl_expected_profit: number;
+    installment_principal: number;
+    installment_collected: number;
+    installment_remaining: number;
+    installment_expected_profit: number;
+    interstore_net: number;
+    owner_in: number;
+    owner_out: number;
+    owner_net: number;
   };
   overview: {
     cash_in_series: Series2;
@@ -100,6 +118,8 @@ const getDetailedAnalytics = async (
   startDate: string,
   endDate: string,
   storeId: number,
+  byShift: boolean,
+  partyId: number | null,
 ) => {
   const { data } = await axios.get<DetailedAnalyticsResponse>(
     "/detailed-analytics",
@@ -108,6 +128,8 @@ const getDetailedAnalytics = async (
         start_date: startDate, // YYYY-MM-DD
         end_date: endDate, // YYYY-MM-DD
         store_id: storeId,
+        by_shift: byShift,
+        ...(partyId != null ? { party_id: partyId } : {}),
       },
     },
   );
@@ -122,13 +144,13 @@ const formatCurrency = (value: number): string =>
 const DetailedAnalyticsTab = () => {
   const [startDate, setStartDate] = useState<Dayjs>(dayjs().startOf("month"));
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
-  const [inventoryViewMode, setInventoryViewMode] = useState<"daily" | "shift">(
-    "daily",
-  );
+  const [viewMode, setViewMode] = useState<"daily" | "shift">("daily");
+  const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
   const [clientsPage, setClientsPage] = useState(0);
   const [clientsRowsPerPage, setClientsRowsPerPage] = useState(10);
   const { storeId, store } = useContext(StoreContext);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+  const { parties } = useParties(setMsg);
 
   const {
     palette: { mode },
@@ -141,24 +163,36 @@ const DetailedAnalyticsTab = () => {
       startDate.format("YYYY-MM-DD"),
       endDate.format("YYYY-MM-DD"),
       storeId,
+      viewMode,
+      selectedPartyId,
     ],
     queryFn: () =>
       getDetailedAnalytics(
         startDate.format("YYYY-MM-DD"),
         endDate.format("YYYY-MM-DD"),
         storeId,
+        viewMode === "shift",
+        selectedPartyId,
       ),
     initialData: {
       period: { start_date: "", end_date: "" },
       cards: {
         total_sales: 0,
+        purchases: 0,
+        operating_expenses: 0,
+        free_cash: 0,
         total_profit_fifo: 0,
-        non_bill_cash_in: 0,
-        non_bill_cash_out: 0,
-        total_profit_net: 0,
-        bills_count: 0,
-        avg_bill_total: 0,
-        avg_discount: 0,
+        net_profit: 0,
+        bnpl_outstanding: 0,
+        bnpl_expected_profit: 0,
+        installment_principal: 0,
+        installment_collected: 0,
+        installment_remaining: 0,
+        installment_expected_profit: 0,
+        interstore_net: 0,
+        owner_in: 0,
+        owner_out: 0,
+        owner_net: 0,
       },
       overview: { cash_in_series: [], profit_series: [] },
       top_products: [],
@@ -181,7 +215,7 @@ const DetailedAnalyticsTab = () => {
   const overviewOptions: echarts.EChartsOption = useMemo(() => {
     return {
       tooltip: { trigger: "axis" },
-      legend: { data: ["الإيرادات", "الربح FIFO"] },
+      legend: { data: ["النقد الوارد", "الربح FIFO"] },
       toolbox: {
         feature: {
           magicType: { type: ["line", "bar"] },
@@ -192,7 +226,7 @@ const DetailedAnalyticsTab = () => {
             icon: `image://${tableIcon}`,
             onclick: () => {
               const exportData = [
-                ["التاريخ", "الإيرادات", "الربح FIFO"],
+                ["التاريخ", "النقد الوارد", "الربح FIFO"],
                 ...data.overview.cash_in_series.map(([d, cashIn], i) => [
                   d,
                   cashIn,
@@ -209,7 +243,7 @@ const DetailedAnalyticsTab = () => {
       yAxis: { type: "value" },
       series: [
         {
-          name: "الإيرادات",
+          name: "النقد الوارد",
           type: "line",
           smooth: true,
           data: data.overview.cash_in_series,
@@ -228,7 +262,7 @@ const DetailedAnalyticsTab = () => {
     const net = data.cash_flow_daily.map(([d, cin, cout]) => [d, cin - cout]);
     return {
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-      legend: { data: ["الإيرادات", "المصروفات", "صافي"] },
+      legend: { data: ["النقد الوارد", "النقد الصادر", "صافي"] },
       toolbox: {
         feature: {
           magicType: { type: ["line", "bar", "stack"] },
@@ -239,7 +273,7 @@ const DetailedAnalyticsTab = () => {
             icon: `image://${tableIcon}`,
             onclick: () => {
               const exportData = [
-                ["التاريخ", "الإيرادات", "المصروفات", "صافي"],
+                ["التاريخ", "النقد الوارد", "النقد الصادر", "صافي"],
                 ...data.cash_flow_daily.map(([d, cin, cout]) => [
                   d,
                   cin,
@@ -257,12 +291,12 @@ const DetailedAnalyticsTab = () => {
       yAxis: { type: "value" },
       series: [
         {
-          name: "الإيرادات",
+          name: "النقد الوارد",
           type: "bar",
           data: data.cash_flow_daily.map(([d, cin]) => [d, cin]),
         },
         {
-          name: "المصروفات",
+          name: "النقد الصادر",
           type: "bar",
           data: data.cash_flow_daily.map(([d, _cin, cout]) => [d, cout]),
         },
@@ -273,7 +307,7 @@ const DetailedAnalyticsTab = () => {
 
   // Inventory net value trend
   const inventoryValueOptions: echarts.EChartsOption = useMemo(() => {
-    const isShiftView = inventoryViewMode === "shift";
+    const isShiftView = viewMode === "shift";
     const chartData = isShiftView
       ? data.inventory_net_value_by_shift
       : data.inventory_net_value_3m;
@@ -330,7 +364,7 @@ const DetailedAnalyticsTab = () => {
         },
       ],
     };
-  }, [data.inventory_net_value_3m, data.inventory_net_value_by_shift, inventoryViewMode]);
+  }, [data.inventory_net_value_3m, data.inventory_net_value_by_shift, viewMode]);
 
   // Cumulative profit (bonus insight)
   const cumulativeProfitOptions: echarts.EChartsOption = useMemo(() => {
@@ -530,10 +564,68 @@ const DetailedAnalyticsTab = () => {
               />
             </LocalizationProvider>
           </Box>
+          <Box sx={{ mb: 2 }}>
+            <Autocomplete
+              options={parties}
+              value={
+                parties.find((party) => party.id === selectedPartyId) || null
+              }
+              onChange={(_, value) => setSelectedPartyId(value?.id || null)}
+              getOptionLabel={(option) =>
+                option.name + " - " + option.phone + " - " + option.type
+              }
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              filterOptions={(options, params) =>
+                options.filter(
+                  (option) =>
+                    option.name
+                      .toLowerCase()
+                      .includes(params.inputValue.toLowerCase()) ||
+                    option.phone.includes(params.inputValue),
+                )
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="تصفية حسب طرف معيّن (كل الأطراف افتراضياً)"
+                  variant="outlined"
+                />
+              )}
+              disabled={isFetching}
+            />
+          </Box>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 2,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              طريقة عرض الرسوم الزمنية
+            </Typography>
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={(_e, value) => value && setViewMode(value)}
+              size="small"
+              disabled={isFetching}
+            >
+              <ToggleButton value="daily">يومي</ToggleButton>
+              <ToggleButton value="shift">حسب الشيفتات</ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
         </Paper>
       </Grid2>
 
-      {/* Cards */}
+      {/* Group 1: realized profit & loss */}
+      <Grid2 size={12}>
+        <Typography variant="subtitle1" color="text.secondary" sx={{ mt: 1 }}>
+          المبيعات والأرباح المحقّقة
+        </Typography>
+      </Grid2>
       <Grid2 container size={12} spacing={2}>
         <Grid2 size={3}>
           <AnalyticsCard
@@ -542,69 +634,193 @@ const DetailedAnalyticsTab = () => {
             color="success.main"
             loading={isFetching}
             icon={<PaidIcon fontSize="large" color="success" />}
+            info="صافي مبيعات الفواتير المدفوعة خلال الفترة: فواتير البيع ناقص المرتجعات. لا يشمل البيع الآجل أو التقسيط أو التحويلات بين الفروع. (البيع الآجل يُحتسب هنا تلقائياً بمجرد تحصيله لأنه يتحول إلى فاتورة بيع.)"
           />
         </Grid2>
         <Grid2 size={3}>
           <AnalyticsCard
-            title="إجمالي الربح FIFO"
+            title="ربح FIFO"
             value={formatCurrency(data.cards.total_profit_fifo)}
             color="info.main"
             loading={isFetching}
             icon={<TrendingUpIcon fontSize="large" color="info" />}
+            info="ربح البضاعة المباعة (سعر البيع ناقص تكلفة الشراء الفعلية بطريقة الوارد أولاً صادر أولاً). فواتير البيع فقط. أرباح الآجل والتقسيط لا تدخل هنا حتى تتحقق."
           />
         </Grid2>
         <Grid2 size={3}>
           <AnalyticsCard
-            title="تحصيلات خارج الفواتير"
-            value={formatCurrency(data.cards.non_bill_cash_in)}
-            color="success.dark"
-            loading={isFetching}
-            icon={<PaidIcon fontSize="large" color="success" />}
-          />
-        </Grid2>
-        <Grid2 size={3}>
-          <AnalyticsCard
-            title="مصروفات خارج الفواتير"
-            value={formatCurrency(data.cards.non_bill_cash_out)}
-            color="error.main"
-            loading={isFetching}
-            icon={<PaidIcon fontSize="large" color="error" />}
-          />
-        </Grid2>
-        <Grid2 size={3}>
-          <AnalyticsCard
-            title="الربح الصافي (FIFO + خارج الفواتير)"
-            value={formatCurrency(data.cards.total_profit_net)}
-            color="warning.main"
-            loading={isFetching}
-            icon={<TrendingUpIcon fontSize="large" color="warning" />}
-          />
-        </Grid2>
-        <Grid2 size={3}>
-          <AnalyticsCard
-            title="عدد الفواتير"
-            value={`${data.cards.bills_count}`}
-            color="primary.main"
-            loading={isFetching}
-            icon={<ReceiptLongIcon fontSize="large" color="primary" />}
-          />
-        </Grid2>
-        <Grid2 size={3}>
-          <AnalyticsCard
-            title="متوسط قيمة الفاتورة"
-            value={formatCurrency(data.cards.avg_bill_total)}
+            title="المشتريات"
+            value={formatCurrency(data.cards.purchases)}
             color="secondary.main"
             loading={isFetching}
-            icon={<SummarizeIcon fontSize="large" color="secondary" />}
+            icon={<ShoppingCartIcon fontSize="large" color="secondary" />}
+            info="صافي مشتريات البضاعة من المورّدين خلال الفترة (شراء ناقص مرتجع شراء). لا يشمل التحويلات بين الفروع. لا تُطرح من صافي الربح لأنها مدرجة أصلاً ضمن تكلفة البضاعة."
           />
         </Grid2>
         <Grid2 size={3}>
           <AnalyticsCard
-            title="متوسط الخصم"
-            value={formatCurrency(data.cards.avg_discount)}
-            color="secondary.dark"
+            title="مصروفات تشغيلية"
+            value={formatCurrency(data.cards.operating_expenses)}
+            color="error.main"
             loading={isFetching}
-            icon={<SummarizeIcon fontSize="large" color="secondary" />}
+            icon={<TrendingDownIcon fontSize="large" color="error" />}
+            info="المصروفات النقدية خلال الفترة (رواتب ومصاريف يدوية). لا تشمل شراء البضاعة ولا التحويلات بين الفروع ولا مسحوبات المالك."
+          />
+        </Grid2>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="نقد فائض"
+            value={formatCurrency(data.cards.free_cash)}
+            color="success.main"
+            loading={isFetching}
+            icon={<RedeemIcon fontSize="large" color="success" />}
+            info="نقد وارد يدوياً غير مرتبط بأي فاتورة، وليس من فرع آخر ولا من المالك (مثل مبلغ زائد يُوجد في الدرج). يُعتبر ربحاً صافياً ويُضاف إلى صافي الربح."
+          />
+        </Grid2>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="صافي الربح"
+            value={formatCurrency(data.cards.net_profit)}
+            color="warning.main"
+            loading={isFetching}
+            icon={<SavingsIcon fontSize="large" color="warning" />}
+            info="ربح FIFO ناقص المصروفات التشغيلية زائد النقد الفائض. لا تُطرح منه المشتريات (ضمن التكلفة أصلاً) ولا التحويلات بين الفروع ولا مسحوبات المالك. أرباح الآجل/التقسيط غير المحصّلة غير مشمولة."
+          />
+        </Grid2>
+      </Grid2>
+
+      {/* Group 2: BNPL (deferred, not yet collected) */}
+      <Grid2 size={12}>
+        <Typography variant="subtitle1" color="text.secondary" sx={{ mt: 1 }}>
+          مبيعات آجلة (BNPL) — غير محصّلة
+        </Typography>
+      </Grid2>
+      <Grid2 container size={12} spacing={2}>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="آجل: مستحق التحصيل"
+            value={formatCurrency(data.cards.bnpl_outstanding)}
+            color="info.main"
+            loading={isFetching}
+            icon={<ReceiptLongIcon fontSize="large" color="info" />}
+            info="قيمة فواتير البيع الآجل التي تمت في الفترة ولم تُحصَّل بعد (المال الذي سيدخل عند السداد). بمجرد التحصيل تتحول الفاتورة إلى بيع وتنتقل تلقائياً إلى إجمالي المبيعات وربح FIFO."
+          />
+        </Grid2>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="آجل: ربح متوقع"
+            value={formatCurrency(data.cards.bnpl_expected_profit)}
+            color="info.main"
+            loading={isFetching}
+            icon={<TrendingUpIcon fontSize="large" color="info" />}
+            info="الربح المتوقع من البيع الآجل غير المحصّل (سعر البيع ناقص تكلفة الشراء المسجّلة للبضاعة). يتحقق ويُحتسب ضمن ربح FIFO فور تحصيله."
+          />
+        </Grid2>
+      </Grid2>
+
+      {/* Group 3: installments */}
+      <Grid2 size={12}>
+        <Typography variant="subtitle1" color="text.secondary" sx={{ mt: 1 }}>
+          التقسيط
+        </Typography>
+      </Grid2>
+      <Grid2 container size={12} spacing={2}>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="تقسيط: قيمة المبيعات"
+            value={formatCurrency(data.cards.installment_principal)}
+            color="info.main"
+            loading={isFetching}
+            icon={<ScheduleIcon fontSize="large" color="info" />}
+            info="إجمالي قيمة البضاعة المباعة بالتقسيط في الفترة (المقدَّم + المتبقّي). محسوبة من أسعار المنتجات."
+          />
+        </Grid2>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="تقسيط: محصّل"
+            value={formatCurrency(data.cards.installment_collected)}
+            color="success.main"
+            loading={isFetching}
+            icon={<PaidIcon fontSize="large" color="success" />}
+            info="ما تم تحصيله حتى الآن من أقساط الفترة (المقدَّم + الأقساط المسددة)، حتى لو سُددت بعد انتهاء الفترة."
+          />
+        </Grid2>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="تقسيط: متبقٍّ للتحصيل"
+            value={formatCurrency(data.cards.installment_remaining)}
+            color="info.main"
+            loading={isFetching}
+            icon={<HourglassBottomIcon fontSize="large" color="info" />}
+            info="المال الذي سيدخل لاحقاً من أقساط الفترة = قيمة المبيعات ناقص المحصّل."
+          />
+        </Grid2>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="تقسيط: ربح متوقع"
+            value={formatCurrency(data.cards.installment_expected_profit)}
+            color="info.main"
+            loading={isFetching}
+            icon={<TrendingUpIcon fontSize="large" color="info" />}
+            info="إجمالي الربح المتوقع من مبيعات التقسيط في الفترة عند اكتمال السداد (سعر البيع ناقص تكلفة الشراء المسجّلة). لا يدخل حالياً في صافي الربح المحقّق."
+          />
+        </Grid2>
+      </Grid2>
+
+      {/* Group 4: set-apart movements that do NOT enter profit */}
+      <Grid2 size={12}>
+        <Typography variant="subtitle1" color="text.secondary" sx={{ mt: 1 }}>
+          حركات مستقلة (لا تدخل في حساب الربح)
+        </Typography>
+      </Grid2>
+      <Grid2 container size={12} spacing={2}>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="تحويلات بين الفروع (صافي)"
+            value={formatCurrency(data.cards.interstore_net)}
+            color="text.secondary"
+            loading={isFetching}
+            icon={<SwapHorizIcon fontSize="large" color="disabled" />}
+            info="صافي الأموال المتحركة بينك وبين الفروع الأخرى خلال الفترة (الوارد ناقص الصادر). مستقلة تماماً عن المبيعات والربح. القيمة السالبة تعني صافي مبالغ خرجت لفروع أخرى."
+          />
+        </Grid2>
+      </Grid2>
+
+      {/* Group 5: owner transactions with the store (in / out / net) */}
+      <Grid2 size={12}>
+        <Typography variant="subtitle1" color="text.secondary" sx={{ mt: 1 }}>
+          حركة المالك مع المحل
+        </Typography>
+      </Grid2>
+      <Grid2 container size={12} spacing={2}>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="إيداعات المالك"
+            value={formatCurrency(data.cards.owner_in)}
+            color="success.main"
+            loading={isFetching}
+            icon={<AccountBalanceWalletIcon fontSize="large" color="success" />}
+            info="إجمالي ما أودعه المالك في المحل خلال الفترة. مستقل عن الربح."
+          />
+        </Grid2>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="مسحوبات المالك"
+            value={formatCurrency(data.cards.owner_out)}
+            color="error.main"
+            loading={isFetching}
+            icon={<AccountBalanceWalletIcon fontSize="large" color="error" />}
+            info="إجمالي ما سحبه المالك من المحل خلال الفترة. مستقل عن الربح."
+          />
+        </Grid2>
+        <Grid2 size={3}>
+          <AnalyticsCard
+            title="صافي حركة المالك"
+            value={formatCurrency(data.cards.owner_net)}
+            color="text.secondary"
+            loading={isFetching}
+            icon={<AccountBalanceWalletIcon fontSize="large" color="disabled" />}
+            info="الإيداعات ناقص المسحوبات. القيمة السالبة تعني أن المالك سحب أكثر مما أودع خلال الفترة."
           />
         </Grid2>
       </Grid2>
@@ -613,7 +829,7 @@ const DetailedAnalyticsTab = () => {
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 2, mb: 3 }}>
           <Typography variant="h6" gutterBottom>
-            نظرة عامة: الإيرادات مقابل ربح FIFO
+            نظرة عامة: النقد الوارد مقابل ربح FIFO
           </Typography>
           <EChartsReact
             option={overviewOptions}
@@ -934,27 +1150,12 @@ const DetailedAnalyticsTab = () => {
       {/* Inventory net value trend */}
       <Grid2 size={12}>
         <Card elevation={3} sx={{ p: 2, mb: 3 }}>
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              mb: 2,
-            }}
-          >
-            <Typography variant="h6">قيمة المخزون الصافية</Typography>
-            <ToggleButtonGroup
-              value={inventoryViewMode}
-              exclusive
-              onChange={(_e, value) => value && setInventoryViewMode(value)}
-              size="small"
-            >
-              <ToggleButton value="daily">يومي</ToggleButton>
-              <ToggleButton value="shift">حسب الشيفتات</ToggleButton>
-            </ToggleButtonGroup>
-          </Box>
+          <Typography variant="h6">قيمة المخزون الصافية</Typography>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            قيمة على مستوى المتجر بالكامل ولا تتأثر بتصفية الطرف.
+          </Typography>
           <EChartsReact
-            key={`inventory-${inventoryViewMode}`}
+            key={`inventory-${viewMode}`}
             option={inventoryValueOptions}
             style={{ height: 400 }}
             theme={mode}

@@ -935,8 +935,8 @@ export const buildIncomeReportHtml = ({
       { label: "طريقة حساب الأرباح", value: methodLabel },
     ],
     summary: [
-      { label: "إجمالي الإيرادات", value: formatCurrency(cashIn), tone: "success" },
-      { label: "إجمالي المصروفات", value: formatCurrency(cashOut), tone: "danger" },
+      { label: "إجمالي النقد الوارد", value: formatCurrency(cashIn), tone: "success" },
+      { label: "إجمالي النقد الصادر", value: formatCurrency(cashOut), tone: "danger" },
       {
         label: "صافي النقد",
         value: formatCurrency(netCash),
@@ -995,11 +995,21 @@ export const buildDetailedReportHtml = ({
   endDate: string;
   cards: {
     total_sales: number;
+    purchases: number;
+    operating_expenses: number;
+    free_cash: number;
     total_profit_fifo: number;
-    total_profit_net: number;
-    bills_count: number;
-    avg_bill_total: number;
-    avg_discount: number;
+    net_profit: number;
+    bnpl_outstanding: number;
+    bnpl_expected_profit: number;
+    installment_principal: number;
+    installment_collected: number;
+    installment_remaining: number;
+    installment_expected_profit: number;
+    interstore_net: number;
+    owner_in: number;
+    owner_out: number;
+    owner_net: number;
   };
   topProducts: {
     name: string;
@@ -1107,9 +1117,21 @@ export const buildDetailedReportHtml = ({
     ],
     summary: [
       { label: "إجمالي المبيعات", value: formatCurrency(cards.total_sales), tone: "success" },
-      { label: "صافي الربح", value: formatCurrency(cards.total_profit_net), tone: "default" },
-      { label: "عدد الفواتير", value: String(cards.bills_count), tone: "default" },
-      { label: "متوسط الفاتورة", value: formatCurrency(cards.avg_bill_total), tone: "default" },
+      { label: "ربح FIFO", value: formatCurrency(cards.total_profit_fifo), tone: "default" },
+      { label: "المشتريات", value: formatCurrency(cards.purchases), tone: "default" },
+      { label: "مصروفات تشغيلية", value: formatCurrency(cards.operating_expenses), tone: "danger" },
+      { label: "نقد فائض", value: formatCurrency(cards.free_cash), tone: "success" },
+      { label: "صافي الربح", value: formatCurrency(cards.net_profit), tone: "default" },
+      { label: "آجل: مستحق التحصيل", value: formatCurrency(cards.bnpl_outstanding), tone: "default" },
+      { label: "آجل: ربح متوقع", value: formatCurrency(cards.bnpl_expected_profit), tone: "default" },
+      { label: "تقسيط: قيمة المبيعات", value: formatCurrency(cards.installment_principal), tone: "default" },
+      { label: "تقسيط: محصّل", value: formatCurrency(cards.installment_collected), tone: "default" },
+      { label: "تقسيط: متبقٍّ", value: formatCurrency(cards.installment_remaining), tone: "default" },
+      { label: "تقسيط: ربح متوقع", value: formatCurrency(cards.installment_expected_profit), tone: "default" },
+      { label: "تحويلات بين الفروع (صافي)", value: formatCurrency(cards.interstore_net), tone: "default" },
+      { label: "إيداعات المالك", value: formatCurrency(cards.owner_in), tone: "default" },
+      { label: "مسحوبات المالك", value: formatCurrency(cards.owner_out), tone: "default" },
+      { label: "صافي حركة المالك", value: formatCurrency(cards.owner_net), tone: "default" },
     ],
     content: `
       ${categoryPanel}
@@ -1179,15 +1201,22 @@ export const buildBillsReportHtml = ({
   averageDiscount: number;
   bills: Bill[];
 }) => {
+  const paymentLabel = (b: Bill): string => {
+    if (!b.payments || b.payments.length === 0) return "—";
+    if (b.payments.length === 1) return b.payments[0].name || "—";
+    return `متعدد (${b.payments.length})`;
+  };
+
   const summaryTable = tablePanel(
     "قائمة الفواتير",
     [
-      { label: "رقم", width: "10%", align: "center" },
-      { label: "الوقت", width: "22%" },
-      { label: "النوع", width: "12%", align: "center" },
-      { label: "الطرف الثاني", width: "22%" },
-      { label: "الخصم", width: "16%" },
-      { label: "الإجمالي", width: "18%" },
+      { label: "رقم", width: "8%", align: "center" },
+      { label: "الوقت", width: "19%" },
+      { label: "النوع", width: "11%", align: "center" },
+      { label: "الطرف الثاني", width: "18%" },
+      { label: "الدفع", width: "14%", align: "center" },
+      { label: "الخصم", width: "14%" },
+      { label: "الإجمالي", width: "16%" },
     ],
     bills.length
       ? bills
@@ -1198,12 +1227,13 @@ export const buildBillsReportHtml = ({
                 <td>${escapeHtml(formatDateTime(b.time))}</td>
                 <td class="align-center">${escapeHtml(billTypeLabel(b.type))}</td>
                 <td>${escapeHtml(b.party_name || "بدون")}</td>
+                <td class="align-center">${escapeHtml(paymentLabel(b))}</td>
                 <td>${escapeHtml(formatCurrency(b.discount || 0))}</td>
                 <td>${escapeHtml(formatCurrency(b.total))}</td>
               </tr>`,
           )
           .join("")
-      : emptyRow(6, "لا توجد فواتير مطابقة للفلاتر الحالية"),
+      : emptyRow(7, "لا توجد فواتير مطابقة للفلاتر الحالية"),
     `${bills.length} فاتورة`,
   );
 
@@ -1238,6 +1268,18 @@ export const buildBillsReportHtml = ({
                 <div class="mini-stat"><div class="label">الإجمالي</div><div class="value">${escapeHtml(formatCurrency(b.total))}</div></div>
                 <div class="mini-stat"><div class="label">الخصم</div><div class="value">${escapeHtml(formatCurrency(b.discount || 0))}</div></div>
               </div>
+              ${
+                b.payments && b.payments.length
+                  ? `<p class="section-note">${b.payments.length > 1 ? "طرق الدفع" : "طريقة الدفع"}: ${escapeHtml(
+                      b.payments
+                        .map(
+                          (p) =>
+                            `${p.name} (${formatCurrency(Math.abs(p.amount))})`,
+                        )
+                        .join("، "),
+                    )}</p>`
+                  : ""
+              }
               ${
                 b.note
                   ? `<p class="section-note">ملاحظة: ${escapeHtml(b.note)}</p>`

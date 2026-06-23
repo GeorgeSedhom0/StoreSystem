@@ -103,7 +103,7 @@ const SalesAnalytics = () => {
             icon: `image://${tableIcon}`,
             onclick: () => {
               const exportData = [
-                ["التاريخ", "الاجمالى", "نوع البيانات"],
+                ["التاريخ", "الإجمالي", "نوع البيانات"],
                 ...data.map(
                   ([date, value, is_prediction]: [
                     string,
@@ -127,7 +127,7 @@ const SalesAnalytics = () => {
       },
       series: [
         {
-          name: "الاجمالى",
+          name: "الإجمالي",
           type: "bar",
           smooth: true,
           data: data.map(
@@ -218,7 +218,7 @@ const SalesAnalytics = () => {
             </ButtonGroup>
           </Grid2>
           <Grid2 size={12}>
-            الاجمالى:{" "}
+            الإجمالي:{" "}
             {data.reduce((acc, [_, v]) => acc + v, 0).toLocaleString()}
           </Grid2>
           <Grid2 size={12}>

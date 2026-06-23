@@ -1,4 +1,5 @@
-import { Card, Typography, Box, Skeleton } from "@mui/material";
+import { Card, Typography, Box, Skeleton, Tooltip } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import React from "react";
 
 interface AnalyticsCardProps {
@@ -7,6 +8,9 @@ interface AnalyticsCardProps {
   color?: string;
   icon?: React.ReactNode;
   loading?: boolean;
+  /** Optional explanation of exactly what this number includes/excludes.
+   * Shown as an info icon next to the title with a tooltip on hover/tap. */
+  info?: string;
 }
 
 const AnalyticsCard: React.FC<AnalyticsCardProps> = ({
@@ -15,6 +19,7 @@ const AnalyticsCard: React.FC<AnalyticsCardProps> = ({
   color = "primary.main",
   icon,
   loading = false,
+  info,
 }) => {
   return (
     <Card
@@ -27,9 +32,22 @@ const AnalyticsCard: React.FC<AnalyticsCardProps> = ({
         justifyContent: "space-between",
       }}
     >
-      <Typography variant="subtitle2" color="text.secondary">
-        {title}
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          {title}
+        </Typography>
+        {info && (
+          <Tooltip title={info} enterTouchDelay={0} arrow>
+            <InfoOutlinedIcon
+              sx={{
+                fontSize: 16,
+                color: "text.disabled",
+                cursor: "help",
+              }}
+            />
+          </Tooltip>
+        )}
+      </Box>
       <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
         {icon && <Box sx={{ mr: 1 }}>{icon}</Box>}
         {loading ? (

@@ -110,7 +110,7 @@ const ShiftsAnalytics = () => {
             icon: `image://${tableIcon}`,
             onclick: () => {
               exportToExcel([
-                ["بداية الشفت", "نهاية الشفت", "الاجمالى", "نوع البيانات"],
+                ["بداية الشفت", "نهاية الشفت", "الإجمالي", "نوع البيانات"],
                 ...data.map(
                   ({
                     start_date_time,
@@ -268,7 +268,7 @@ const ShiftsAnalytics = () => {
             </ButtonGroup>
           </Grid2>
           <Grid2 size={12}>
-            الأجمالى: {data.reduce((acc, { total }) => acc + total, 0)}
+            الإجمالي: {data.reduce((acc, { total }) => acc + total, 0)}
           </Grid2>
           <Grid2 size={12}>
             <EChartsReact

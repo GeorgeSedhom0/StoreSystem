@@ -765,7 +765,7 @@ const BillView = forwardRef(
                 ? renderReserveSection()
                 : renderDefaultTotals()}
 
-          {bill.payments && bill.payments.length > 1 && (
+          {bill.payments && bill.payments.length > 0 && (
             <div style={{ width: "100%", marginTop: "0.5rem" }}>
               <h6
                 style={{
@@ -774,7 +774,7 @@ const BillView = forwardRef(
                   margin: "0.15rem 0 0.35rem",
                 }}
               >
-                طرق الدفع
+                {bill.payments.length > 1 ? "طرق الدفع" : "طريقة الدفع"}
               </h6>
               <table
                 style={{
