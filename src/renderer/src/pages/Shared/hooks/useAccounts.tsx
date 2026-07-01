@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dispatch, SetStateAction } from "react";
 import { Account, AccountTransaction } from "../../utils/types";
 import { AlertMsg } from "../AlertMessage";
+import { localTimestamp } from "../../utils/functions";
 
 interface AccountsResponse {
   accounts: Account[];
@@ -87,7 +88,7 @@ const useAccounts = (
           payment_method_id: paymentMethodId,
           amount,
           description,
-          time: new Date().toLocaleString(),
+          time: localTimestamp(),
         },
       });
     },
@@ -106,7 +107,7 @@ const useAccounts = (
           payment_method_id: paymentMethodId,
           amount,
           description,
-          time: new Date().toLocaleString(),
+          time: localTimestamp(),
         },
       });
     },
@@ -133,7 +134,7 @@ const useAccounts = (
           payment_method_id: paymentMethodId,
           actual_amount: actualAmount,
           description,
-          time: new Date().toLocaleString(),
+          time: localTimestamp(),
         },
       });
     },
@@ -163,7 +164,7 @@ const useAccounts = (
           to_method_id: toMethodId,
           amount,
           description,
-          time: new Date().toLocaleString(),
+          time: localTimestamp(),
         },
       });
     },
@@ -206,7 +207,7 @@ const useAccounts = (
           to_payment_method_id:
             toPaymentMethodId === "" ? undefined : toPaymentMethodId,
           description,
-          time: new Date().toLocaleString(),
+          time: localTimestamp(),
         },
       });
     },

@@ -29,6 +29,7 @@ import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
 import LoadingScreen from "../Shared/LoadingScreen";
+import { localTimestamp } from "../utils/functions";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
 import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
@@ -218,7 +219,7 @@ const MoveProducts = () => {
 
       try {
         const bill = {
-          time: new Date().toLocaleString(),
+          time: localTimestamp(),
           discount: 0,
           total: shoppingCart.reduce(
             (acc, item) => acc + item.wholesale_price * item.quantity,

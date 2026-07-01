@@ -20,6 +20,7 @@ import EChartsReact from "echarts-for-react";
 import { exportToExcel } from "../utils";
 import tableIcon from "./table.png";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { localTimestamp } from "../../utils/functions";
 
 interface ShiftsAnalytics {
   start_date_time: string;
@@ -65,8 +66,8 @@ const ShiftsAnalytics = () => {
     queryKey: ["analytics", startDate, endDate, requiredTypes, storeId],
     queryFn: () =>
       getAnalytics(
-        startDate.startOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
-        endDate.endOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
+        localTimestamp(startDate.startOf("day")),
+        localTimestamp(endDate.endOf("day")),
         requiredTypes,
         storeId,
       ),

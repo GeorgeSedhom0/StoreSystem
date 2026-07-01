@@ -35,6 +35,7 @@ import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import ProductInCart from "../Shared/ProductInCart";
 import LoadingScreen from "../Shared/LoadingScreen";
+import { localTimestamp } from "../utils/functions";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
 import useQuickHandle from "../Shared/hooks/useCtrlBackspace";
 import ProductAutocomplete from "../Shared/ProductAutocomplete";
@@ -389,7 +390,7 @@ const Buy = () => {
             : buildPayments(billTotal, paymentMethods, paymentLines);
 
         const bill = {
-          time: new Date().toLocaleString(),
+          time: localTimestamp(),
           discount,
           total: billTotal,
           products_flow: shoppingCart,
@@ -437,7 +438,7 @@ const Buy = () => {
               to_payment_method_id:
                 payByMyMethod === "" ? undefined : payByMyMethod,
               description: "تمويل فاتورة شراء من متجر آخر",
-              time: new Date().toLocaleString(),
+              time: localTimestamp(),
             },
           });
         }

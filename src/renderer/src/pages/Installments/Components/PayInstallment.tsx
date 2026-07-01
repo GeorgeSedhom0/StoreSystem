@@ -30,6 +30,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Dispatch, SetStateAction, useState, useEffect } from "react";
 import { AlertMsg } from "../../Shared/AlertMessage";
 import FormatedNumber from "../../Shared/FormatedNumber";
+import { localTimestamp } from "../../utils/functions";
 
 const payInstallment = async ({
   id,
@@ -44,7 +45,7 @@ const payInstallment = async ({
     {
       params: {
         amount,
-        time: new Date().toISOString(),
+        time: localTimestamp(),
       },
     },
   );

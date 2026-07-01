@@ -20,6 +20,7 @@ import EChartsReact from "echarts-for-react";
 import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { localTimestamp } from "../../utils/functions";
 
 type SalesAnalyticsType = [string, number, boolean?][];
 const getAnalytics = async (
@@ -58,8 +59,8 @@ const SalesAnalytics = () => {
     queryKey: ["analytics", "sales", startDate, endDate, types, storeId],
     queryFn: () =>
       getAnalytics(
-        startDate.startOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
-        endDate.endOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
+        localTimestamp(startDate.startOf("day")),
+        localTimestamp(endDate.endOf("day")),
         types,
         storeId,
       ),

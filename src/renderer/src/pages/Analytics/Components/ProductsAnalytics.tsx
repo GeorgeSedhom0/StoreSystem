@@ -20,6 +20,7 @@ import { DBProducts } from "../../utils/types";
 import { exportToExcel } from "../utils";
 import tableIcon from "./table.png";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { localTimestamp } from "../../utils/functions";
 
 const getAnalytics = async (
   startDate: string,
@@ -66,8 +67,8 @@ const ProductsAnalytics = () => {
     queryKey: ["analytics", selectedProducts, startDate, endDate, storeId],
     queryFn: () =>
       getAnalytics(
-        startDate.startOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
-        endDate.endOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
+        localTimestamp(startDate.startOf("day")),
+        localTimestamp(endDate.endOf("day")),
         selectedProducts,
         storeId,
       ),

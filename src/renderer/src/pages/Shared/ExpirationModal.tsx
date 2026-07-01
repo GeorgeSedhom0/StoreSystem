@@ -22,6 +22,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { BatchInfo, SCProduct } from "../utils/types";
+import { localDate } from "../utils/functions";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -50,7 +51,7 @@ const calculateExpirationDate = (
   if (!productionDate || shelfLifeDays <= 0) return "";
   const date = new Date(productionDate);
   date.setDate(date.getDate() + shelfLifeDays);
-  return date.toISOString().split("T")[0];
+  return localDate(date);
 };
 
 const ExpirationModal = ({
@@ -273,7 +274,7 @@ const ExpirationModal = ({
                             updateBatch(
                               batch.id,
                               "production_date",
-                              newValue ? newValue.format("YYYY-MM-DD") : "",
+                              newValue ? localDate(newValue) : "",
                             )
                           }
                           format="DD/MM/YYYY"
@@ -316,7 +317,7 @@ const ExpirationModal = ({
                           updateBatch(
                             batch.id,
                             "expiration_date",
-                            newValue ? newValue.format("YYYY-MM-DD") : "",
+                            newValue ? localDate(newValue) : "",
                           )
                         }
                         format="DD/MM/YYYY"

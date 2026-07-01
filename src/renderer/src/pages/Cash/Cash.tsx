@@ -50,6 +50,7 @@ import useAccounts from "../Shared/hooks/useAccounts";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { exportToExcel } from "../Analytics/utils";
 import { buildCashFlowReportHtml, exportPdfDocument } from "../utils/a4Reports";
+import { localTimestamp } from "../utils/functions";
 import StatCard from "../Shared/StatCard";
 
 const getCashFlow = async (
@@ -60,8 +61,8 @@ const getCashFlow = async (
 ) => {
   const { data } = await axios.get<CashFlow[]>("/cash-flow", {
     params: {
-      start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
-      end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
+      start_date: localTimestamp(startDate),
+      end_date: localTimestamp(endDate),
       party_id: partyId,
       store_id: storeId,
     },
@@ -390,7 +391,7 @@ const Cash = () => {
             description,
             store_id: storeId,
             party_id: newPartyId,
-            time: new Date().toLocaleString(),
+            time: localTimestamp(),
             payment_method_id: accountId === "" ? null : accountId,
             counterpart_payment_method_id:
               isStoreParty && counterpartAccountId !== ""

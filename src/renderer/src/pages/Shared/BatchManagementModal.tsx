@@ -26,6 +26,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { StoreContext } from "../../StoreDataProvider";
+import { localDate } from "../utils/functions";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -318,7 +319,7 @@ const BatchManagementModal = ({
                               updateBatch(
                                 batch.id,
                                 "expiration_date",
-                                newValue ? newValue.format("YYYY-MM-DD") : "",
+                                newValue ? localDate(newValue) : "",
                               )
                             }
                             format="DD/MM/YYYY"

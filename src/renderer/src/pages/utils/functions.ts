@@ -1,4 +1,5 @@
 import { AlertMsg } from "../Shared/AlertMessage";
+import type { Dayjs } from "dayjs";
 import printJS from "print-js";
 import {
   buildBarcodeLabelHtml,
@@ -49,6 +50,51 @@ const getBarCodeStyleLegacy = (
     .replaceAll("{barcodePrinterHeight}", barcodePrinterHeight.toString())
     .replaceAll("{barcodePrinterWidth}", barcodePrinterWidth.toString());
 };
+
+// THE one canonical way to send any date/datetime to the backend.
+//
+// Always emits local wall-clock time as "YYYY-MM-DD HH:mm:ss" with ASCII ("English")
+// digits, no matter the device language, locale, or timezone. This is the single
+// format the backend forwards to PostgreSQL, which parses it unambiguously under any
+// `datestyle` setting (the YYYY-MM-DD ordering is ISO-8601, recognized before any
+// MDY/DMY rule). Use this for EVERY date value sent to the server (request bodies and
+// query params) so we never hit locale/format issues again.
+//
+// Why not toLocaleString()/toISOString()?
+//  - `toLocaleString()` is locale-dependent: en-US Windows emits a parseable date, but
+//    an Arabic phone emits "DD/MM/YYYY" (or Arabic-Indic digits) which Postgres rejects.
+//  - `toISOString()` is locale-safe but converts to UTC, shifting the stored wall-clock
+//    by the timezone offset — inconsistent with the rest of the app, which stores local.
+//
+// Accepts a JS Date, a dayjs object, a parseable string/number, or nothing (= now).
+export const localTimestamp = (
+  input?: Date | Dayjs | string | number | null,
+): string => {
+  let d: Date;
+  if (input == null) d = new Date();
+  else if (input instanceof Date) d = input;
+  else if (
+    typeof input === "object" &&
+    typeof (input as Dayjs).toDate === "function"
+  )
+    d = (input as Dayjs).toDate(); // dayjs -> Date (keeps local wall-clock)
+  else d = new Date(input as string | number);
+
+  const pad = (n: number) => String(n).padStart(2, "0"); // ASCII digits always
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+};
+
+// Date-only counterpart of localTimestamp: "YYYY-MM-DD" (local, ASCII digits) for
+// fields backed by a DATE column (e.g. product batch expiration dates, analytics
+// day boundaries). Same locale/timezone guarantees as localTimestamp — use this for
+// every date-only value sent to the backend. (Avoids `.toISOString()`, which would
+// shift to UTC and can land on the wrong calendar day near midnight.)
+export const localDate = (
+  input?: Date | Dayjs | string | number | null,
+): string => localTimestamp(input).slice(0, 10);
 
 export const handlePrintError = (
   error: string,

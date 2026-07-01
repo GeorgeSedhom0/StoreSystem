@@ -36,6 +36,7 @@ import { useTheme } from "@mui/material";
 import AnalyticsCard from "../../Shared/AnalyticsCard";
 import useParties from "../../Shared/hooks/useParties";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { localDate } from "../../utils/functions";
 import PaidIcon from "@mui/icons-material/Paid";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import ScheduleIcon from "@mui/icons-material/Schedule";
@@ -168,8 +169,8 @@ const DetailedAnalyticsTab = () => {
     ],
     queryFn: () =>
       getDetailedAnalytics(
-        startDate.format("YYYY-MM-DD"),
-        endDate.format("YYYY-MM-DD"),
+        localDate(startDate),
+        localDate(endDate),
         storeId,
         viewMode === "shift",
         selectedPartyId,

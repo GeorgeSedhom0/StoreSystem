@@ -16,6 +16,7 @@ import EChartsReact from "echarts-for-react";
 import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { localTimestamp } from "../../utils/functions";
 
 export interface ProductsAnalyticsType {
   [key: string]: [string, number, boolean?][];
@@ -54,8 +55,8 @@ const TopProductsAnalytics = () => {
     queryKey: ["analytics", "top-products", startDate, endDate, storeId],
     queryFn: () =>
       getAnalytics(
-        startDate.startOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
-        endDate.endOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
+        localTimestamp(startDate.startOf("day")),
+        localTimestamp(endDate.endOf("day")),
         storeId,
       ),
     initialData: {} as ProductsAnalyticsType,

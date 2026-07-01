@@ -22,6 +22,7 @@ import { useTheme } from "@mui/material";
 import AnalyticsCard from "../../Shared/AnalyticsCard";
 import usePaymentMethods from "../../Shared/hooks/usePaymentMethods";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { localTimestamp } from "../../utils/functions";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
@@ -123,8 +124,8 @@ const IncomeAnalyticsTab = () => {
     queryKey: ["analytics", "income", startDate, endDate, storeId, method],
     queryFn: () =>
       getIncomeAnalytics(
-        startDate.startOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
-        endDate.endOf("day").locale("en").format("M/D/YYYY, h:mm:ss A"),
+        localTimestamp(startDate.startOf("day")),
+        localTimestamp(endDate.endOf("day")),
         storeId,
         method,
       ),

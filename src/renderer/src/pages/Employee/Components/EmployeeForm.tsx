@@ -18,6 +18,7 @@ import { Employee } from "../../utils/types";
 import axios from "axios";
 import { AlertMsg } from "../../Shared/AlertMessage";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import { localTimestamp } from "../../utils/functions";
 
 const addEmployee = async (employee: Employee, storeId: number) => {
   const { data } = await axios.post<Employee>("/employees", employee, {
@@ -85,7 +86,7 @@ const EmployeeForm = ({
       phone,
       address,
       salary,
-      started_on: joiningDate.toISOString(),
+      started_on: localTimestamp(joiningDate),
     };
 
     if (employee) {

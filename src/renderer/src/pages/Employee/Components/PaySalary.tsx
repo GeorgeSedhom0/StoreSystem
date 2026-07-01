@@ -19,6 +19,7 @@ import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import { AlertMsg } from "../../Shared/AlertMessage";
 import usePaymentMethods from "../../Shared/hooks/usePaymentMethods";
+import { localTimestamp } from "../../utils/functions";
 
 const postNewSalary = async ({
   id,
@@ -39,7 +40,7 @@ const postNewSalary = async ({
   formData.append("bonus", bonus.toString());
   formData.append("deductions", deductions.toString());
   formData.append("month", month.toString());
-  formData.append("time", date.toISOString());
+  formData.append("time", localTimestamp(date));
   if (paymentMethodId !== "") {
     formData.append("payment_method_id", paymentMethodId.toString());
   }

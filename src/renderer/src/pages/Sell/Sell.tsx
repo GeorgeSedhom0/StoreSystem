@@ -40,7 +40,7 @@ import ProductInCart from "../Shared/ProductInCart";
 import ShiftDialog from "./Components/ShiftDialog";
 import BillView from "../utils/BillView";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { printBill } from "../utils/functions";
+import { printBill, localTimestamp } from "../utils/functions";
 import { useNavigate } from "react-router-dom";
 import PartyDetails from "../Shared/PartyDetails";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
@@ -337,7 +337,7 @@ const Sell = () => {
           ) - discount;
 
         const bill = {
-          time: new Date().toLocaleString(),
+          time: localTimestamp(),
           discount: discount,
           total: billTotal,
           note: billNote.trim() ? billNote.trim() : null,

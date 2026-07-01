@@ -20,6 +20,7 @@ import "dayjs/locale/ar-sa";
 import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { CollectionBill, DBProducts, Product } from "../utils/types";
+import { localTimestamp } from "../utils/functions";
 import { TableVirtuoso } from "react-virtuoso";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
@@ -52,8 +53,8 @@ const getBills = async (
 ) => {
   const { data } = await axios.get<CollectionBill[]>("/parties/bills", {
     params: {
-      start_date: startDate.format("YYYY-MM-DDTHH:mm:ss"),
-      end_date: endDate.format("YYYY-MM-DDTHH:mm:ss"),
+      start_date: localTimestamp(startDate),
+      end_date: localTimestamp(endDate),
       party_id: partyId,
       store_id: storeId,
     },
