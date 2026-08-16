@@ -692,18 +692,30 @@ async def get_detailed_analytics(
 
     def compute_inventory_net_value_trend(by_shift: bool = False) -> List[List]:
         """
-        Compute inventory net value trend using historical prices.
+        Compute inventory net value trend, anchored to the present.
 
-        We go FORWARD through time:
-        - Start from the beginning with initial stock (current stock minus all movements)
-        - Move forward, applying stock changes
-        - When we hit a 'buy' bill, update the price for that product from that point onward
+        We go BACKWARD through time:
+        - Start from now: current stock priced at products.wholesale_price
+        - Move backward, undoing stock changes
+        - When we step back past a 'buy' bill, restore that product's previous
+          buy price
+
+        The newest point is therefore the exact same expression the products
+        page sums, so the chart and the page can never disagree at "now".
+        Deriving the series forward from the first buy instead (what this used
+        to do) rebuilt every price from products_flow, which silently drifts
+        from products.wholesale_price whenever that column is written by
+        anything other than a buy in this store -- another store's buy, or a
+        products-page edit.
+
+        Known limit: a price edit leaves no dated record, so it is applied
+        backward as far as the previous buy. Freezing that needs price history.
 
         Args:
             by_shift: If True, return data points at shift end times instead of daily.
         """
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            # Get current stock and prices
+            # The anchor: exactly what the products page sums.
             cur.execute(
                 """
                 SELECT pi.product_id, pi.stock, p.wholesale_price
@@ -714,43 +726,54 @@ async def get_detailed_analytics(
                 (store_id,),
             )
             inv_rows = cur.fetchall()
-            current_stock = {
+            stock_state = {
                 int(r["product_id"]): float(r["stock"] or 0) for r in inv_rows
             }
-            current_prices = {
+            price_state = {
                 int(r["product_id"]): float(r["wholesale_price"] or 0) for r in inv_rows
             }
 
-            # Get all products_flow records with bill type and wholesale_price
-            # Sorted by time ASCENDING for forward processing
+            # Get all products_flow records with bill type and wholesale_price.
+            # pf.id breaks same-timestamp ties so the walk is deterministic.
             cur.execute(
                 """
-                SELECT pf.product_id, pf.amount, pf.wholesale_price AS pf_wholesale_price,
+                SELECT pf.id, pf.product_id, pf.amount,
+                       pf.wholesale_price AS pf_wholesale_price,
                        b.time, b.type AS bill_type
                 FROM products_flow pf
                 JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
                 WHERE pf.store_id = %s AND b.id > 0
-                ORDER BY b.time ASC
+                ORDER BY b.time ASC, pf.id ASC
                 """,
                 (store_id,),
             )
             all_flow_rows = cur.fetchall()
 
-            # Get the total net movement for each product (to calculate starting stock)
-            cur.execute(
-                """
-                SELECT pf.product_id, COALESCE(SUM(pf.amount), 0) AS total_movement
-                FROM products_flow pf
-                JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
-                WHERE pf.store_id = %s AND b.id > 0
-                GROUP BY pf.product_id
-                """,
-                (store_id,),
-            )
-            movement_rows = cur.fetchall()
-            total_movements = {
-                int(r["product_id"]): float(r["total_movement"] or 0) for r in movement_rows
-            }
+            # Build flow events list sorted by time ascending
+            flow_events = []
+            for r in all_flow_rows:
+                flow_events.append({
+                    "time": r["time"],
+                    "product_id": int(r["product_id"]),
+                    "amount": float(r["amount"] or 0),
+                    "pf_wholesale_price": float(r["pf_wholesale_price"] or 0),
+                    "bill_type": r["bill_type"],
+                })
+
+            # Products that moved in the past but are gone from the current
+            # inventory (deleted, or never given a row). They hold no stock now
+            # and regain it as we walk back, so they still need a price.
+            missing = {e["product_id"] for e in flow_events} - set(price_state)
+            if missing:
+                cur.execute(
+                    "SELECT id, wholesale_price FROM products WHERE id IN %s",
+                    (tuple(missing),),
+                )
+                for r in cur.fetchall():
+                    price_state[int(r["id"])] = float(r["wholesale_price"] or 0)
+                for pid in missing:
+                    stock_state.setdefault(pid, 0.0)
+                    price_state.setdefault(pid, 0.0)
 
             # Get shifts if needed
             shifts_data = []
@@ -769,17 +792,6 @@ async def get_detailed_analytics(
                 )
                 shifts_data = cur.fetchall()
 
-        # Build flow events list sorted by time ascending
-        flow_events = []
-        for r in all_flow_rows:
-            flow_events.append({
-                "time": r["time"],
-                "product_id": int(r["product_id"]),
-                "amount": float(r["amount"] or 0),
-                "pf_wholesale_price": float(r["pf_wholesale_price"] or 0),
-                "bill_type": r["bill_type"],
-            })
-
         # Determine time points for the series
         if by_shift:
             time_points = [r["end_date_time"] for r in shifts_data]
@@ -793,50 +805,36 @@ async def get_detailed_analytics(
         if not time_points:
             return []
 
-        # Calculate initial stock (current stock - all movements = stock at the very beginning)
-        all_pids = set(current_stock.keys()) | set(total_movements.keys())
-        stock_state = {
-            pid: current_stock.get(pid, 0.0) - total_movements.get(pid, 0.0)
-            for pid in all_pids
-        }
+        # For each buy that set a price, the price in effect just before it --
+        # what to restore when the walk steps back past it. The first buy for a
+        # product restores its own price, so the earliest segment keeps the
+        # oldest known cost instead of dropping to zero.
+        restore_price: Dict[int, float] = {}
+        seen_price: Dict[int, float] = {}
+        for i, evt in enumerate(flow_events):
+            if evt["bill_type"] == "buy" and evt["pf_wholesale_price"] > 0:
+                pid = evt["product_id"]
+                restore_price[i] = seen_price.get(pid, evt["pf_wholesale_price"])
+                seen_price[pid] = evt["pf_wholesale_price"]
 
-        # For initial prices, we need to find the first buy bill for each product
-        # or use current price if no buy bills exist
-        # We'll build this as we go forward - start with zeros and update on first buy
-        price_state: Dict[int, float] = {}
-
-        # Pre-scan to find the first buy price for each product
-        first_buy_price: Dict[int, float] = {}
-        for evt in flow_events:
-            pid = evt["product_id"]
-            if evt["bill_type"] == "buy" and pid not in first_buy_price and evt["pf_wholesale_price"] > 0:
-                first_buy_price[pid] = evt["pf_wholesale_price"]
-
-        # Initialize prices: use first buy price if available, otherwise current price
-        for pid in all_pids:
-            if pid in first_buy_price:
-                price_state[pid] = first_buy_price[pid]
-            else:
-                price_state[pid] = current_prices.get(pid, 0.0)
-
-        # Process forward through time
+        # Process backward through time, newest point first
         series: List[List] = []
-        flow_idx = 0
+        flow_idx = len(flow_events) - 1
 
-        for tp in time_points:
-            # Apply all flow events up to and including this time point
-            while flow_idx < len(flow_events) and flow_events[flow_idx]["time"] <= tp:
+        for tp in reversed(time_points):
+            # Undo every flow event that happened after this time point
+            while flow_idx >= 0 and flow_events[flow_idx]["time"] > tp:
                 evt = flow_events[flow_idx]
                 pid = evt["product_id"]
 
-                # If this is a buy bill, update the price BEFORE applying the stock change
-                # This way the new stock from this buy uses the new price
-                if evt["bill_type"] == "buy" and evt["pf_wholesale_price"] > 0:
-                    price_state[pid] = evt["pf_wholesale_price"]
+                # Undo the stock change
+                stock_state[pid] = stock_state.get(pid, 0.0) - evt["amount"]
 
-                # Apply stock change
-                stock_state[pid] = stock_state.get(pid, 0.0) + evt["amount"]
-                flow_idx += 1
+                # If this buy set the price, put back what preceded it
+                if flow_idx in restore_price:
+                    price_state[pid] = restore_price[flow_idx]
+
+                flow_idx -= 1
 
             # Calculate total value at this time point
             total_value = 0.0
@@ -848,6 +846,7 @@ async def get_detailed_analytics(
             else:
                 series.append([tp.strftime("%Y-%m-%d"), float(total_value)])
 
+        series.reverse()
         return series
 
     def fetch_shift_windows() -> List[tuple]:
