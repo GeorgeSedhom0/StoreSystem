@@ -1,7 +1,7 @@
 from fastapi import HTTPException, APIRouter, Depends
 from fastapi.responses import JSONResponse
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from dotenv import load_dotenv
 from os import getenv
@@ -16,6 +16,7 @@ from analytics_utils import (
     Database,
 )
 from auth_middleware import get_current_user
+from profit_fifo import compute_fifo_profit
 
 load_dotenv()
 
@@ -645,292 +646,31 @@ def _calculate_profit_fifo(
     store_id: int, start_date: str, end_date: str, cursor
 ) -> tuple:
     """
-    Calculate profit using FIFO method.
+    Calculate profit using FIFO method (see profit_fifo).
     Returns (total_profit, daily_profit_data)
     """
-    start_date_obj = parse_date(start_date)
-    end_date_obj = parse_date(end_date)
-
-    # Get all products that had sell transactions in the selected period
-    cursor.execute(
-        """
-        SELECT DISTINCT pf.product_id
-        FROM products_flow pf
-        JOIN bills b ON pf.bill_id = b.id
-        WHERE pf.store_id = %s AND b.time > %s AND b.time <= %s
-        AND b.id > 0 AND b.type = 'sell'
-    """,
-        (store_id, start_date, end_date),
+    # The page sends start-of-day / end-of-day timestamps; the end is inclusive.
+    per_product = compute_fifo_profit(
+        cursor,
+        store_id,
+        parse_date(start_date),
+        parse_date(end_date) + timedelta(microseconds=1),
     )
 
-    product_ids = [row["product_id"] for row in cursor.fetchall()]
-
     total_profit = 0.0
-    daily_profit = {}
+    daily_profit: Dict[str, float] = {}
+    for stats in per_product.values():
+        total_profit += stats["total_profit"]
+        for t, profit in stats["profit_events"]:
+            date_str = t.strftime("%Y-%m-%d")
+            daily_profit[date_str] = daily_profit.get(date_str, 0.0) + profit
 
-    for product_id in product_ids:
-        product_profit = _calculate_product_profit_fifo(
-            product_id, store_id, start_date_obj, end_date_obj, cursor
-        )
-        total_profit += product_profit["total"]
-
-        # Aggregate daily profits
-        for date_str, profit in product_profit["daily"].items():
-            if date_str not in daily_profit:
-                daily_profit[date_str] = 0.0
-            daily_profit[date_str] += profit
-
-    # Convert daily profit dict to sorted list
     daily_profit_data = [
         [date_str, profit] for date_str, profit in sorted(daily_profit.items())
     ]
 
     return total_profit, daily_profit_data
 
-
-def _calculate_product_profit_fifo(
-    product_id: int, store_id: int, start_date: datetime, end_date: datetime, cursor
-) -> dict:
-    """
-    Calculate profit for a single product using FIFO method with future borrowing capability.
-    """
-    # Find the earliest point where total was <= 0 before our period
-    cursor.execute(
-        """
-        SELECT pf.time, pf.total
-        FROM products_flow pf
-        JOIN bills b ON pf.bill_id = b.id
-        WHERE pf.product_id = %s AND pf.store_id = %s 
-        AND b.time < %s AND b.id > 0
-        AND pf.total = 0
-        ORDER BY pf.time DESC
-        LIMIT 1
-    """,
-        (product_id, store_id, start_date),
-    )
-
-    starting_point = cursor.fetchone()
-    if starting_point:
-        fifo_start_time = starting_point["time"]
-    else:
-        # If no zero point found, start from the very beginning
-        cursor.execute(
-            """
-            SELECT MIN(pf.time) as min_time
-            FROM products_flow pf
-            JOIN bills b ON pf.bill_id = b.id
-            WHERE pf.product_id = %s AND pf.store_id = %s AND b.id > 0
-        """,
-            (product_id, store_id),
-        )
-        result = cursor.fetchone()
-        fifo_start_time = (
-            result["min_time"] if result and result["min_time"] else start_date
-        )
-
-    # Get all transactions from the FIFO start point to the end of our period
-    cursor.execute(
-        """
-        SELECT pf.time, pf.amount, pf.wholesale_price, pf.price, pf.total,
-               b.type, b.party_id, ap.type as party_type
-        FROM products_flow pf
-        JOIN bills b ON pf.bill_id = b.id
-        LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
-        WHERE pf.product_id = %s AND pf.store_id = %s 
-        AND pf.time >= %s AND pf.time <= %s
-        AND b.id > 0 AND b.type IN ('sell', 'buy')
-        ORDER BY pf.time
-    """,
-        (product_id, store_id, fifo_start_time, end_date),
-    )
-
-    transactions = cursor.fetchall()
-
-    # Get future purchases beyond our period for borrowing
-    cursor.execute(
-        """
-        SELECT pf.time, pf.amount, pf.wholesale_price
-        FROM products_flow pf
-        JOIN bills b ON pf.bill_id = b.id
-        WHERE pf.product_id = %s AND pf.store_id = %s 
-        AND pf.time > %s AND b.id > 0 AND b.type = 'buy'
-        AND pf.amount > 0
-        ORDER BY pf.time
-    """,
-        (product_id, store_id, end_date),
-    )
-
-    future_purchases = cursor.fetchall()
-
-    # FIFO inventory queue: [(cost, quantity), ...]
-    inventory_queue = []
-    # Future inventory queue for borrowing outside bounds: [(cost, quantity), ...]
-    future_inventory_queue = [
-        (float(fp["wholesale_price"] or 0), float(fp["amount"]))
-        for fp in future_purchases
-    ]
-
-    total_profit = 0.0
-    daily_profit = {}
-    last_known_cost = None
-
-    for i, transaction in enumerate(transactions):
-        date_str = transaction["time"].strftime("%Y-%m-%d")
-        amount = float(transaction["amount"])
-        wholesale_price = float(transaction["wholesale_price"] or 0)
-        sell_price = float(transaction["price"] or 0)
-        bill_type = transaction["type"]
-        party_type = transaction["party_type"]
-        transaction_time = transaction["time"]
-
-        # Only process transactions within our target date range for profit calculation
-        is_in_target_period = start_date <= transaction_time <= end_date
-
-        if bill_type == "buy" and amount > 0:
-            # Add inventory (buy transaction)
-            inventory_queue.append((wholesale_price, amount))
-            last_known_cost = wholesale_price
-
-        elif bill_type == "sell" and amount < 0:
-            # Sell transaction - calculate profit using FIFO with borrowing
-            sell_quantity = abs(amount)
-
-            # Skip profit calculation for sales to store parties
-            if party_type == "store":
-                # Still remove from inventory but don't count profit
-                _remove_from_fifo_queue(inventory_queue, sell_quantity)
-                continue
-
-            if is_in_target_period:
-                # Calculate profit for this sale
-                sale_profit = 0.0
-                remaining_to_sell = sell_quantity
-
-                # STEP 1: Use current inventory (normal FIFO)
-                while remaining_to_sell > 0 and inventory_queue:
-                    cost, available_qty = inventory_queue[0]
-
-                    if available_qty <= remaining_to_sell:
-                        # Use entire batch
-                        profit_for_batch = available_qty * (sell_price - cost)
-                        sale_profit += profit_for_batch
-                        remaining_to_sell -= available_qty
-                        inventory_queue.pop(0)
-                    else:
-                        # Use partial batch
-                        profit_for_batch = remaining_to_sell * (sell_price - cost)
-                        sale_profit += profit_for_batch
-                        inventory_queue[0] = (cost, available_qty - remaining_to_sell)
-                        remaining_to_sell = 0
-
-                # STEP 2: Borrow from future buys within the same period
-                if remaining_to_sell > 0:
-                    # Look for future buy transactions in the remaining transactions
-                    future_within_period = []
-                    for j in range(i + 1, len(transactions)):
-                        future_tx = transactions[j]
-                        if (
-                            future_tx["type"] == "buy"
-                            and float(future_tx["amount"]) > 0
-                        ):
-                            future_within_period.append(
-                                (
-                                    float(future_tx["wholesale_price"] or 0),
-                                    float(future_tx["amount"]),
-                                )
-                            )
-
-                    # Use future inventory within period
-                    future_within_idx = 0
-                    while remaining_to_sell > 0 and future_within_idx < len(
-                        future_within_period
-                    ):
-                        cost, available_qty = future_within_period[future_within_idx]
-
-                        if available_qty <= remaining_to_sell:
-                            # Use entire future batch
-                            profit_for_batch = available_qty * (sell_price - cost)
-                            sale_profit += profit_for_batch
-                            remaining_to_sell -= available_qty
-                            # Mark this future inventory as used
-                            future_within_period[future_within_idx] = (cost, 0)
-                            future_within_idx += 1
-                        else:
-                            # Use partial future batch
-                            profit_for_batch = remaining_to_sell * (sell_price - cost)
-                            sale_profit += profit_for_batch
-                            future_within_period[future_within_idx] = (
-                                cost,
-                                available_qty - remaining_to_sell,
-                            )
-                            remaining_to_sell = 0
-
-                    # Update the main transactions to reflect used future inventory
-                    future_within_idx = 0
-                    for j in range(i + 1, len(transactions)):
-                        if (
-                            transactions[j]["type"] == "buy"
-                            and float(transactions[j]["amount"]) > 0
-                        ):
-                            if future_within_idx < len(future_within_period):
-                                _, remaining_qty = future_within_period[
-                                    future_within_idx
-                                ]
-                                # Update the transaction amount to reflect what's left
-                                transactions[j] = dict(transactions[j])
-                                transactions[j]["amount"] = remaining_qty
-                                future_within_idx += 1
-
-                # STEP 3: Borrow from future purchases outside the period
-                while remaining_to_sell > 0 and future_inventory_queue:
-                    cost, available_qty = future_inventory_queue[0]
-
-                    if available_qty <= remaining_to_sell:
-                        # Use entire future batch
-                        profit_for_batch = available_qty * (sell_price - cost)
-                        sale_profit += profit_for_batch
-                        remaining_to_sell -= available_qty
-                        future_inventory_queue.pop(0)
-                    else:
-                        # Use partial future batch
-                        profit_for_batch = remaining_to_sell * (sell_price - cost)
-                        sale_profit += profit_for_batch
-                        future_inventory_queue[0] = (
-                            cost,
-                            available_qty - remaining_to_sell,
-                        )
-                        remaining_to_sell = 0
-
-                # STEP 4: Final fallback - use last known cost
-                if remaining_to_sell > 0 and last_known_cost is not None:
-                    profit_for_batch = remaining_to_sell * (
-                        sell_price - last_known_cost
-                    )
-                    sale_profit += profit_for_batch
-                    remaining_to_sell = 0
-
-                total_profit += sale_profit
-                if date_str not in daily_profit:
-                    daily_profit[date_str] = 0.0
-                daily_profit[date_str] += sale_profit
-            else:
-                # Remove from inventory but don't count profit (outside target period)
-                _remove_from_fifo_queue(inventory_queue, sell_quantity)
-
-    return {"total": total_profit, "daily": daily_profit}
-
-
-def _remove_from_fifo_queue(queue, quantity_to_remove):
-    """Helper function to remove quantity from FIFO queue without calculating profit."""
-    remaining = quantity_to_remove
-    while remaining > 0 and queue:
-        cost, available_qty = queue[0]
-        if available_qty <= remaining:
-            remaining -= available_qty
-            queue.pop(0)
-        else:
-            queue[0] = (cost, available_qty - remaining)
-            remaining = 0
 
 
 def _calculate_profit_simple(

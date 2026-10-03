@@ -7,6 +7,7 @@ from typing import Optional, List, Dict
 import pandas as pd
 from utils import parse_date
 from analytics_utils import Database
+from profit_fifo import compute_fifo_profit
 from auth_middleware import get_current_user
 
 load_dotenv()
@@ -176,25 +177,6 @@ async def get_detailed_analytics(
                 "owner_net": float(r5.get("owner_net") or 0),
             }
 
-    # Products participating in sells in period (exclude internal store)
-    def get_products_sold_in_period() -> List[int]:
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT pf.product_id
-                FROM products_flow pf
-                JOIN bills b ON pf.bill_id = b.id
-                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
-                WHERE pf.store_id = %s
-                  AND b.type = 'sell' AND pf.amount < 0 AND b.id > 0
-                  AND b.time >= %s AND b.time < %s
-                  AND (b.party_id IS NULL OR ap.type != 'store')
-                  AND (%s IS NULL OR b.party_id = %s)
-                """,
-                (store_id, start_dt, end_dt_next, party_id, party_id),
-            )
-            return [int(r["product_id"]) for r in cur.fetchall()]
-
     def get_product_meta(product_ids: List[int]) -> Dict[int, Dict]:
         if not product_ids:
             return {}
@@ -216,227 +198,26 @@ async def get_detailed_analytics(
                 for r in cur.fetchall()
             }
 
-    # FIFO per product
-    def compute_fifo_profit_for_product(product_id: int):
-        with Database(HOST, DATABASE, USER, PASS) as cur:
-            cur.execute(
-                """
-                SELECT pf.time
-                FROM products_flow pf
-                JOIN bills b ON pf.bill_id = b.id
-                WHERE pf.product_id = %s AND pf.store_id = %s AND b.id > 0
-                  AND b.time < %s AND pf.total = 0
-                ORDER BY pf.time DESC LIMIT 1
-                """,
-                (product_id, store_id, start_dt),
-            )
-            sp = cur.fetchone()
-            if sp:
-                fifo_start_time = sp["time"]
-            else:
-                cur.execute(
-                    """
-                    SELECT MIN(pf.time) AS min_time
-                    FROM products_flow pf
-                    JOIN bills b ON pf.bill_id = b.id
-                    WHERE pf.product_id = %s AND pf.store_id = %s AND b.id > 0
-                    """,
-                    (product_id, store_id),
-                )
-                res = cur.fetchone()
-                fifo_start_time = (
-                    res["min_time"] if res and res["min_time"] else start_dt
-                )
-
-            # Transactions in window
-            cur.execute(
-                """
-                SELECT pf.time, pf.amount, pf.wholesale_price, pf.price,
-                       b.type, b.party_id, ap.type as party_type
-                FROM products_flow pf
-                JOIN bills b ON pf.bill_id = b.id
-                LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
-                WHERE pf.product_id = %s AND pf.store_id = %s AND b.id > 0
-                  AND pf.time >= %s AND pf.time < %s
-                  AND b.type IN ('sell','buy')
-                ORDER BY pf.time
-                """,
-                (product_id, store_id, fifo_start_time, end_dt_next),
-            )
-            transactions = [dict(t) for t in cur.fetchall()]
-
-            # Future purchases after the period
-            cur.execute(
-                """
-                SELECT pf.time, pf.amount, pf.wholesale_price
-                FROM products_flow pf
-                JOIN bills b ON pf.bill_id = b.id
-                WHERE pf.product_id = %s AND pf.store_id = %s AND b.id > 0
-                  AND pf.time > %s AND b.type = 'buy' AND pf.amount > 0
-                ORDER BY pf.time
-                """,
-                (product_id, store_id, end_dt),
-            )
-            future_purchases = cur.fetchall()
-
-        inv: List[tuple[float, float]] = []
-        future_inv: List[tuple[float, float]] = [
-            (float(fp["wholesale_price"] or 0), float(fp["amount"]))
-            for fp in future_purchases
-        ]
-        daily_profit: Dict[str, float] = {}
-        profit_events: List[tuple] = []  # (timestamp, profit) per sale, for shift bucketing
-        total_profit = 0.0
-        total_sales_value = 0.0
-        total_units_sold = 0.0
-        accumulated_cost_for_sold = 0.0
-        last_known_cost = None
-
-        def remove_from_inv(qty: float):
-            remaining = qty
-            while remaining > 1e-9 and inv:
-                cost, q = inv[0]
-                if q <= remaining + 1e-9:
-                    remaining -= q
-                    inv.pop(0)
-                else:
-                    inv[0] = (cost, q - remaining)
-                    remaining = 0.0
-
-        for i, tr in enumerate(transactions):
-            dt = tr["time"]
-            date_str = dt.strftime("%Y-%m-%d")
-            amount = float(tr["amount"] or 0)
-            w_cost = float(tr["wholesale_price"] or 0)
-            s_price = float(tr["price"] or 0)
-            btype = tr["type"]
-            party_type = tr.get("party_type")
-            in_period = (start_dt <= dt) and (dt < end_dt_next)
-
-            include_for_profit = btype == "sell" and party_type != "store" and in_period
-            # When a specific party is selected, only count that party's sales as
-            # profit; other sales still consume inventory so FIFO cost layers stay
-            # correct. With no party selected this equals include_for_profit.
-            counts_profit = include_for_profit and (
-                party_id is None or tr["party_id"] == party_id
-            )
-
-            if btype == "buy" and amount > 0:
-                inv.append((w_cost, amount))
-                last_known_cost = w_cost or last_known_cost
-                continue
-
-            if btype == "sell" and amount < 0:
-                sell_qty = -amount
-                if counts_profit:
-                    total_sales_value += s_price * sell_qty
-                    total_units_sold += sell_qty
-                else:
-                    remove_from_inv(sell_qty)
-                    continue
-
-                remaining = sell_qty
-                sale_profit = 0.0
-
-                # From current inventory
-                while remaining > 1e-9 and inv:
-                    cost, q = inv[0]
-                    take = min(q, remaining)
-                    sale_profit += (s_price - cost) * take
-                    accumulated_cost_for_sold += cost * take
-                    q -= take
-                    remaining -= take
-                    if q <= 1e-9:
-                        inv.pop(0)
-                    else:
-                        inv[0] = (cost, q)
-
-                # Borrow from later buys within the period
-                if remaining > 1e-9:
-                    future_within: List[tuple[float, float]] = []
-                    for j in range(i + 1, len(transactions)):
-                        fut = transactions[j]
-                        if fut["type"] == "buy" and float(fut["amount"] or 0) > 0:
-                            future_within.append(
-                                (
-                                    float(fut["wholesale_price"] or 0),
-                                    float(fut["amount"]),
-                                )
-                            )
-                    fw_idx = 0
-                    while remaining > 1e-9 and fw_idx < len(future_within):
-                        cost, q = future_within[fw_idx]
-                        take = min(q, remaining)
-                        sale_profit += (s_price - cost) * take
-                        accumulated_cost_for_sold += cost * take
-                        q -= take
-                        remaining -= take
-                        future_within[fw_idx] = (cost, q)
-                        if q <= 1e-9:
-                            fw_idx += 1
-                    # write back remaining amounts to transactions
-                    fw_idx = 0
-                    for j in range(i + 1, len(transactions)):
-                        fut = transactions[j]
-                        if fut["type"] == "buy" and float(fut["amount"] or 0) > 0:
-                            if fw_idx < len(future_within):
-                                _, rem = future_within[fw_idx]
-                                transactions[j] = dict(transactions[j])
-                                transactions[j]["amount"] = rem
-                                fw_idx += 1
-
-                # Borrow from purchases after the period
-                while remaining > 1e-9 and future_inv:
-                    cost, q = future_inv[0]
-                    take = min(q, remaining)
-                    sale_profit += (s_price - cost) * take
-                    accumulated_cost_for_sold += cost * take
-                    q -= take
-                    remaining -= take
-                    if q <= 1e-9:
-                        future_inv.pop(0)
-                    else:
-                        future_inv[0] = (cost, q)
-
-                # Fallback
-                if remaining > 1e-9 and last_known_cost is not None:
-                    sale_profit += (s_price - last_known_cost) * remaining
-                    accumulated_cost_for_sold += last_known_cost * remaining
-                    remaining = 0.0
-
-                total_profit += sale_profit
-                daily_profit[date_str] = daily_profit.get(date_str, 0.0) + sale_profit
-                profit_events.append((dt, sale_profit))
-
-        avg_cost_per_unit = (
-            (accumulated_cost_for_sold / total_units_sold)
-            if total_units_sold > 0
-            else 0.0
-        )
-        return {
-            "product_id": product_id,
-            "daily_profit": daily_profit,
-            "profit_events": profit_events,
-            "total_profit": total_profit,
-            "total_sales_value": total_sales_value,
-            "total_units_sold": total_units_sold,
-            "avg_cost_per_unit": avg_cost_per_unit,
-        }
-
     def compute_fifo_once_and_aggregate(shift_windows: Optional[List] = None):
-        product_ids = get_products_sold_in_period()
-        meta = get_product_meta(product_ids)
+        with Database(HOST, DATABASE, USER, PASS) as cur:
+            per_product = compute_fifo_profit(
+                cur, store_id, start_dt, end_dt_next, party_id
+            )
+        meta = get_product_meta(list(per_product))
 
         overall_daily_profit: Dict[str, float] = {}
         all_profit_events: List[tuple] = []
-        per_product: Dict[int, Dict] = {}
         total_profit_fifo = 0.0
 
-        for pid in product_ids:
-            stats = compute_fifo_profit_for_product(pid)
-            per_product[pid] = stats
+        for stats in per_product.values():
+            stats["avg_cost_per_unit"] = (
+                stats["total_cost"] / stats["total_units_sold"]
+                if stats["total_units_sold"] > 0
+                else 0.0
+            )
             total_profit_fifo += stats["total_profit"]
-            for d, p in stats["daily_profit"].items():
+            for t, p in stats["profit_events"]:
+                d = t.strftime("%Y-%m-%d")
                 overall_daily_profit[d] = overall_daily_profit.get(d, 0.0) + p
             all_profit_events.extend(stats["profit_events"])
 
@@ -697,8 +478,9 @@ async def get_detailed_analytics(
         We go BACKWARD through time:
         - Start from now: current stock priced at products.wholesale_price
         - Move backward, undoing stock changes
-        - When we step back past a 'buy' bill, restore that product's previous
-          buy price
+        - When we step back past a 'buy' bill -- in ANY store, since a buy sets
+          the product's one shared products.wholesale_price -- restore that
+          product's previous buy price
 
         The newest point is therefore the exact same expression the products
         page sums, so the chart and the page can never disagree at "now".
@@ -733,16 +515,14 @@ async def get_detailed_analytics(
                 int(r["product_id"]): float(r["wholesale_price"] or 0) for r in inv_rows
             }
 
-            # Get all products_flow records with bill type and wholesale_price.
-            # pf.id breaks same-timestamp ties so the walk is deterministic.
+            # This store's stock movements. pf.id breaks same-timestamp ties so
+            # the walk is deterministic.
             cur.execute(
                 """
-                SELECT pf.id, pf.product_id, pf.amount,
-                       pf.wholesale_price AS pf_wholesale_price,
-                       b.time, b.type AS bill_type
+                SELECT pf.id, pf.product_id, pf.amount, b.time
                 FROM products_flow pf
                 JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
-                WHERE pf.store_id = %s AND b.id > 0
+                WHERE pf.store_id = %s AND b.id > 0 AND b.time IS NOT NULL
                 ORDER BY b.time ASC, pf.id ASC
                 """,
                 (store_id,),
@@ -756,9 +536,23 @@ async def get_detailed_analytics(
                     "time": r["time"],
                     "product_id": int(r["product_id"]),
                     "amount": float(r["amount"] or 0),
-                    "pf_wholesale_price": float(r["pf_wholesale_price"] or 0),
-                    "bill_type": r["bill_type"],
                 })
+
+            # Price changes: every buy line in every store (the
+            # update_product_price_after_insert trigger writes it to products).
+            cur.execute(
+                """
+                SELECT pf.product_id, pf.wholesale_price, b.time
+                FROM products_flow pf
+                JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
+                WHERE b.type = 'buy' AND b.id > 0 AND pf.wholesale_price > 0 AND b.time IS NOT NULL
+                ORDER BY b.time ASC, pf.id ASC
+                """
+            )
+            price_events = [
+                (r["time"], int(r["product_id"]), float(r["wholesale_price"]))
+                for r in cur.fetchall()
+            ]
 
             # Products that moved in the past but are gone from the current
             # inventory (deleted, or never given a row). They hold no stock now
@@ -809,17 +603,16 @@ async def get_detailed_analytics(
         # what to restore when the walk steps back past it. The first buy for a
         # product restores its own price, so the earliest segment keeps the
         # oldest known cost instead of dropping to zero.
-        restore_price: Dict[int, float] = {}
+        restore_price: List[float] = []
         seen_price: Dict[int, float] = {}
-        for i, evt in enumerate(flow_events):
-            if evt["bill_type"] == "buy" and evt["pf_wholesale_price"] > 0:
-                pid = evt["product_id"]
-                restore_price[i] = seen_price.get(pid, evt["pf_wholesale_price"])
-                seen_price[pid] = evt["pf_wholesale_price"]
+        for _t, pid, price in price_events:
+            restore_price.append(seen_price.get(pid, price))
+            seen_price[pid] = price
 
         # Process backward through time, newest point first
         series: List[List] = []
         flow_idx = len(flow_events) - 1
+        price_idx = len(price_events) - 1
 
         for tp in reversed(time_points):
             # Undo every flow event that happened after this time point
@@ -829,12 +622,12 @@ async def get_detailed_analytics(
 
                 # Undo the stock change
                 stock_state[pid] = stock_state.get(pid, 0.0) - evt["amount"]
-
-                # If this buy set the price, put back what preceded it
-                if flow_idx in restore_price:
-                    price_state[pid] = restore_price[flow_idx]
-
                 flow_idx -= 1
+
+            # Undo every price change after this time point
+            while price_idx >= 0 and price_events[price_idx][0] > tp:
+                price_state[price_events[price_idx][1]] = restore_price[price_idx]
+                price_idx -= 1
 
             # Calculate total value at this time point
             total_value = 0.0

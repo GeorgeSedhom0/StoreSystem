@@ -27,6 +27,8 @@ import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ProductAutocomplete from "../../Shared/ProductAutocomplete";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import PartySelect from "../../Shared/PartySelect";
+import useParties from "../../Shared/hooks/useParties";
 
 const EditableBill = ({
   bill,
@@ -50,8 +52,20 @@ const EditableBill = ({
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [loading, setLoading] = useState(false);
   const [isPairedBill, setIsPairedBill] = useState(false);
+  const [partyId, setPartyId] = useState<number | null>(bill.party_id ?? null);
+  // What the lines looked like when the dialog opened, to tell whether the
+  // save needs a full bill edit or only the (in-place) party change.
+  const [originalLines] = useState(() =>
+    JSON.stringify({
+      discount: bill.discount,
+      products: bill.products.map((p) => [p.id, Math.abs(p.amount), p.wholesale_price, p.price]),
+    }),
+  );
 
   const { storeId } = useContext(StoreContext);
+  const { parties } = useParties(setMsg);
+  const isTransfer =
+    isPairedBill || parties.find((p) => p.id === bill.party_id)?.type === "store";
 
   useEffect(() => {
     const getProds = async () => {
@@ -146,19 +160,32 @@ const EditableBill = ({
   const submitBill = useCallback(async () => {
     setLoading(true);
     try {
-      await axios.put("/bill", editedBill, {
-        params: {
-          store_id: storeId,
-        },
+      // Lines go through the normal edit; the party is rewritten in place.
+      // Lines first: if that edit is refused, nothing has changed yet.
+      const lines = JSON.stringify({
+        discount: editedBill.discount,
+        products: editedBill.products.map((p) => [p.id, p.amount, p.wholesale_price, p.price]),
       });
+      if (lines !== originalLines) {
+        await axios.put("/bill", editedBill, {
+          params: {
+            store_id: storeId,
+          },
+        });
+      }
+      if (partyId !== (bill.party_id ?? null)) {
+        await axios.put("/bill/party", null, {
+          params: { store_id: storeId, bill_id: bill.id, party_id: partyId ?? undefined },
+        });
+      }
       getBills();
       setEditing(false);
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
-      setMsg({ type: "error", text: "حدث خطأ" });
+      setMsg({ type: "error", text: error?.response?.data?.detail || "حدث خطأ" });
     }
     setLoading(false);
-  }, [editedBill, storeId]);
+  }, [editedBill, storeId, partyId, originalLines]);
 
   return (
     <Dialog open={true} onClose={() => setEditing(false)} maxWidth="lg">
@@ -173,6 +200,15 @@ const EditableBill = ({
         <LoadingScreen loading={loading} />
         <AlertMessage message={msg} setMessage={setMsg} />
         <Grid2 size={12}>اجمالى الفاتورة : {editedBill.total}</Grid2>
+        <Grid2 size={12}>
+          <PartySelect
+            parties={parties}
+            value={partyId}
+            onChange={setPartyId}
+            disabled={isTransfer}
+            helperText={isTransfer ? "لا يمكن تغيير الطرف الثاني لفاتورة نقل بين المتاجر" : undefined}
+          />
+        </Grid2>
         <Grid2 size={12}>
           <TextField
             label="الخصم"

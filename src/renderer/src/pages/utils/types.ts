@@ -88,6 +88,7 @@ export interface Bill {
   type: string;
   note?: string | null;
   payments?: PaymentLine[] | null;
+  party_id?: number | null;
   party_name: string | null;
   installment_details?: {
     id: number;

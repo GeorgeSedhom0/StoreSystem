@@ -56,6 +56,7 @@ def drop_all_tables(cur):
     cur.execute("DROP TABLE IF EXISTS payment_methods CASCADE")
     cur.execute("DROP TABLE IF EXISTS account_transactions CASCADE")
     cur.execute("DROP TABLE IF EXISTS db_meta CASCADE")
+    cur.execute("DROP TABLE IF EXISTS bill_corrections CASCADE")
     cur.execute("SET TIME ZONE 'Africa/Cairo'")
     cur.execute(f"ALTER DATABASE {DATABASE} SET timezone TO 'Africa/Cairo';")
 
@@ -111,8 +112,11 @@ def create_all_tables(cur):
     ('الموظفين', '/employees'),
     ('الإشعارات', '/notifications'),
     ('admin', '/admin'),
-    ('الحسابات', '/accounts')
+    ('الحسابات', '/accounts'),
+    ('تصحيح الفواتير', '/bill-corrections')
     """)
+    # /bill-corrections (kept in sync with update_db_24.py) is deliberately in
+    # no scope: it rewrites history, so it is granted explicitly per scope.
 
     # Create the users table
     cur.execute("""
@@ -235,7 +239,7 @@ def create_all_tables(cur):
     )
     """)
     cur.execute("""
-    INSERT INTO db_meta (key, value) VALUES ('version', '23')
+    INSERT INTO db_meta (key, value) VALUES ('version', '25')
     """)
 
     # Create the payment_methods table (dynamic, user-managed payment methods)
@@ -509,6 +513,32 @@ def create_all_tables(cur):
         CREATE INDEX idx_product_batches_store_product ON product_batches(store_id, product_id);
         CREATE INDEX idx_product_batches_expiration ON product_batches(expiration_date);
         CREATE INDEX idx_product_batches_store_expiration ON product_batches(store_id, expiration_date);
+    """)
+
+    # Bill corrections log (kept in sync with update_db_24.py): the only record
+    # of an in-place bill rewrite -- who, when, before/after -- for review/revert.
+    cur.execute("""
+    CREATE TABLE bill_corrections (
+        id BIGSERIAL PRIMARY KEY,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        user_id BIGINT,
+        username VARCHAR,
+        action VARCHAR NOT NULL,
+        store_id BIGINT NOT NULL,
+        bill_id BIGINT NOT NULL,
+        pair_store_id BIGINT,
+        pair_bill_id BIGINT,
+        note TEXT,
+        before JSONB NOT NULL,
+        after JSONB,
+        impact JSONB,
+        reverts_id BIGINT REFERENCES bill_corrections(id),
+        reverted_by BIGINT REFERENCES bill_corrections(id)
+    )
+    """)
+    cur.execute("""
+        CREATE INDEX idx_bill_corrections_bill ON bill_corrections (store_id, bill_id);
+        CREATE INDEX idx_products_flow_product_time ON products_flow (product_id, time);
     """)
 
     # Performance indexes (kept in sync with update_db_21.py).
@@ -839,15 +869,17 @@ def create_all_triggers(cur):
 
     # Create the trigger to update total after inserting a cash_flow
     cur.execute("""
-    -- Trigger to update total after insert
+    -- Trigger to update total after insert (kept in sync with update_db_25.py)
     CREATE OR REPLACE FUNCTION update_total_after_insert()
     RETURNS TRIGGER AS $$
     DECLARE
         latest_total NUMERIC;
-        latest_record RECORD;
     BEGIN
-        -- Lock the latest cash_flow record for this store to prevent race conditions
-        SELECT id, total INTO latest_record
+        -- One running-total writer per store at a time; concurrent sales
+        -- used to read the same previous row.
+        PERFORM pg_advisory_xact_lock(781234, NEW.store_id::int);
+
+        SELECT total INTO latest_total
         FROM cash_flow
         WHERE store_id = NEW.store_id
         AND (time < NEW.time OR (time = NEW.time AND id < NEW.id))
@@ -855,18 +887,18 @@ def create_all_triggers(cur):
         LIMIT 1
         FOR UPDATE;
 
-        -- If no previous record exists, start from 0
-        IF latest_record.total IS NULL THEN
-            latest_total := 0;
-        ELSE
-            latest_total := latest_record.total;
-        END IF;
-
-        -- Update the total for the current row
         UPDATE cash_flow
-        SET total = COALESCE(NEW.amount, 0) + latest_total
+        SET total = COALESCE(NEW.amount, 0) + COALESCE(latest_total, 0)
         WHERE id = NEW.id
         AND store_id = NEW.store_id;
+
+        -- A back-dated row: every later row includes its amount too.
+        IF COALESCE(NEW.amount, 0) <> 0 THEN
+            UPDATE cash_flow
+            SET total = total + NEW.amount
+            WHERE store_id = NEW.store_id
+            AND (time > NEW.time OR (time = NEW.time AND id > NEW.id));
+        END IF;
 
         RETURN NEW;
     END;
@@ -880,57 +912,39 @@ def create_all_triggers(cur):
 
     # Create the trigger to bubble fix the total after updating a cash_flow
     cur.execute("""
-    -- Trigger to bubble fix the total after update
+    -- Trigger to bubble fix the total after update (kept in sync with update_db_25.py)
     CREATE OR REPLACE FUNCTION bubble_fix_total_after_update()
     RETURNS TRIGGER AS $$
     DECLARE
         previous_total NUMERIC;
-        current_total NUMERIC;
-        rec RECORD;
     BEGIN
-        -- Only process if amount actually changed
-        IF NEW.amount = OLD.amount THEN
+        IF NEW.amount IS NOT DISTINCT FROM OLD.amount THEN
             RETURN NEW;
         END IF;
 
-        -- First, fix the total of the current row
-        -- Get the previous row's total
+        PERFORM pg_advisory_xact_lock(781234, NEW.store_id::int);
+
         SELECT total INTO previous_total
         FROM cash_flow
         WHERE store_id = NEW.store_id
         AND (time < NEW.time OR (time = NEW.time AND id < NEW.id))
         ORDER BY time DESC, id DESC
         LIMIT 1;
-        
-        IF previous_total IS NULL THEN
-            previous_total := 0;
-        END IF;
-        
-        -- Update the current row's total
-        UPDATE cash_flow
-        SET total = NEW.amount + previous_total
-        WHERE id = NEW.id
-        AND store_id = NEW.store_id;
-        
-        -- Get the updated total
-        current_total := NEW.amount + previous_total;
 
-        -- Now update all subsequent records
-        FOR rec IN 
-            SELECT id, amount
+        -- Re-total this row and everything after it in one statement.
+        UPDATE cash_flow c
+        SET total = s.rt
+        FROM (
+            SELECT id,
+                   COALESCE(previous_total, 0)
+                   + SUM(COALESCE(amount, 0)) OVER (ORDER BY time, id) AS rt
             FROM cash_flow
             WHERE store_id = NEW.store_id
-            AND (time > NEW.time OR (time = NEW.time AND id > NEW.id))
-            ORDER BY time ASC, id ASC
-            FOR UPDATE
-        LOOP
-            current_total := current_total + rec.amount;
-            
-            UPDATE cash_flow
-            SET total = current_total
-            WHERE id = rec.id
-            AND store_id = NEW.store_id;
-        END LOOP;
+            AND (time > NEW.time OR (time = NEW.time AND id >= NEW.id))
+        ) s
+        WHERE c.store_id = NEW.store_id
+        AND c.id = s.id
+        AND c.total IS DISTINCT FROM s.rt;
 
         RETURN NEW;
     END;
@@ -987,44 +1001,18 @@ def create_all_triggers(cur):
 
     # Trigger to bubble fix the total after delete
     cur.execute("""
-    -- Trigger to bubble fix the total after delete
+    -- Trigger to bubble fix the total after delete (kept in sync with update_db_25.py)
     CREATE OR REPLACE FUNCTION bubble_fix_total_after_delete()
     RETURNS TRIGGER AS $$
-    DECLARE
-        previous_total NUMERIC;
-        current_total NUMERIC;
-        rec RECORD;
     BEGIN
-        -- Get the total from the record before the deleted one
-        SELECT total INTO previous_total
-        FROM cash_flow
-        WHERE store_id = OLD.store_id
-        AND (time < OLD.time OR (time = OLD.time AND id < OLD.id))
-        ORDER BY time DESC, id DESC
-        LIMIT 1;
+        PERFORM pg_advisory_xact_lock(781234, OLD.store_id::int);
 
-        IF previous_total IS NULL THEN
-            previous_total := 0;
-        END IF;
-
-        current_total := previous_total;
-
-        -- Update all subsequent records to fix their totals
-        FOR rec IN
-            SELECT id, amount
-            FROM cash_flow
-            WHERE store_id = OLD.store_id
-            AND (time > OLD.time OR (time = OLD.time AND id > OLD.id))
-            ORDER BY time ASC, id ASC
-            FOR UPDATE
-        LOOP
-            current_total := current_total + rec.amount;
-
+        IF COALESCE(OLD.amount, 0) <> 0 THEN
             UPDATE cash_flow
-            SET total = current_total
-            WHERE id = rec.id
-            AND store_id = OLD.store_id;
-        END LOOP;
+            SET total = total - OLD.amount
+            WHERE store_id = OLD.store_id
+            AND (time > OLD.time OR (time = OLD.time AND id > OLD.id));
+        END IF;
 
         RETURN OLD;
     END;

@@ -32,6 +32,8 @@ from batches import router as batches_router
 from payment_methods import router as payment_methods_router
 from payment_methods import get_default_payment_method
 from accounts import router as accounts_router
+from bill_corrections import router as bill_corrections_router
+from bill_party import router as bill_party_router
 from auth_middleware import get_current_user, get_store_info
 from telegram_utils import (
     send_telegram_notification_background,
@@ -69,6 +71,8 @@ app.include_router(notifications_router)
 app.include_router(batches_router)
 app.include_router(payment_methods_router)
 app.include_router(accounts_router)
+app.include_router(bill_corrections_router)
+app.include_router(bill_party_router)
 
 
 telegram_command_worker_task: Optional[asyncio.Task] = None
@@ -1110,6 +1114,7 @@ def get_bills(
                     bills.type,
                     bills.note,
                     bills.payments,
+                    bills.party_id,
                     assosiated_parties.name AS party_name,
                     CASE
                         WHEN installments_data.installment_id IS NOT NULL THEN jsonb_build_object(
@@ -1991,7 +1996,8 @@ def _add_bill_internal(
                         mid = line.get("method_id")
                         amt = float(line.get("amount") or 0)
                         home_store = home_by_method.get(mid)
-                        if not mid or not home_store or home_store == store_id:
+                        # `is None`: store 0 (the warehouse) is a real home store.
+                        if not mid or home_store is None or home_store == store_id:
                             continue
                         if amt <= 0:
                             continue
@@ -2900,7 +2906,7 @@ def store_transfer(
 
 
 # The latest DB schema version this backend expects (bump with each update_db_N).
-LATEST_DB_VERSION = 23
+LATEST_DB_VERSION = 25
 
 
 @app.get("/db-version")

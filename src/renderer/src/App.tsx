@@ -32,6 +32,7 @@ import AdminSell from "./pages/AdminSell/AdminSell";
 import Notifications from "./pages/Notifications/Notifications";
 import Setup from "./pages/Setup/Setup";
 import Accounts from "./pages/Accounts/Accounts";
+import BillCorrections from "./pages/BillCorrections/BillCorrections";
 
 axios.defaults.withCredentials = true;
 
@@ -239,6 +240,10 @@ const App = () => {
                   <Route path="/cash/:partyId" element={<Cash />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/accounts" element={<Accounts />} />
+                  <Route
+                    path="/bill-corrections"
+                    element={<BillCorrections />}
+                  />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/installments" element={<Installments />} />
                   <Route path="/employees" element={<Employee />} />
