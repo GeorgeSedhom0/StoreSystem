@@ -11,8 +11,10 @@ import {
   Typography,
   Paper,
   Box,
+  Button,
   IconButton,
   InputAdornment,
+  Tooltip,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { Party } from "../../utils/types";
@@ -28,6 +30,8 @@ import {
   Print as PrintIcon,
 } from "@mui/icons-material";
 import PrintBarCode from "../../Shared/PrintBarCode";
+import { normalizeArabic } from "../../Shared/ProductAutocomplete";
+import { apiError } from "../../utils/errors";
 
 const Parties = () => {
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
@@ -54,11 +58,57 @@ const Parties = () => {
     try {
       const barcode = await generateClientBarcode();
       setPartyBarcode(barcode);
-    } catch {
-      setMsg({ type: "error", text: "حدث خطأ اثناء توليد الباركود" });
+    } catch (e) {
+      setMsg({
+        type: "error",
+        text: apiError(e, "حدث خطأ أثناء توليد الباركود"),
+      });
     } finally {
       setGeneratingBarcode(false);
     }
+  };
+
+  const resetForm = () => {
+    setPartyId(null);
+    setPartyName("");
+    setPartyPhone("");
+    setPartyAddress("");
+    setPartyType("عميل");
+    setPartyBarcode("");
+  };
+
+  const handleSave = () => {
+    const name = partyName.trim();
+    if (!name) {
+      setMsg({ type: "error", text: "اكتب الاسم" });
+      return;
+    }
+    const party = {
+      id: partyId,
+      name,
+      phone: partyPhone.trim(),
+      address: partyAddress.trim(),
+      type: partyType,
+      extra_info: {},
+      bar_code: partyBarcode.trim() || undefined,
+    };
+    // Clear the form only after the server accepted it, so a failed save
+    // (e.g. duplicate barcode) keeps what was typed.
+    const options = {
+      onSuccess: resetForm,
+      onError: (e: unknown) =>
+        setMsg({
+          type: "error",
+          text: apiError(
+            e,
+            partyId
+              ? "حدث خطأ أثناء تعديل العميل أو المورد"
+              : "حدث خطأ أثناء إضافة العميل أو المورد",
+          ),
+        }),
+    };
+    if (partyId) updatePartyMutation(party, options);
+    else addPartyMutation(party, options);
   };
 
   return (
@@ -77,7 +127,7 @@ const Parties = () => {
       <Paper
         elevation={2}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
           background:
@@ -90,14 +140,18 @@ const Parties = () => {
           <GroupsIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
           <Typography
             variant="h4"
-            sx={{ fontWeight: 600, color: "primary.main" }}
+            sx={{
+              fontWeight: 600,
+              color: "primary.main",
+              fontSize: { xs: "1.4rem", sm: "2.125rem" },
+            }}
           >
             العملاء والموردين
           </Typography>
         </Box>
         <Typography variant="body1" color="text.secondary">
-          إدارة بيانات العملاء والموردين - يمكنك إضافة جديد أو تعديل البيانات
-          الموجودة
+          إدارة بيانات العملاء والموردين: اختر اسمًا لتعديله أو اترك "إضافة
+          جديد" لإضافة عميل أو مورد
         </Typography>
       </Paper>
 
@@ -107,7 +161,7 @@ const Parties = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
@@ -134,7 +188,9 @@ const Parties = () => {
               getOptionLabel={(option) =>
                 option.id === null
                   ? "إضافة جديد"
-                  : `${option.name} - ${option.phone} - ${option.type}`
+                  : [option.name, option.phone, option.type]
+                      .filter(Boolean)
+                      .join(" - ")
               }
               value={
                 parties.find((party) => party.id === partyId) ||
@@ -149,25 +205,25 @@ const Parties = () => {
                 } as Party)
               }
               filterOptions={(options, params) => {
-                return options.filter(
-                  (option) =>
-                    option.id === null ||
-                    option.name
-                      .toLowerCase()
-                      .includes(params.inputValue.toLowerCase()) ||
-                    option.phone
-                      .toLowerCase()
-                      .includes(params.inputValue.toLowerCase()) ||
-                    option.address
-                      .toLowerCase()
-                      .includes(params.inputValue.toLowerCase()) ||
-                    option.type
-                      .toLowerCase()
-                      .includes(params.inputValue.toLowerCase()) ||
-                    (option.bar_code || "")
-                      .toLowerCase()
-                      .includes(params.inputValue.toLowerCase()),
-                );
+                const words = normalizeArabic(params.inputValue)
+                  .split(/\s+/)
+                  .filter(Boolean);
+                if (words.length === 0) return options;
+                return options.filter((option) => {
+                  if (option.id === null) return true;
+                  const hay = normalizeArabic(
+                    [
+                      option.name,
+                      option.phone,
+                      option.address,
+                      option.type,
+                      option.bar_code,
+                    ]
+                      .filter(Boolean)
+                      .join(" "),
+                  );
+                  return words.every((w) => hay.includes(w));
+                });
               }}
               onChange={(_, value) => {
                 if (value && value.id !== null) {
@@ -188,7 +244,10 @@ const Parties = () => {
               }}
               isOptionEqualToValue={(option, value) => option.id === value.id}
               renderInput={(params) => (
-                <TextField {...params} label="العملاء والموردين" />
+                <TextField
+                  {...params}
+                  label="ابحث بالاسم أو الهاتف أو الباركود"
+                />
               )}
             />
           </Paper>
@@ -199,7 +258,7 @@ const Parties = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
@@ -214,6 +273,7 @@ const Parties = () => {
                 <TextField
                   fullWidth
                   label="الاسم"
+                  required
                   value={partyName}
                   onChange={(e) => setPartyName(e.target.value)}
                   slotProps={{
@@ -233,6 +293,7 @@ const Parties = () => {
                   value={partyPhone}
                   onChange={(e) => setPartyPhone(e.target.value)}
                   slotProps={{
+                    htmlInput: { dir: "ltr", inputMode: "tel" },
                     input: {
                       startAdornment: (
                         <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
@@ -249,7 +310,7 @@ const Parties = () => {
                   value={partyAddress}
                   onChange={(e) => setPartyAddress(e.target.value)}
                   multiline
-                  rows={3}
+                  minRows={2}
                   slotProps={{
                     input: {
                       startAdornment: (
@@ -297,20 +358,29 @@ const Parties = () => {
                       ),
                       endAdornment: (
                         <InputAdornment position="end">
-                          <IconButton
-                            onClick={handleGenerateBarcode}
-                            disabled={generatingBarcode}
+                          <Tooltip
                             title="توليد باركود تلقائي"
+                            enterTouchDelay={0}
                           >
-                            <AutoAwesomeIcon />
-                          </IconButton>
+                            <span>
+                              <IconButton
+                                onClick={handleGenerateBarcode}
+                                disabled={generatingBarcode}
+                                aria-label="توليد باركود تلقائي"
+                              >
+                                <AutoAwesomeIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
                           {partyBarcode && (
-                            <IconButton
-                              onClick={() => setPrintBarcodeOpen(true)}
-                              title="طباعة الباركود"
-                            >
-                              <PrintIcon />
-                            </IconButton>
+                            <Tooltip title="طباعة الباركود" enterTouchDelay={0}>
+                              <IconButton
+                                onClick={() => setPrintBarcodeOpen(true)}
+                                aria-label="طباعة الباركود"
+                              >
+                                <PrintIcon />
+                              </IconButton>
+                            </Tooltip>
                           )}
                         </InputAdornment>
                       ),
@@ -325,49 +395,23 @@ const Parties = () => {
                   variant="contained"
                   size="large"
                   loading={addPartyLoading || updatePartyLoading}
-                  onClick={() => {
-                    if (partyId) {
-                      updatePartyMutation({
-                        id: partyId,
-                        name: partyName,
-                        phone: partyPhone,
-                        address: partyAddress,
-                        type: partyType,
-                        extra_info: {},
-                        bar_code: partyBarcode || undefined,
-                      });
-                      setPartyId(null);
-                      setPartyName("");
-                      setPartyPhone("");
-                      setPartyAddress("");
-                      setPartyType("عميل");
-                      setPartyBarcode("");
-                    } else {
-                      addPartyMutation({
-                        id: partyId,
-                        name: partyName,
-                        phone: partyPhone,
-                        address: partyAddress,
-                        type: partyType,
-                        extra_info: {},
-                        bar_code: partyBarcode || undefined,
-                      });
-                      setPartyId(null);
-                      setPartyName("");
-                      setPartyPhone("");
-                      setPartyAddress("");
-                      setPartyType("عميل");
-                      setPartyBarcode("");
-                    }
-                  }}
+                  disabled={!partyName.trim()}
+                  onClick={handleSave}
                   sx={{
                     py: 1.5,
                     borderRadius: 2,
                     fontWeight: 600,
                   }}
                 >
-                  {partyId ? "تحديث البيانات" : "إضافة جديد"}
+                  {partyId ? "حفظ التعديلات" : "إضافة"}
                 </LoadingButton>
+                {partyId && (
+                  <Box sx={{ textAlign: "center", mt: 1 }}>
+                    <Button onClick={resetForm} sx={{ minHeight: 40 }}>
+                      إلغاء التعديل وإضافة جديد
+                    </Button>
+                  </Box>
+                )}
               </Grid2>
             </Grid2>
           </Paper>

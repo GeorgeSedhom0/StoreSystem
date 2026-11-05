@@ -17,6 +17,7 @@ import logging
 from os import getenv
 from typing import Optional
 from datetime import datetime
+from clock import local_now
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -294,7 +295,7 @@ def _insert_cash_flow(
         """,
         (
             store_id,
-            time or datetime.now().isoformat(),
+            time or local_now().isoformat(),
             amount_signed,
             move_type,
             description,
@@ -425,7 +426,7 @@ def account_transfer(
         raise HTTPException(status_code=400, detail="لا يمكن التحويل لنفس الحساب")
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            now = time or datetime.now().isoformat()
+            now = time or local_now().isoformat()
             cur.executemany(
                 """
                 INSERT INTO account_transactions

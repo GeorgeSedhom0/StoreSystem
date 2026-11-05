@@ -15,6 +15,8 @@ import {
   POS_PAGE_LABELS,
   POS_MODE_OPTIONS,
   VISIBILITY_OPTIONS,
+  PACKAGES_POLICY_OPTIONS,
+  savePackagesPolicy,
   PosMode,
   PosPage,
   VisibilityPolicy,
@@ -22,20 +24,28 @@ import {
   savePosModes,
   savePolicy,
 } from "../../Shared/PosLayout";
+import type { PackagesPolicy } from "../../Shared/packages";
 
 const Interface = () => {
   const [modes, setModes] = useState<Record<string, PosMode>>({});
   const [partiesPolicy, setPartiesPolicy] = useState<VisibilityPolicy>("ask");
   const [paymentsPolicy, setPaymentsPolicy] = useState<VisibilityPolicy>("ask");
   const [applyAll, setApplyAll] = useState<PosMode | "">("");
+  const [packagesPolicy, setPackagesPolicy] =
+    useState<PackagesPolicy>("suggest");
 
   useEffect(() => {
     (async () => {
-      const { modes: m, partiesPolicy: pp, paymentsPolicy: payp } =
-        await loadPosUi();
+      const {
+        modes: m,
+        partiesPolicy: pp,
+        paymentsPolicy: payp,
+        packagesPolicy: pkp,
+      } = await loadPosUi();
       setModes(m);
       setPartiesPolicy(pp);
       setPaymentsPolicy(payp);
+      setPackagesPolicy(pkp);
     })();
   }, []);
 
@@ -171,6 +181,53 @@ const Interface = () => {
               ))}
             </Select>
           </FormControl>
+        </Card>
+      </Grid2>
+
+      <Grid2 size={12}>
+        <Divider sx={{ my: 1 }} />
+      </Grid2>
+
+      <Grid2 size={12}>
+        <Typography variant="h6" gutterBottom>
+          العبوات في سلة البيع
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          عندما تصل كمية منتج بالوحدة إلى حجم إحدى عبواته (مثلاً 10 علب =
+          كرتونة) وكان سعر العبوة أرخص للعميل.
+        </Typography>
+      </Grid2>
+
+      <Grid2 size={{ xs: 12, sm: 6 }}>
+        <Card variant="outlined" sx={{ p: 2 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel>التحويل إلى عبوات</InputLabel>
+            <Select
+              label="التحويل إلى عبوات"
+              value={packagesPolicy}
+              onChange={(e) => {
+                const v = e.target.value as PackagesPolicy;
+                setPackagesPolicy(v);
+                savePackagesPolicy(v);
+              }}
+            >
+              {PACKAGES_POLICY_OPTIONS.map((o) => (
+                <MenuItem key={o.value} value={o.value}>
+                  {o.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mt: 1, display: "block" }}
+          >
+            {
+              PACKAGES_POLICY_OPTIONS.find((o) => o.value === packagesPolicy)
+                ?.help
+            }
+          </Typography>
         </Card>
       </Grid2>
 

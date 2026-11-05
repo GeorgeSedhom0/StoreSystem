@@ -20,10 +20,10 @@ export const fixedHeaderContent = () => {
       <TableCell>رقم المجموعة</TableCell>
       <TableCell>نوع الفواتير</TableCell>
       <TableCell>الوقت</TableCell>
-      <TableCell>الاجمالى</TableCell>
-      <TableCell>معاينة او طباعة</TableCell>
-      <TableCell>الطرف الثانى</TableCell>
-      <TableCell>الحالة</TableCell>
+      <TableCell>الإجمالي</TableCell>
+      <TableCell sx={{ width: 230 }}>معاينة أو طباعة</TableCell>
+      <TableCell>الطرف الثاني</TableCell>
+      <TableCell sx={{ width: 100 }}>الحالة</TableCell>
     </TableRow>
   );
 };

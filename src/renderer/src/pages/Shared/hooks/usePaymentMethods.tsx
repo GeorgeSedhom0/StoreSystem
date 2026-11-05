@@ -60,14 +60,14 @@ const usePaymentMethods = (setMsg?: Dispatch<SetStateAction<AlertMsg>>) => {
   } = useMutation({
     mutationFn: addPaymentMethod,
     onSuccess: () => {
-      notify({ type: "success", text: "تم اضافة طريقة الدفع بنجاح" });
+      notify({ type: "success", text: "تم إضافة طريقة الدفع بنجاح" });
       refetchPaymentMethods();
     },
     onError: (error: any) => {
       notify({
         type: "error",
         text:
-          error?.response?.data?.detail || "حدث خطأ اثناء اضافة طريقة الدفع",
+          error?.response?.data?.detail || "حدث خطأ اثناء إضافة طريقة الدفع",
       });
     },
   });

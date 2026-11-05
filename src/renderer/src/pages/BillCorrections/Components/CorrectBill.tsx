@@ -25,7 +25,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { Delete as DeleteIcon, Search as SearchIcon } from "@mui/icons-material";
+import {
+  Delete as DeleteIcon,
+  Search as SearchIcon,
+} from "@mui/icons-material";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useContext, useEffect, useMemo, useState } from "react";
@@ -47,7 +50,8 @@ import {
 } from "../types";
 import ImpactView from "./ImpactView";
 
-const errText = (e: any, fallback: string) => e?.response?.data?.detail || fallback;
+const errText = (e: any, fallback: string) =>
+  e?.response?.data?.detail || fallback;
 
 const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
   const { storeId: contextStoreId } = useContext(StoreContext);
@@ -74,14 +78,22 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
   const { data: stores } = useQuery({
     queryKey: ["bill-corrections", "stores"],
     queryFn: async () =>
-      (await axios.get<{ id: number; name: string }[]>("/bill-corrections/stores")).data,
+      (
+        await axios.get<{ id: number; name: string }[]>(
+          "/bill-corrections/stores",
+        )
+      ).data,
     initialData: [],
   });
 
   const { data: products } = useQuery({
     queryKey: ["bill-corrections", "products", storeId],
     queryFn: async () =>
-      (await axios.get<DBProducts>("/products", { params: { store_id: storeId } })).data.products,
+      (
+        await axios.get<DBProducts>("/products", {
+          params: { store_id: storeId },
+        })
+      ).data.products,
     initialData: [],
   });
 
@@ -94,7 +106,14 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
   const total = useMemo(() => {
     if (deleting) return 0;
     const gross = lines.reduce(
-      (acc, l) => acc + l.quantity * (usesSellPrice ? (priceLocked ? l.wholesale_price : l.price) : l.wholesale_price),
+      (acc, l) =>
+        acc +
+        l.quantity *
+          (usesSellPrice
+            ? priceLocked
+              ? l.wholesale_price
+              : l.price
+            : l.wholesale_price),
       0,
     );
     return Math.max(Math.round((gross - discount) * 100) / 100, 0);
@@ -120,9 +139,12 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
     if (!id) return;
     setLoading(true);
     try {
-      const { data: d } = await axios.get<CorrectionBillResponse>("/bill-corrections/bill", {
-        params: { store_id: store, bill_id: id },
-      });
+      const { data: d } = await axios.get<CorrectionBillResponse>(
+        "/bill-corrections/bill",
+        {
+          params: { store_id: store, bill_id: id },
+        },
+      );
       setData(d);
       reset(d);
     } catch (e) {
@@ -134,7 +156,10 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
   };
 
   // Any edit invalidates the last preview.
-  useEffect(() => setResult(null), [lines, discount, partyId, editPayments, paymentLines, cascade, deleting]);
+  useEffect(
+    () => setResult(null),
+    [lines, discount, partyId, editPayments, paymentLines, cascade, deleting],
+  );
 
   const partyChanged = Boolean(bill) && partyId !== (bill?.party_id ?? null);
   const isTransfer = Boolean(pair) || bill?.party_type === "store";
@@ -162,16 +187,20 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
     bill_id: bill?.bill_id,
     action: deleting ? "delete" : "edit",
     discount,
-    lines: lines.map(({ flow_id, product_id, quantity, wholesale_price, price }) => ({
-      flow_id,
-      product_id,
-      quantity,
-      wholesale_price,
-      price,
-    })),
+    lines: lines.map(
+      ({ flow_id, product_id, quantity, wholesale_price, price }) => ({
+        flow_id,
+        product_id,
+        quantity,
+        wholesale_price,
+        price,
+      }),
+    ),
     payments:
       editPayments && !pair
-        ? paymentLines.filter((p) => p.amount > 0).map((p) => ({ method_id: p.method_id, amount: p.amount }))
+        ? paymentLines
+            .filter((p) => p.amount > 0)
+            .map((p) => ({ method_id: p.method_id, amount: p.amount }))
         : null,
     cascade_costs: cascade,
     set_party: partyChanged && !deleting,
@@ -185,7 +214,10 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
     try {
       // Checked against the bill as it was loaded, so someone else's change
       // in between is caught instead of silently overwritten.
-      const { data: r } = await axios.post<CorrectionResult>("/bill-corrections/preview", request(data?.state_token));
+      const { data: r } = await axios.post<CorrectionResult>(
+        "/bill-corrections/preview",
+        request(data?.state_token),
+      );
       setResult(r);
     } catch (e) {
       setMsg({ type: "error", text: errText(e, "تعذرت المعاينة") });
@@ -199,8 +231,14 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
     setConfirmOpen(false);
     setLoading(true);
     try {
-      await axios.post<CorrectionResult>("/bill-corrections/apply", request(result.token));
-      setMsg({ type: "success", text: deleting ? "تم حذف الفاتورة" : "تم تصحيح الفاتورة" });
+      await axios.post<CorrectionResult>(
+        "/bill-corrections/apply",
+        request(result.token),
+      );
+      setMsg({
+        type: "success",
+        text: deleting ? "تم حذف الفاتورة" : "تم تصحيح الفاتورة",
+      });
       onApplied();
       if (deleting) {
         setData(null);
@@ -221,11 +259,16 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
       <LoadingScreen loading={loading} />
 
       <Alert severity="warning">
-        التصحيح يعيد كتابة الفاتورة كأنها سُجّلت هكذا من البداية: يتغير المخزون والنقدية والحسابات بأثر رجعي دون أي حركة
-        جديدة. استخدمه فقط لتصحيح أخطاء الإدخال.
+        التصحيح يعيد كتابة الفاتورة كأنها سُجّلت هكذا من البداية: يتغير المخزون
+        والنقدية والحسابات بأثر رجعي دون أي حركة جديدة. استخدمه فقط لتصحيح أخطاء
+        الإدخال.
       </Alert>
 
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        alignItems={{ sm: "center" }}
+      >
         <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel>المتجر</InputLabel>
           <Select
@@ -251,7 +294,11 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
           onChange={(e) => setBillIdInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && loadBill()}
         />
-        <Button variant="contained" startIcon={<SearchIcon />} onClick={() => loadBill()}>
+        <Button
+          variant="contained"
+          startIcon={<SearchIcon />}
+          onClick={() => loadBill()}
+        >
           تحميل الفاتورة
         </Button>
       </Stack>
@@ -259,31 +306,46 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
       {bill && data && (
         <>
           <Card variant="outlined" sx={{ p: 2 }}>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+            <Stack
+              direction="row"
+              spacing={1}
+              flexWrap="wrap"
+              useFlexGap
+              alignItems="center"
+            >
               <Typography variant="h6">فاتورة #{bill.bill_id}</Typography>
               <Chip label={billTypeLabels[bill.type] ?? bill.type} />
               <Chip label={bill.store_name} variant="outlined" />
-              {bill.party_name && <Chip label={bill.party_name} variant="outlined" />}
+              {bill.party_name && (
+                <Chip label={bill.party_name} variant="outlined" />
+              )}
               <Typography variant="body2" color="text.secondary">
                 {new Date(bill.time).toLocaleString("ar-EG")}
               </Typography>
-              <Typography variant="body2">الإجمالي الحالي: {egp(Math.abs(bill.total))}</Typography>
+              <Typography variant="body2">
+                الإجمالي الحالي: {egp(Math.abs(bill.total))}
+              </Typography>
             </Stack>
             {pair && (
               <Alert severity="info" sx={{ mt: 2 }}>
-                فاتورة نقل مرتبطة بفاتورة #{pair.bill_id} في {pair.store_name}. سيتم تصحيح الفاتورتين معاً بنفس المنتجات
-                والكميات والتكلفة.
+                فاتورة نقل مرتبطة بفاتورة #{pair.bill_id} في {pair.store_name}.
+                سيتم تصحيح الفاتورتين معاً بنفس المنتجات والكميات والتكلفة.
               </Alert>
             )}
             {data.legacy_pair_candidates.length > 0 && (
               <Alert severity="warning" sx={{ mt: 2 }}>
-                تبدو هذه فاتورة نقل قديمة غير مرتبطة. الفاتورة المقابلة على الأرجح:{" "}
-                {data.legacy_pair_candidates.map((c) => `#${c.id} (متجر ${c.store_id})`).join("، ")} — صحّحها بنفس الطريقة.
+                تبدو هذه فاتورة نقل قديمة غير مرتبطة. الفاتورة المقابلة على
+                الأرجح:{" "}
+                {data.legacy_pair_candidates
+                  .map((c) => `#${c.id} (متجر ${c.store_id})`)
+                  .join("، ")}{" "}
+                — صحّحها بنفس الطريقة.
               </Alert>
             )}
             {data.history.length > 0 && (
               <Alert severity="info" sx={{ mt: 2 }}>
-                صُححت هذه الفاتورة من قبل {data.history.length} مرة (راجع سجل التصحيحات).
+                صُححت هذه الفاتورة من قبل {data.history.length} مرة (راجع سجل
+                التصحيحات).
               </Alert>
             )}
             {!data.correctable && (
@@ -296,8 +358,18 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
           {data.correctable && (
             <>
               <FormControlLabel
-                control={<Switch color="error" checked={deleting} onChange={(e) => setDeleting(e.target.checked)} />}
-                label={pair ? "حذف الفاتورة نهائياً (مع الفاتورة المرتبطة) كأنها لم تكن" : "حذف الفاتورة نهائياً كأنها لم تكن"}
+                control={
+                  <Switch
+                    color="error"
+                    checked={deleting}
+                    onChange={(e) => setDeleting(e.target.checked)}
+                  />
+                }
+                label={
+                  pair
+                    ? "حذف الفاتورة نهائياً (مع الفاتورة المرتبطة) كأنها لم تكن"
+                    : "حذف الفاتورة نهائياً كأنها لم تكن"
+                }
               />
 
               {!deleting && (
@@ -330,24 +402,68 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
                     </TableHead>
                     <TableBody>
                       {lines.map((l, i) => {
-                        const orig = bill.lines.find((o) => o.flow_id === l.flow_id && l.flow_id != null);
-                        const changed = (k: keyof CorrectionLine) => orig && orig[k] !== l[k];
+                        const orig = bill.lines.find(
+                          (o) => o.flow_id === l.flow_id && l.flow_id != null,
+                        );
+                        const changed = (k: keyof CorrectionLine) =>
+                          orig && orig[k] !== l[k];
                         const lineTotal =
-                          l.quantity * (usesSellPrice ? (priceLocked ? l.wholesale_price : l.price) : l.wholesale_price);
+                          l.quantity *
+                          (usesSellPrice
+                            ? priceLocked
+                              ? l.wholesale_price
+                              : l.price
+                            : l.wholesale_price);
                         return (
-                          <TableRow key={`${l.flow_id ?? "new"}-${i}`} sx={{ bgcolor: orig ? undefined : "action.hover" }}>
+                          <TableRow
+                            key={`${l.flow_id ?? "new"}-${i}`}
+                            sx={{ bgcolor: orig ? undefined : "action.hover" }}
+                          >
                             <TableCell>
                               {l.name}
-                              {!orig && <Chip size="small" label="جديد" color="success" sx={{ mx: 1 }} />}
+                              {!orig && (
+                                <Chip
+                                  size="small"
+                                  label="جديد"
+                                  color="success"
+                                  sx={{ mx: 1 }}
+                                />
+                              )}
+                              {l.package_units ? (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  color={
+                                    l.quantity % l.package_units === 0
+                                      ? "secondary"
+                                      : "warning"
+                                  }
+                                  label={
+                                    l.quantity % l.package_units === 0
+                                      ? `${l.quantity / l.package_units} ${l.package_name} (×${l.package_units})`
+                                      : `كانت ${l.package_name} — ستصبح بالوحدة`
+                                  }
+                                  sx={{ mx: 1 }}
+                                />
+                              ) : null}
                             </TableCell>
                             <TableCell>
                               <TextField
                                 size="small"
                                 type="number"
                                 value={l.quantity}
-                                color={changed("quantity") ? "warning" : undefined}
+                                color={
+                                  changed("quantity") ? "warning" : undefined
+                                }
                                 focused={changed("quantity") || undefined}
-                                onChange={(e) => updateLine(i, { quantity: Math.max(1, Math.floor(Number(e.target.value) || 0)) })}
+                                onChange={(e) =>
+                                  updateLine(i, {
+                                    quantity: Math.max(
+                                      1,
+                                      Math.floor(Number(e.target.value) || 0),
+                                    ),
+                                  })
+                                }
                                 sx={{ width: 90 }}
                               />
                             </TableCell>
@@ -356,13 +472,33 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
                                 size="small"
                                 type="number"
                                 value={l.wholesale_price}
-                                color={changed("wholesale_price") ? "warning" : undefined}
-                                focused={changed("wholesale_price") || undefined}
-                                helperText={changed("wholesale_price") ? `كان ${orig?.wholesale_price}` : undefined}
+                                color={
+                                  changed("wholesale_price")
+                                    ? "warning"
+                                    : undefined
+                                }
+                                focused={
+                                  changed("wholesale_price") || undefined
+                                }
+                                helperText={
+                                  changed("wholesale_price")
+                                    ? `كان ${orig?.wholesale_price}`
+                                    : undefined
+                                }
                                 onChange={(e) =>
                                   updateLine(i, {
-                                    wholesale_price: Math.max(0, Number(e.target.value) || 0),
-                                    ...(priceLocked ? { price: Math.max(0, Number(e.target.value) || 0) } : {}),
+                                    wholesale_price: Math.max(
+                                      0,
+                                      Number(e.target.value) || 0,
+                                    ),
+                                    ...(priceLocked
+                                      ? {
+                                          price: Math.max(
+                                            0,
+                                            Number(e.target.value) || 0,
+                                          ),
+                                        }
+                                      : {}),
                                   })
                                 }
                                 sx={{ width: 120 }}
@@ -372,18 +508,40 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
                               <TextField
                                 size="small"
                                 type="number"
-                                value={priceLocked ? l.wholesale_price : l.price}
+                                value={
+                                  priceLocked ? l.wholesale_price : l.price
+                                }
                                 disabled={priceLocked}
                                 color={changed("price") ? "warning" : undefined}
-                                focused={(!priceLocked && changed("price")) || undefined}
-                                helperText={!priceLocked && changed("price") ? `كان ${orig?.price}` : undefined}
-                                onChange={(e) => updateLine(i, { price: Math.max(0, Number(e.target.value) || 0) })}
+                                focused={
+                                  (!priceLocked && changed("price")) ||
+                                  undefined
+                                }
+                                helperText={
+                                  !priceLocked && changed("price")
+                                    ? `كان ${orig?.price}`
+                                    : undefined
+                                }
+                                onChange={(e) =>
+                                  updateLine(i, {
+                                    price: Math.max(
+                                      0,
+                                      Number(e.target.value) || 0,
+                                    ),
+                                  })
+                                }
                                 sx={{ width: 120 }}
                               />
                             </TableCell>
                             <TableCell>{egp(lineTotal)}</TableCell>
                             <TableCell>
-                              <IconButton size="small" color="error" onClick={() => setLines((p) => p.filter((_, j) => j !== i))}>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() =>
+                                  setLines((p) => p.filter((_, j) => j !== i))
+                                }
+                              >
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
                             </TableCell>
@@ -393,20 +551,34 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
                     </TableBody>
                   </Table>
                   <Box sx={{ mt: 2, maxWidth: 420 }}>
-                    <ProductAutocomplete onProductSelect={addProduct} products={products} />
+                    <ProductAutocomplete
+                      onProductSelect={addProduct}
+                      products={products}
+                    />
                   </Box>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mt: 2 }} alignItems={{ sm: "center" }}>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={2}
+                    sx={{ mt: 2 }}
+                    alignItems={{ sm: "center" }}
+                  >
                     <TextField
                       size="small"
                       type="number"
                       label="الخصم"
                       value={discount}
-                      onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
+                      onChange={(e) =>
+                        setDiscount(Math.max(0, Number(e.target.value) || 0))
+                      }
                       sx={{ width: 140 }}
                     />
                     <Typography variant="h6">
                       الإجمالي الجديد: {egp(total)}{" "}
-                      <Typography component="span" variant="body2" color="text.secondary">
+                      <Typography
+                        component="span"
+                        variant="body2"
+                        color="text.secondary"
+                      >
                         (كان {egp(Math.abs(bill.total))})
                       </Typography>
                     </Typography>
@@ -417,7 +589,12 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
               {!deleting && !pair && (
                 <Card variant="outlined" sx={{ p: 2 }}>
                   <FormControlLabel
-                    control={<Checkbox checked={editPayments} onChange={(e) => setEditPayments(e.target.checked)} />}
+                    control={
+                      <Checkbox
+                        checked={editPayments}
+                        onChange={(e) => setEditPayments(e.target.checked)}
+                      />
+                    }
                     label="تعديل توزيع طرق الدفع (وإلا يُعاد توزيع الإجمالي الجديد بنفس النسب الحالية)"
                   />
                   {editPayments && (
@@ -434,7 +611,12 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
 
               {(bill.type === "buy" || pair) && (
                 <FormControlLabel
-                  control={<Checkbox checked={cascade} onChange={(e) => setCascade(e.target.checked)} />}
+                  control={
+                    <Checkbox
+                      checked={cascade}
+                      onChange={(e) => setCascade(e.target.checked)}
+                    />
+                  }
                   label={
                     deleting
                       ? "إعادة سجل الأسعار كأن فاتورة الشراء لم تكن: تكلفة الفواتير اللاحقة وسعر المنتج الحالي يرجعان لسعر الشراء السابق"
@@ -455,7 +637,12 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
                 <Button variant="outlined" onClick={preview}>
                   معاينة التأثير
                 </Button>
-                <Button variant="contained" color="error" disabled={!result} onClick={() => setConfirmOpen(true)}>
+                <Button
+                  variant="contained"
+                  color="error"
+                  disabled={!result}
+                  onClick={() => setConfirmOpen(true)}
+                >
                   {deleting ? "حذف الفاتورة" : "تطبيق التصحيح"}
                 </Button>
                 <Button onClick={() => reset(data)}>إلغاء التعديلات</Button>
@@ -475,10 +662,13 @@ const CorrectBill = ({ onApplied }: { onApplied: () => void }) => {
       )}
 
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-        <DialogTitle>{deleting ? "حذف الفاتورة نهائياً؟" : "تطبيق التصحيح؟"}</DialogTitle>
+        <DialogTitle>
+          {deleting ? "حذف الفاتورة نهائياً؟" : "تطبيق التصحيح؟"}
+        </DialogTitle>
         <DialogContent>
           <Typography>
-            سيتم تعديل البيانات بأثر رجعي كما في المعاينة. يمكن التراجع عن التعديل لاحقاً من سجل التصحيحات
+            سيتم تعديل البيانات بأثر رجعي كما في المعاينة. يمكن التراجع عن
+            التعديل لاحقاً من سجل التصحيحات
             {deleting ? "، أما الحذف فلا يمكن التراجع عنه" : ""}.
           </Typography>
         </DialogContent>

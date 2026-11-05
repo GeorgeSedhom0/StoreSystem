@@ -6,8 +6,9 @@ import {
   Box,
   InputAdornment,
   Fade,
+  IconButton,
 } from "@mui/material";
-import { Person, Lock } from "@mui/icons-material";
+import { Person, Lock, Visibility, VisibilityOff } from "@mui/icons-material";
 import { ViewContainer } from "../Shared/Utils";
 import { useCallback, useState, useContext } from "react";
 import axios from "axios";
@@ -15,22 +16,28 @@ import { useNavigate } from "react-router-dom";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import { StoreContext } from "../../StoreDataProvider";
 import { LoadingButton } from "@mui/lab";
+import { apiError } from "../utils/errors";
 
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [loggingIn, setLoggingIn] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const navigate = useNavigate();
   const { refreshProfile, storeId } = useContext(StoreContext);
 
   const login = useCallback(async () => {
     if (loggingIn) return;
+    if (!username.trim() || !password) {
+      setMsg({ type: "error", text: "أدخل اسم المستخدم وكلمة المرور" });
+      return;
+    }
     setLoggingIn(true);
     try {
       const formdata = new FormData();
-      formdata.append("username", username);
+      formdata.append("username", username.trim());
       formdata.append("password", password);
 
       await axios.post("/login", formdata, {
@@ -42,27 +49,25 @@ const Login = () => {
       await refreshProfile();
       navigate("/sell");
     } catch (e) {
-      setMsg({ type: "error", text: "حدث خطأ ما" });
-      console.error(e);
+      const status = (e as any)?.response?.status;
+      setMsg({
+        type: "error",
+        text:
+          status === 401
+            ? "اسم المستخدم أو كلمة المرور غير صحيحة"
+            : apiError(e, "تعذر تسجيل الدخول، حاول مرة أخرى"),
+      });
     }
     setLoggingIn(false);
   }, [username, password, navigate, loggingIn, refreshProfile, storeId]);
-
-  const handleKeyPress = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (event.key === "Enter") {
-        login();
-      }
-    },
-    [login],
-  );
 
   return (
     <ViewContainer>
       <Box
         sx={{
           width: "100%",
-          height: "100vh",
+          minHeight: "100dvh",
+          py: 2,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -113,13 +118,22 @@ const Login = () => {
               },
             }}
           >
-            <Grid2 container spacing={4}>
+            <Grid2
+              container
+              spacing={{ xs: 3, sm: 4 }}
+              component="form"
+              noValidate
+              onSubmit={(e: React.FormEvent) => {
+                e.preventDefault();
+                login();
+              }}
+            >
               <Grid2 size={12}>
                 <Box sx={{ textAlign: "center", mb: 2 }}>
                   <Box
                     sx={{
-                      width: 80,
-                      height: 80,
+                      width: { xs: 64, sm: 80 },
+                      height: { xs: 64, sm: 80 },
                       borderRadius: "50%",
                       background: (theme) =>
                         `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
@@ -133,7 +147,9 @@ const Login = () => {
                           : "0 8px 32px rgba(144, 202, 249, 0.2)",
                     }}
                   >
-                    <Person sx={{ fontSize: 40, color: "white" }} />
+                    <Person
+                      sx={{ fontSize: { xs: 32, sm: 40 }, color: "white" }}
+                    />
                   </Box>
                   <Typography
                     variant="h4"
@@ -146,9 +162,10 @@ const Login = () => {
                       WebkitBackgroundClip: "text",
                       WebkitTextFillColor: "transparent",
                       mb: 1,
+                      fontSize: { xs: "1.6rem", sm: "2.125rem" },
                     }}
                   >
-                    مرحبا بك مرة أخرى!
+                    مرحبًا بك مرة أخرى!
                   </Typography>
                   <Typography
                     variant="body1"
@@ -166,16 +183,24 @@ const Login = () => {
                     id="loginUserName"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    onKeyDown={handleKeyPress}
                     label="اسم المستخدم"
                     fullWidth
+                    autoFocus
                     variant="outlined"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Person color="action" />
-                        </InputAdornment>
-                      ),
+                    slotProps={{
+                      htmlInput: {
+                        autoComplete: "username",
+                        autoCapitalize: "none",
+                        autoCorrect: "off",
+                        spellCheck: false,
+                      },
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Person color="action" />
+                          </InputAdornment>
+                        ),
+                      },
                     }}
                     sx={{
                       "& .MuiOutlinedInput-root": {
@@ -199,18 +224,39 @@ const Login = () => {
                   <TextField
                     id="loginPassword"
                     value={password}
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={handleKeyPress}
                     label="كلمة المرور"
                     fullWidth
                     variant="outlined"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Lock color="action" />
-                        </InputAdornment>
-                      ),
+                    slotProps={{
+                      htmlInput: { autoComplete: "current-password" },
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Lock color="action" />
+                          </InputAdornment>
+                        ),
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              aria-label={
+                                showPassword
+                                  ? "إخفاء كلمة المرور"
+                                  : "إظهار كلمة المرور"
+                              }
+                              onClick={() => setShowPassword((v) => !v)}
+                              edge="end"
+                            >
+                              {showPassword ? (
+                                <VisibilityOff />
+                              ) : (
+                                <Visibility />
+                              )}
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      },
                     }}
                     sx={{
                       "& .MuiOutlinedInput-root": {
@@ -234,7 +280,7 @@ const Login = () => {
               <Grid2 size={12}>
                 <LoadingButton
                   loading={loggingIn}
-                  onClick={login}
+                  type="submit"
                   variant="contained"
                   id="loginBtn"
                   fullWidth

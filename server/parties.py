@@ -238,8 +238,11 @@ async def get_party_bills(
                             'bar_code', products.bar_code,
                             'amount', products_flow.amount,
                             'wholesale_price', products_flow.wholesale_price,
-                            'price', products_flow.price
-                        )
+                            'price', products_flow.price,
+                            'package_id', products_flow.package_id,
+                            'package_units', products_flow.package_units,
+                            'package_name', products_flow.package_name
+                        ) ORDER BY products_flow.id
                     ) AS products
                 FROM bills
                 JOIN products_flow ON bills.id = products_flow.bill_id
@@ -329,8 +332,11 @@ def get_parties_open_bills(
                                 'bar_code', p.bar_code,
                                 'amount', pf.amount,
                                 'wholesale_price', pf.wholesale_price,
-                                'price', pf.price
-                            ) ORDER BY pf.product_id
+                                'price', pf.price,
+                                'package_id', pf.package_id,
+                                'package_units', pf.package_units,
+                                'package_name', pf.package_name
+                            ) ORDER BY pf.id
                         ) FILTER (WHERE pf.product_id IS NOT NULL) AS products
                     FROM bills_collections bc
                     JOIN bills b ON bc.bill_id = b.id AND bc.store_id = b.store_id

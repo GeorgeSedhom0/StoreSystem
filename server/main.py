@@ -1,6 +1,9 @@
+# Must come first: reuse DB connections across requests (see db_pool.py).
+import db_pool  # noqa: F401
+
 from typing import Optional
 import json
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
 from typing import Literal, Any, Dict, List
@@ -10,8 +13,10 @@ from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi import UploadFile, File
 from datetime import datetime
+from clock import local_now
 import logging
 from dotenv import load_dotenv
 from os import getenv
@@ -34,6 +39,11 @@ from payment_methods import get_default_payment_method
 from accounts import router as accounts_router
 from bill_corrections import router as bill_corrections_router
 from bill_party import router as bill_party_router
+from bill_payments import router as bill_payments_router
+from packages import router as packages_router
+from packages import PACKAGES_JSON_SUBQUERY, barcode_owner, package_snapshot
+from attendance import router as attendance_router
+from restock import router as restock_router, record_fulfillment
 from auth_middleware import get_current_user, get_store_info
 from telegram_utils import (
     send_telegram_notification_background,
@@ -45,6 +55,8 @@ from telegram_utils import (
 from expiration_scheduler import start_expiration_scheduler
 from batches import consume_batches_fefo, add_to_batch, adjust_batches_for_stock_change
 from telegram_commands import telegram_command_worker_loop
+from backup_scheduler import router as backup_router
+from backup_scheduler import backup_scheduler_loop, dump_database, BackupError
 
 load_dotenv()
 
@@ -73,9 +85,15 @@ app.include_router(payment_methods_router)
 app.include_router(accounts_router)
 app.include_router(bill_corrections_router)
 app.include_router(bill_party_router)
+app.include_router(bill_payments_router)
+app.include_router(packages_router)
+app.include_router(attendance_router)
+app.include_router(restock_router)
+app.include_router(backup_router)
 
 
 telegram_command_worker_task: Optional[asyncio.Task] = None
+backup_scheduler_task: Optional[asyncio.Task] = None
 
 
 def _install_windows_asyncio_exception_filter() -> None:
@@ -111,26 +129,30 @@ def _install_windows_asyncio_exception_filter() -> None:
 @app.on_event("startup")
 async def startup_event():
     """Initialize background tasks on startup"""
-    global telegram_command_worker_task
+    global telegram_command_worker_task, backup_scheduler_task
     _install_windows_asyncio_exception_filter()
     start_expiration_scheduler()
     if telegram_command_worker_task is None or telegram_command_worker_task.done():
         telegram_command_worker_task = asyncio.create_task(
             telegram_command_worker_loop()
         )
+    if backup_scheduler_task is None or backup_scheduler_task.done():
+        backup_scheduler_task = asyncio.create_task(backup_scheduler_loop())
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Stop background tasks on shutdown"""
-    global telegram_command_worker_task
-    if telegram_command_worker_task is not None:
-        telegram_command_worker_task.cancel()
-        try:
-            await telegram_command_worker_task
-        except asyncio.CancelledError:
-            pass
-        telegram_command_worker_task = None
+    global telegram_command_worker_task, backup_scheduler_task
+    for task in (telegram_command_worker_task, backup_scheduler_task):
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    telegram_command_worker_task = None
+    backup_scheduler_task = None
 
 
 origins = [
@@ -143,6 +165,10 @@ origins = [
     "https://localhost:8000",
     "https://localhost:5173",
 ]
+
+# Compress the web bundle and large JSON lists (products, bills) — a big win
+# for phones on a slow link. Small responses are left as they are.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(
     CORSMiddleware,
@@ -196,6 +222,11 @@ class ProductFlow(BaseModel):
         None  # For buy operations with expiration dates
     )
     batch_id: Optional[int] = None  # For sell operations to specify which batch
+    # Sold/bought as a package: quantity/price stay in base units, these are
+    # the snapshot shown on the bill (see packages.py).
+    package_id: Optional[int] = None
+    package_units: Optional[int] = None
+    package_name: Optional[str] = None
 
     def dict(self, *args, **kwargs):
         data = super().dict(*args, **kwargs)
@@ -238,6 +269,9 @@ class dbProduct(BaseModel):
     amount: int
     wholesale_price: float
     price: float
+    package_id: Optional[int] = None
+    package_units: Optional[int] = None
+    package_name: Optional[str] = None
 
     def dict(self, *args, **kwargs):
         data = super().dict(*args, **kwargs)
@@ -348,7 +382,7 @@ def _create_cross_store_transfer(
     if amount is None or amount <= 0 or from_store_id == to_store_id:
         return
 
-    t = time or datetime.now().isoformat()
+    t = time or local_now().isoformat()
     from_side_party = _get_store_party_id(cur, to_store_id)
     to_side_party = _get_store_party_id(cur, from_store_id)
 
@@ -673,8 +707,12 @@ def get_bar_code(current_user: dict = Depends(get_current_user)):
         cur.execute("""
             WITH OrderedBarcodes AS (
                 SELECT bar_code, CAST(bar_code AS BIGINT) AS numeric_barcode
-                FROM products
-                WHERE bar_code ~ '^[0-9]+$'
+                FROM (
+                    SELECT bar_code FROM products
+                    UNION
+                    SELECT bar_code FROM product_packages WHERE is_deleted = FALSE
+                ) codes
+                WHERE bar_code ~ '^[0-9]{1,15}$'
                 ORDER BY numeric_barcode ASC
             ), Gaps AS (
                 SELECT numeric_barcode + 1 AS gap_start
@@ -695,8 +733,12 @@ def get_bar_code(current_user: dict = Depends(get_current_user)):
             # If no gaps were found, find the maximum barcode and add 1.
             cur.execute("""
                 SELECT COALESCE(MAX(CAST(bar_code AS BIGINT)), 100000000000) + 1 AS first_available_barcode
-                FROM products
-                WHERE bar_code ~ '^[0-9]+$'
+                FROM (
+                    SELECT bar_code FROM products
+                    UNION
+                    SELECT bar_code FROM product_packages WHERE is_deleted = FALSE
+                ) codes
+                WHERE bar_code ~ '^[0-9]{1,15}$'
                 """)
             first_available_barcode = cur.fetchone()["first_available_barcode"]
 
@@ -723,11 +765,13 @@ def get_products(
         with Database(HOST, DATABASE, USER, PASS) as cur:
             # Get products with inventory for the specific store
             cur.execute(
-                """SELECT
+                f"""SELECT
                     p.id, p.name, p.bar_code, p.wholesale_price,
-                    p.price, pi.stock, p.category
+                    p.price, pi.stock, p.category,
+                    COALESCE(pk.packages, '[]'::json) AS packages
                 FROM products p
                 JOIN product_inventory pi ON p.id = pi.product_id
+                LEFT JOIN ({PACKAGES_JSON_SUBQUERY}) pk ON pk.product_id = p.id
                 WHERE pi.is_deleted = %s
                 AND pi.store_id = %s
                 ORDER BY p.name;
@@ -782,7 +826,7 @@ def get_products_as_admin(current_user: dict = Depends(get_current_user)):
         with Database(HOST, DATABASE, USER, PASS) as cur:
             # Get products with inventory for all stores
             cur.execute(
-                """WITH all_stores AS (
+                f"""WITH all_stores AS (
                 SELECT id, name FROM store_data
                 ),
                 product_stocks AS (
@@ -805,8 +849,10 @@ def get_products_as_admin(current_user: dict = Depends(get_current_user)):
                     LEFT JOIN product_inventory pi ON p.id = pi.product_id AND s.id = pi.store_id
                     GROUP BY p.id, p.name, p.bar_code, p.wholesale_price, p.price, p.category
                 )
-                SELECT * FROM product_stocks
-                ORDER BY name;
+                SELECT ps.*, COALESCE(pk.packages, '[]'::json) AS packages
+                FROM product_stocks ps
+                LEFT JOIN ({PACKAGES_JSON_SUBQUERY}) pk ON pk.product_id = ps.id
+                ORDER BY ps.name;
                 """
             )
             products = cur.fetchall()
@@ -869,6 +915,12 @@ def add_product(
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
+            owner = barcode_owner(cur, product.bar_code)
+            if owner:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"الباركود {product.bar_code} مستخدم بالفعل لـ «{owner}»",
+                )
             # First add to the central products table
             cur.execute(
                 """
@@ -890,6 +942,8 @@ def add_product(
 
             result = cur.fetchone()
             return result
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -914,6 +968,14 @@ def update_product(
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             for product in products:
+                owner = barcode_owner(
+                    cur, product.bar_code, exclude_product_id=product.id
+                )
+                if owner:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"الباركود {product.bar_code} مستخدم بالفعل لـ «{owner}»",
+                    )
                 # Update product basic information in the central products table
                 cur.execute(
                     """
@@ -994,6 +1056,8 @@ def update_product(
                         )
 
             return JSONResponse(content={"message": "Products updated successfully"})
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1082,7 +1146,8 @@ def get_bills(
 
     """
     extra_conditions: list[str] = []
-    params: list[Any] = []
+    # The first two parameters scope the installments aggregate to this store.
+    params: list[Any] = [store_id, store_id]
 
     if bill_id is not None:
         extra_conditions.append("AND bills.id = %s")
@@ -1134,8 +1199,11 @@ def get_bills(
                             'bar_code', products.bar_code,
                             'amount', products_flow.amount,
                             'wholesale_price', products_flow.wholesale_price,
-                            'price', products_flow.price
-                        )
+                            'price', products_flow.price,
+                            'package_id', products_flow.package_id,
+                            'package_units', products_flow.package_units,
+                            'package_name', products_flow.package_name
+                        ) ORDER BY products_flow.id
                     ) AS products
                 FROM bills
                 JOIN products_flow
@@ -1167,8 +1235,12 @@ def get_bills(
                                 ORDER BY time, id
                             ) AS flow
                         FROM installments_flow
+                        WHERE installment_id IN (
+                            SELECT id FROM installments WHERE store_id = %s
+                        )
                         GROUP BY installment_id
                     ) AS flow_data ON i.id = flow_data.installment_id
+                    WHERE i.store_id = %s
                 ) AS installments_data ON bills.id = installments_data.bill_id
                     AND bills.store_id = installments_data.store_id
                 WHERE 1 = 1
@@ -1550,7 +1622,7 @@ def update_bill(
                 VALUES (%s, %s, %s)
                 ON CONFLICT (id, store_id) DO NOTHING
                 """,
-                (negative_bill_id, store_id, datetime.now().isoformat()),
+                (negative_bill_id, store_id, local_now().isoformat()),
             )
 
             # Get the products_flow entries associated with this bill
@@ -1583,12 +1655,22 @@ def update_bill(
                     -product["amount"],
                     product["wholesale_price"],
                     product["price"],
-                    datetime.now().isoformat(),
+                    local_now().isoformat(),
+                    product.get("package_id"),
+                    product.get("package_units"),
+                    product.get("package_name"),
                 )
                 for product in old_products_flow
             ]
 
-            # Create entries for the new products
+            # Create entries for the new products. A package line keeps its
+            # snapshot only while it is still a whole number of packages.
+            def _edit_snapshot(pf):
+                units = pf.package_units or 0
+                if units >= 2 and abs(pf.amount) % units == 0:
+                    return (pf.package_id, units, pf.package_name or "عبوة")
+                return (None, None, None)
+
             values += [
                 (
                     store_id,
@@ -1597,7 +1679,8 @@ def update_bill(
                     product_flow.amount,
                     product_flow.wholesale_price,
                     product_flow.price,
-                    datetime.now().isoformat(),
+                    local_now().isoformat(),
+                    *_edit_snapshot(product_flow),
                 )
                 for product_flow in bill.products
             ]
@@ -1607,9 +1690,10 @@ def update_bill(
                 """
                 INSERT INTO products_flow (
                     store_id, bill_id, product_id,
-                    amount, wholesale_price, price, time
+                    amount, wholesale_price, price, time,
+                    package_id, package_units, package_name
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 values,
             )
@@ -1862,7 +1946,15 @@ def _add_bill_internal(
                     else product_flow.quantity,
                     product_flow.wholesale_price,
                     product_flow.price,
-                    datetime.now().isoformat(),
+                    local_now().isoformat(),
+                    *package_snapshot(
+                        cur,
+                        product_flow.id,
+                        product_flow.package_id,
+                        product_flow.package_units,
+                        product_flow.package_name,
+                        product_flow.quantity,
+                    ),
                 )
                 for product_flow in bill.products_flow
             ]
@@ -1871,9 +1963,10 @@ def _add_bill_internal(
                 """
                 INSERT INTO products_flow (
                     store_id, bill_id, product_id,
-                    amount, wholesale_price, price, time
+                    amount, wholesale_price, price, time,
+                    package_id, package_units, package_name
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 values,
             )
@@ -2055,11 +2148,15 @@ def _add_bill_internal(
                             'bar_code', products.bar_code,
                             'amount', products_flow.amount,
                             'wholesale_price', products_flow.wholesale_price,
-                            'price', products_flow.price
-                        )
+                            'price', products_flow.price,
+                            'package_id', products_flow.package_id,
+                            'package_units', products_flow.package_units,
+                            'package_name', products_flow.package_name
+                        ) ORDER BY products_flow.id
                     ) AS products
                 FROM bills
                 JOIN products_flow ON bills.id = products_flow.bill_id
+                    AND bills.store_id = products_flow.store_id
                 JOIN products ON products_flow.product_id = products.id
                 LEFT JOIN assosiated_parties ON bills.party_id = assosiated_parties.id
                 LEFT JOIN (
@@ -2090,19 +2187,21 @@ def _add_bill_internal(
                     ) AS flow_data ON i.id = flow_data.installment_id
                 ) AS installments_data ON bills.id = installments_data.bill_id
                     AND bills.store_id = installments_data.store_id
-                WHERE bills.id = %s
+                WHERE bills.id = %s AND bills.store_id = %s
                 GROUP BY bills.id, bills.time, bills.discount,
                     bills.total, bills.type, bills.note, bills.payments, bills.party_id, assosiated_parties.name,
                     installments_data.installment_id, installments_data.paid,
                     installments_data.installments_count, installments_data.installment_interval,
                     installments_data.total_paid, installments_data.flow
                 """,
-                (bill_id,),
+                (bill_id, store_id),
             )
 
             bill_result = cur.fetchone()
 
         return {"message": "Bill added successfully", "bill": bill_result}
+    except HTTPException:
+        raise
     except Exception as e:
         print("Error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -2154,6 +2253,7 @@ def move_products(
     source_payment_method_id: Optional[int] = None,
     destination_payment_method_id: Optional[int] = None,
     settle_from_debt: bool = False,
+    restock_request_ids: Optional[List[int]] = Query(None),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -2176,6 +2276,30 @@ def move_products(
         raise HTTPException(
             status_code=400, detail="لا يمكن نقل المنتجات لنفس المتجر"
         )
+    # One line per product. A transfer moves base units, and the batch
+    # allocation below is keyed by product id: two lines of the same product
+    # (e.g. a unit line and a carton line) would otherwise share one
+    # allocation and leave the source's batches out of step with its stock.
+    merged_flow: Dict[int, ProductFlow] = {}
+    for pf in bill.products_flow:
+        prev = merged_flow.get(pf.id)
+        if prev is None:
+            merged_flow[pf.id] = pf.model_copy(
+                update={"package_id": None, "package_units": None, "package_name": None}
+            )
+            continue
+        if bool(prev.batches) != bool(pf.batches):
+            raise HTTPException(
+                status_code=400,
+                detail="نفس المنتج في أكثر من سطر: حدد الدفعات للسطرين أو اجمعهما في سطر واحد",
+            )
+        merged_flow[pf.id] = prev.model_copy(
+            update={
+                "quantity": prev.quantity + pf.quantity,
+                "batches": ((prev.batches or []) + (pf.batches or [])) or None,
+            }
+        )
+    bill.products_flow = list(merged_flow.values())
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
             # Get store information for notifications
@@ -2508,6 +2632,10 @@ def move_products(
                 "move_products",
             )
 
+            # Restock requests this transfer fills (v27): allocate the sent
+            # units to them, oldest first, and auto-close completed ones.
+            restock_summary = []
+
             # "Settle from debt" mode: no real money changes hands. Counter the
             # bills' cash with a source->destination transfer, which nets the
             # cash to zero and moves the inter-store balance instead.
@@ -2522,6 +2650,32 @@ def move_products(
                     destination_payment_method_id,
                     bill.time,
                 )
+
+            # Linking is secondary: the bills are already committed, so a
+            # failure here must not report the transfer as failed (a retry
+            # would move the goods twice). Isolated in a savepoint.
+            if restock_request_ids:
+                sent_qty: Dict[int, float] = {}
+                for pf in bill.products_flow:
+                    sent_qty[pf.id] = sent_qty.get(pf.id, 0) + pf.quantity
+                cur.execute("SAVEPOINT restock_link")
+                try:
+                    restock_summary = record_fulfillment(
+                        cur,
+                        restock_request_ids,
+                        source_store_id,
+                        destination_store_id,
+                        source_bill_id,
+                        sent_qty,
+                    )
+                    cur.execute("RELEASE SAVEPOINT restock_link")
+                except Exception as link_err:  # noqa: BLE001
+                    cur.execute("ROLLBACK TO SAVEPOINT restock_link")
+                    logging.error("Restock link failed for bill %s: %s", source_bill_id, link_err)
+                    restock_summary = [
+                        {"id": int(i), "skipped": True, "error": True}
+                        for i in restock_request_ids
+                    ]
 
         # Prepare products data for notification
         transfer_products = []
@@ -2544,6 +2698,17 @@ def move_products(
             transfer_time=bill.time,
             user_name=user_name,
         )
+        for rs in restock_summary:
+            if rs.get("skipped") or not rs.get("sent_now"):
+                continue
+            transfer_message += (
+                f"\n📦 طلب البضاعة #{rs['id']}: "
+                + (
+                    "اكتمل ✅"
+                    if rs.get("closed") or not rs.get("remaining_lines")
+                    else f"بقي {rs['remaining_lines']} صنف"
+                )
+            )
 
         # Check if both stores have the same Telegram chat ID to avoid duplicate notifications
         source_chat_id = get_store_telegram_chat_id(source_store_id)
@@ -2577,7 +2742,7 @@ def move_products(
                     f"📥 <b>منتجات مستلمة</b>\n\n{transfer_message}",
                 )
 
-        return {"message": "Products moved successfully"}
+        return {"message": "Products moved successfully", "restock": restock_summary}
     except HTTPException:
         raise
     except Exception as e:
@@ -2816,7 +2981,7 @@ def add_cash_flow(
     """
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            current_time = time or datetime.now().isoformat()
+            current_time = time or local_now().isoformat()
             signed_amount = amount if move_type == "in" else -amount
 
             cur.execute(
@@ -2906,7 +3071,7 @@ def store_transfer(
 
 
 # The latest DB schema version this backend expects (bump with each update_db_N).
-LATEST_DB_VERSION = 25
+LATEST_DB_VERSION = 27
 
 
 @app.get("/db-version")
@@ -3212,31 +3377,44 @@ def generate_xlsx(data):
 
 
 @app.get("/backup")
-async def backup(current_user: dict = Depends(get_current_user)):
+def backup(current_user: dict = Depends(get_current_user)):
     """
-    Backs up everything in the database as a save point to restore later
+    Backs up everything in the database as a save point to restore later.
+
+    Plain `def` so pg_dump runs in the threadpool, not on the event loop. The
+    dump goes to a unique temp file (concurrent downloads can't clobber each
+    other), is checked (exit code + completion trailer) and deleted once sent.
     """
     import tempfile
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+
+    fd, backup_path = tempfile.mkstemp(prefix="openstore_backup_", suffix=".sql")
+    os.close(fd)
+
+    def _cleanup() -> None:
+        try:
+            os.remove(backup_path)
+        except OSError:
+            pass
 
     try:
-        # Create a .sql file in a writable temp directory
-        backup_path = os.path.join(tempfile.gettempdir(), "openstore_backup.sql")
-        with open(backup_path, "wb") as f:
-            os.environ["PGPASSWORD"] = PASS
-            subprocess.run(
-                ["pg_dump", "-h", HOST, "-U", USER, "-d", DATABASE], stdout=f
-            )
-
-        # Return the file
-        return StreamingResponse(
-            open(backup_path, "rb"),
-            media_type="application/octet-stream",
-            headers={"Content-Disposition": "attachment;filename=backup.sql"},
-        )
-
+        dump_database(backup_path, compress=False)
+    except BackupError as e:
+        _cleanup()
+        logging.error(f"Backup failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
     except Exception as e:
-        logging.error(f"Error: {e}")
+        _cleanup()
+        logging.error(f"Backup failed: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return FileResponse(
+        backup_path,
+        media_type="application/octet-stream",
+        filename="backup.sql",
+        background=BackgroundTask(_cleanup),
+    )
 
 
 @app.post("/restore")

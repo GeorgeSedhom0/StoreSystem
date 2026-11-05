@@ -1,4 +1,5 @@
 import type { Bill, CashFlow, StoreData } from "./types";
+import { lineView } from "../Shared/packages";
 
 export interface PdfExportPayload {
   fileName: string;
@@ -935,14 +936,26 @@ export const buildIncomeReportHtml = ({
       { label: "طريقة حساب الأرباح", value: methodLabel },
     ],
     summary: [
-      { label: "إجمالي النقد الوارد", value: formatCurrency(cashIn), tone: "success" },
-      { label: "إجمالي النقد الصادر", value: formatCurrency(cashOut), tone: "danger" },
+      {
+        label: "إجمالي النقد الوارد",
+        value: formatCurrency(cashIn),
+        tone: "success",
+      },
+      {
+        label: "إجمالي النقد الصادر",
+        value: formatCurrency(cashOut),
+        tone: "danger",
+      },
       {
         label: "صافي النقد",
         value: formatCurrency(netCash),
         tone: netCash >= 0 ? "default" : "warning",
       },
-      { label: "إجمالي الأرباح", value: formatCurrency(profit), tone: "default" },
+      {
+        label: "إجمالي الأرباح",
+        value: formatCurrency(profit),
+        tone: "default",
+      },
     ],
     content: `
       ${tablePanel(
@@ -1081,7 +1094,9 @@ export const buildDetailedReportHtml = ({
               <td>${escapeHtml(formatCurrency(m.total))}</td>
               <td class="align-center">${escapeHtml(m.bills_count)}</td>
               <td class="align-center">${
-                paymentTotal > 0 ? Math.round((m.total / paymentTotal) * 100) : 0
+                paymentTotal > 0
+                  ? Math.round((m.total / paymentTotal) * 100)
+                  : 0
               }%</td>
             </tr>`,
         )
@@ -1116,22 +1131,86 @@ export const buildDetailedReportHtml = ({
       { label: "إلى", value: endDate },
     ],
     summary: [
-      { label: "إجمالي المبيعات", value: formatCurrency(cards.total_sales), tone: "success" },
-      { label: "ربح FIFO", value: formatCurrency(cards.total_profit_fifo), tone: "default" },
-      { label: "المشتريات", value: formatCurrency(cards.purchases), tone: "default" },
-      { label: "مصروفات تشغيلية", value: formatCurrency(cards.operating_expenses), tone: "danger" },
-      { label: "نقد فائض", value: formatCurrency(cards.free_cash), tone: "success" },
-      { label: "صافي الربح", value: formatCurrency(cards.net_profit), tone: "default" },
-      { label: "آجل: مستحق التحصيل", value: formatCurrency(cards.bnpl_outstanding), tone: "default" },
-      { label: "آجل: ربح متوقع", value: formatCurrency(cards.bnpl_expected_profit), tone: "default" },
-      { label: "تقسيط: قيمة المبيعات", value: formatCurrency(cards.installment_principal), tone: "default" },
-      { label: "تقسيط: محصّل", value: formatCurrency(cards.installment_collected), tone: "default" },
-      { label: "تقسيط: متبقٍّ", value: formatCurrency(cards.installment_remaining), tone: "default" },
-      { label: "تقسيط: ربح متوقع", value: formatCurrency(cards.installment_expected_profit), tone: "default" },
-      { label: "تحويلات بين الفروع (صافي)", value: formatCurrency(cards.interstore_net), tone: "default" },
-      { label: "إيداعات المالك", value: formatCurrency(cards.owner_in), tone: "default" },
-      { label: "مسحوبات المالك", value: formatCurrency(cards.owner_out), tone: "default" },
-      { label: "صافي حركة المالك", value: formatCurrency(cards.owner_net), tone: "default" },
+      {
+        label: "إجمالي المبيعات",
+        value: formatCurrency(cards.total_sales),
+        tone: "success",
+      },
+      {
+        label: "ربح FIFO",
+        value: formatCurrency(cards.total_profit_fifo),
+        tone: "default",
+      },
+      {
+        label: "المشتريات",
+        value: formatCurrency(cards.purchases),
+        tone: "default",
+      },
+      {
+        label: "مصروفات تشغيلية",
+        value: formatCurrency(cards.operating_expenses),
+        tone: "danger",
+      },
+      {
+        label: "نقد فائض",
+        value: formatCurrency(cards.free_cash),
+        tone: "success",
+      },
+      {
+        label: "صافي الربح",
+        value: formatCurrency(cards.net_profit),
+        tone: "default",
+      },
+      {
+        label: "آجل: مستحق التحصيل",
+        value: formatCurrency(cards.bnpl_outstanding),
+        tone: "default",
+      },
+      {
+        label: "آجل: ربح متوقع",
+        value: formatCurrency(cards.bnpl_expected_profit),
+        tone: "default",
+      },
+      {
+        label: "تقسيط: قيمة المبيعات",
+        value: formatCurrency(cards.installment_principal),
+        tone: "default",
+      },
+      {
+        label: "تقسيط: محصّل",
+        value: formatCurrency(cards.installment_collected),
+        tone: "default",
+      },
+      {
+        label: "تقسيط: متبقٍّ",
+        value: formatCurrency(cards.installment_remaining),
+        tone: "default",
+      },
+      {
+        label: "تقسيط: ربح متوقع",
+        value: formatCurrency(cards.installment_expected_profit),
+        tone: "default",
+      },
+      {
+        label: "تحويلات بين الفروع (صافي)",
+        value: formatCurrency(cards.interstore_net),
+        tone: "default",
+      },
+      {
+        label: "إيداعات المالك",
+        value: formatCurrency(cards.owner_in),
+        tone: "default",
+      },
+      {
+        label: "مسحوبات المالك",
+        value: formatCurrency(cards.owner_out),
+        tone: "default",
+      },
+      {
+        label: "صافي حركة المالك",
+        value: formatCurrency(cards.owner_net),
+        tone: "default",
+      },
     ],
     content: `
       ${categoryPanel}
@@ -1242,15 +1321,16 @@ export const buildBillsReportHtml = ({
         .map((b) => {
           const productRows = b.products?.length
             ? b.products
-                .map(
-                  (p) => `
+                .map((p) => {
+                  const v = lineView(p);
+                  return `
                     <tr>
-                      <td>${escapeHtml(p.name)}</td>
-                      <td class="align-center">${escapeHtml(Math.abs(p.amount))}</td>
-                      <td>${escapeHtml(formatCurrency(p.price))}</td>
-                      <td>${escapeHtml(formatCurrency(Math.abs(p.amount) * p.price))}</td>
-                    </tr>`,
-                )
+                      <td>${escapeHtml(v.unitLabel ? `${v.name} — ${v.unitLabel}` : v.name)}</td>
+                      <td class="align-center">${escapeHtml(v.qty)}</td>
+                      <td>${escapeHtml(formatCurrency(v.price))}</td>
+                      <td>${escapeHtml(formatCurrency(v.total))}</td>
+                    </tr>`;
+                })
                 .join("")
             : emptyRow(4, "لا توجد منتجات");
           return `
@@ -1302,7 +1382,8 @@ export const buildBillsReportHtml = ({
     : `<div class="panel"><div class="empty-state align-center">لا توجد فواتير مطابقة للفلاتر الحالية</div></div>`;
 
   return buildReportDocument({
-    title: mode === "summary" ? "تقرير الفواتير (ملخص)" : "تقرير الفواتير (تفصيلي)",
+    title:
+      mode === "summary" ? "تقرير الفواتير (ملخص)" : "تقرير الفواتير (تفصيلي)",
     store,
     meta: [
       { label: "من", value: startDate },
@@ -1312,11 +1393,110 @@ export const buildBillsReportHtml = ({
       { label: "المنتج", value: productLabel },
     ],
     summary: [
-      { label: "عدد الفواتير", value: String(totalTransactions), tone: "default" },
-      { label: "إجمالي الفواتير", value: formatCurrency(totalAmount), tone: "success" },
-      { label: "إجمالي المبيعات", value: formatCurrency(totalSalesAmount), tone: "default" },
-      { label: "متوسط الخصم", value: formatCurrency(averageDiscount), tone: "warning" },
+      {
+        label: "عدد الفواتير",
+        value: String(totalTransactions),
+        tone: "default",
+      },
+      {
+        label: "إجمالي الفواتير",
+        value: formatCurrency(totalAmount),
+        tone: "success",
+      },
+      {
+        label: "إجمالي المبيعات",
+        value: formatCurrency(totalSalesAmount),
+        tone: "default",
+      },
+      {
+        label: "متوسط الخصم",
+        value: formatCurrency(averageDiscount),
+        tone: "warning",
+      },
     ],
     content: mode === "summary" ? summaryTable : fullCards,
+  });
+};
+
+// ─── Restock request (طلبات البضاعة) — A4 pick list / request sheet ──────────
+export const buildRestockReportHtml = ({
+  store,
+  request,
+  side,
+}: {
+  store: Pick<StoreData, "name" | "address" | "phone">;
+  side: "requester" | "supplier";
+  request: {
+    id: number;
+    from_store_name: string;
+    to_store_name: string;
+    created_at: string;
+    created_by_name: string;
+    note: string;
+    stateLabel: string;
+    lines: {
+      name: string;
+      bar_code: string | null;
+      quantityLabel: string;
+      sent: number;
+      remaining: number;
+      available?: number;
+    }[];
+  };
+}) => {
+  const supplier = side === "supplier";
+  const headers = [
+    { label: "#", width: "6%", align: "center" },
+    { label: "المنتج", width: supplier ? "34%" : "44%" },
+    { label: "الباركود", width: "16%", align: "center" },
+    { label: "المطلوب", width: "11%", align: "center" },
+    { label: "أُرسل", width: "9%", align: "center" },
+    { label: "المتبقي", width: "10%", align: "center" },
+    ...(supplier ? [{ label: "المتاح", width: "10%", align: "center" }] : []),
+    ...(supplier ? [{ label: "✓", width: "4%", align: "center" }] : []),
+  ];
+  const rows = request.lines.length
+    ? request.lines
+        .map(
+          (l, i) => `
+            <tr>
+              <td class="align-center">${i + 1}</td>
+              <td>${escapeHtml(l.name)}</td>
+              <td class="align-center">${escapeHtml(l.bar_code || "")}</td>
+              <td class="align-center">${escapeHtml(l.quantityLabel)}</td>
+              <td class="align-center">${escapeHtml(l.sent)}</td>
+              <td class="align-center"><strong>${escapeHtml(l.remaining)}</strong></td>
+              ${
+                supplier
+                  ? `<td class="align-center">${
+                      l.available != null && l.available < l.remaining
+                        ? `<span class="tag tag-danger">${escapeHtml(l.available)}</span>`
+                        : escapeHtml(l.available ?? "")
+                    }</td><td></td>`
+                  : ""
+              }
+            </tr>`,
+        )
+        .join("")
+    : emptyRow(headers.length, "لا توجد أصناف");
+  return buildReportDocument({
+    title: supplier
+      ? `قائمة تجهيز طلب #${request.id}`
+      : `طلب بضاعة #${request.id}`,
+    store,
+    meta: [
+      { label: "من", value: request.from_store_name },
+      { label: "إلى", value: request.to_store_name },
+      { label: "التاريخ", value: formatDateTime(request.created_at) },
+      { label: "بواسطة", value: request.created_by_name || "—" },
+      { label: "الحالة", value: request.stateLabel },
+      ...(request.note ? [{ label: "ملاحظة", value: request.note }] : []),
+    ],
+    content: tablePanel(
+      "الأصناف",
+      headers,
+      rows,
+      `${request.lines.length} صنف`,
+    ),
   });
 };

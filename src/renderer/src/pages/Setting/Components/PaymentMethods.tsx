@@ -4,13 +4,11 @@ import {
   Divider,
   FormControl,
   Grid2,
-  IconButton,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   TextField,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
@@ -98,7 +96,7 @@ const PaymentMethods = () => {
       <Paper
         elevation={2}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
           background:
@@ -111,15 +109,19 @@ const PaymentMethods = () => {
           <PaymentsIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
           <Typography
             variant="h4"
-            sx={{ fontWeight: 600, color: "primary.main" }}
+            sx={{
+              fontWeight: 600,
+              color: "primary.main",
+              fontSize: { xs: "1.4rem", sm: "2.125rem" },
+            }}
           >
             إدارة طرق الدفع
           </Typography>
         </Box>
         <Typography variant="body1" color="text.secondary">
           يمكنك إضافة طرق دفع جديدة أو تعديل أسمائها. يمكنك أيضًا تحديد المتجر
-          الذي يملك حساب طريقة الدفع فعليًا (مثل محفظة إلكترونية لمتجر معيّن) — عند
-          استخدامها من متجر آخر يتم تحويل المبلغ تلقائيًا إلى المتجر المالك.
+          الذي يملك حساب طريقة الدفع فعليًا (مثل محفظة إلكترونية لمتجر معيّن) —
+          عند استخدامها من متجر آخر يتم تحويل المبلغ تلقائيًا إلى المتجر المالك.
         </Typography>
       </Paper>
 
@@ -127,7 +129,7 @@ const PaymentMethods = () => {
       <Paper
         elevation={1}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
           border: "1px solid",
@@ -137,11 +139,18 @@ const PaymentMethods = () => {
         <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
           إضافة طريقة دفع جديدة
         </Typography>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+        <Box
+          sx={{
+            display: "flex",
+            gap: 2,
+            alignItems: { xs: "stretch", sm: "center" },
+            flexDirection: { xs: "column", sm: "row" },
+          }}
+        >
           <TextField
             fullWidth
-            size="small"
             label="اسم طريقة الدفع"
+            placeholder="مثال: فودافون كاش"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
@@ -153,7 +162,8 @@ const PaymentMethods = () => {
             startIcon={<AddIcon />}
             onClick={handleAdd}
             loading={addPaymentMethodLoading}
-            sx={{ whiteSpace: "nowrap", px: 3 }}
+            disabled={!newName.trim()}
+            sx={{ whiteSpace: "nowrap", px: 3, minHeight: 48 }}
           >
             إضافة
           </LoadingButton>
@@ -164,7 +174,7 @@ const PaymentMethods = () => {
       <Paper
         elevation={1}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           borderRadius: 3,
           border: "1px solid",
           borderColor: "divider",
@@ -175,6 +185,9 @@ const PaymentMethods = () => {
         </Typography>
         <Divider sx={{ mb: 2 }} />
 
+        {isPaymentMethodsLoading && (
+          <Typography color="text.secondary">جارٍ التحميل...</Typography>
+        )}
         {paymentMethods.length === 0 && !isPaymentMethodsLoading && (
           <Typography color="text.secondary">لا توجد طرق دفع بعد</Typography>
         )}
@@ -187,7 +200,8 @@ const PaymentMethods = () => {
             const nameChanged =
               buffer.trim() !== method.name && buffer.trim() !== "";
             const homeChanged = homeBuffer !== currentHome;
-            const changed = (nameChanged || homeChanged) && buffer.trim() !== "";
+            const changed =
+              (nameChanged || homeChanged) && buffer.trim() !== "";
             return (
               <Grid2 size={12} key={method.id}>
                 <Box
@@ -212,15 +226,20 @@ const PaymentMethods = () => {
                         [method.id]: e.target.value,
                       }))
                     }
-                    sx={{ flex: 1, minWidth: 160 }}
+                    sx={{ flex: "1 1 200px", minWidth: 0 }}
                   />
                   {method.is_default ? (
                     <Chip label="نقدي / افتراضي" size="small" color="primary" />
                   ) : (
-                    <FormControl size="small" sx={{ minWidth: 200 }}>
-                      <InputLabel>المتجر المالك للحساب</InputLabel>
+                    <FormControl
+                      size="small"
+                      sx={{ flex: "1 1 200px", minWidth: 0 }}
+                    >
+                      <InputLabel shrink>المتجر المالك للحساب</InputLabel>
                       <Select
                         label="المتجر المالك للحساب"
+                        displayEmpty
+                        notched
                         value={homeBuffer}
                         onChange={(e) =>
                           setEditHome((prev) => ({
@@ -243,23 +262,25 @@ const PaymentMethods = () => {
                       </Select>
                     </FormControl>
                   )}
-                  <Tooltip title="حفظ">
-                    <span>
-                      <IconButton
-                        color="primary"
-                        disabled={!changed || updatePaymentMethodLoading}
-                        onClick={() =>
-                          updatePaymentMethodMutation({
-                            id: method.id,
-                            name: buffer.trim(),
-                            homeStoreId: homeBuffer === "" ? null : homeBuffer,
-                          })
-                        }
-                      >
-                        <SaveIcon />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
+                  <LoadingButton
+                    variant={changed ? "contained" : "outlined"}
+                    startIcon={<SaveIcon />}
+                    disabled={!changed}
+                    loading={updatePaymentMethodLoading && changed}
+                    onClick={() =>
+                      updatePaymentMethodMutation({
+                        id: method.id,
+                        name: buffer.trim(),
+                        homeStoreId: homeBuffer === "" ? null : homeBuffer,
+                      })
+                    }
+                    sx={{
+                      minHeight: 40,
+                      flex: { xs: "1 1 100%", sm: "0 0 auto" },
+                    }}
+                  >
+                    حفظ
+                  </LoadingButton>
                 </Box>
                 {!method.is_default && method.home_store_id != null && (
                   <Typography

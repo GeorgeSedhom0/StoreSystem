@@ -84,6 +84,10 @@ class CorrectionLine(BaseModel):
     quantity: int
     wholesale_price: float
     price: float
+    # Only set by a revert: restore the line's package snapshot.
+    package_id: Optional[int] = None
+    package_units: Optional[int] = None
+    package_name: Optional[str] = None
 
 
 class CorrectionPayment(BaseModel):
@@ -193,7 +197,8 @@ def _load_lines(cur, store_id: int, bill_id: int) -> List[dict]:
     cur.execute(
         """
         SELECT pf.id AS flow_id, pf.product_id, p.name, p.bar_code,
-               pf.amount, pf.wholesale_price, pf.price, pf.time
+               pf.amount, pf.wholesale_price, pf.price, pf.time,
+               pf.package_id, pf.package_units, pf.package_name
         FROM products_flow pf
         JOIN products p ON p.id = pf.product_id
         WHERE pf.bill_id = %s AND pf.store_id = %s
@@ -278,6 +283,9 @@ def _bill_snapshot(cur, store_id: int, bill_id: int) -> Optional[dict]:
                     "quantity": abs(int(l["amount"] or 0)),
                     "wholesale_price": float(l["wholesale_price"] or 0),
                     "price": float(l["price"] or 0),
+                    "package_id": l["package_id"],
+                    "package_units": l["package_units"],
+                    "package_name": l["package_name"],
                 }
                 for l in _load_lines(cur, store_id, bill_id)
             ],
@@ -285,9 +293,35 @@ def _bill_snapshot(cur, store_id: int, bill_id: int) -> Optional[dict]:
     )
 
 
+# Display-only line keys (v26 package snapshot). Left out of the token so a
+# correction logged before they existed still compares equal for revert.
+_TOKEN_IGNORED_LINE_KEYS = ("package_id", "package_units", "package_name")
+
+
+def _line_snapshot(nl: "CorrectionLine"):
+    """(package_id, package_units, package_name) when the line carries a
+    package snapshot that still fits its quantity, else None."""
+    units = int(nl.package_units or 0)
+    if units >= 2 and nl.quantity > 0 and nl.quantity % units == 0:
+        return (nl.package_id, units, nl.package_name or "عبوة")
+    return None
+
+
 def _state_token(snapshots: List[Optional[dict]]) -> str:
+    def strip(snap):
+        if not isinstance(snap, dict) or not isinstance(snap.get("lines"), list):
+            return snap
+        return {
+            **snap,
+            "lines": [
+                {k: v for k, v in l.items() if k not in _TOKEN_IGNORED_LINE_KEYS}
+                if isinstance(l, dict) else l
+                for l in snap["lines"]
+            ],
+        }
+
     return hashlib.sha256(
-        json.dumps(snapshots, sort_keys=True, default=str).encode()
+        json.dumps([strip(s) for s in snapshots], sort_keys=True, default=str).encode()
     ).hexdigest()[:16]
 
 
@@ -627,13 +661,30 @@ def _rewrite_lines(cur, bill: dict, old_lines: List[dict], new_lines: List[Corre
         old = old_by_id.get(nl.flow_id) if nl.flow_id else None
         if old and old["product_id"] == nl.product_id and nl.flow_id not in kept:
             kept.add(nl.flow_id)
-            cur.execute(
-                """
-                UPDATE products_flow SET amount = %s, wholesale_price = %s, price = %s
-                WHERE id = %s AND store_id = %s
-                """,
-                (amount, nl.wholesale_price, nl.price, nl.flow_id, store_id),
-            )
+            # A package line stays one only while it is a whole number of
+            # packages; otherwise it becomes a plain unit line.
+            snap = _line_snapshot(nl)
+            if snap:
+                # A revert restoring the line's package snapshot.
+                cur.execute(
+                    """
+                    UPDATE products_flow SET amount = %s, wholesale_price = %s, price = %s,
+                        package_id = %s, package_units = %s, package_name = %s
+                    WHERE id = %s AND store_id = %s
+                    """,
+                    (amount, nl.wholesale_price, nl.price, *snap, nl.flow_id, store_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE products_flow SET amount = %s, wholesale_price = %s, price = %s,
+                        package_id = CASE WHEN package_units > 0 AND %s %% package_units = 0 THEN package_id END,
+                        package_name = CASE WHEN package_units > 0 AND %s %% package_units = 0 THEN package_name END,
+                        package_units = CASE WHEN package_units > 0 AND %s %% package_units = 0 THEN package_units END
+                    WHERE id = %s AND store_id = %s
+                    """,
+                    (amount, nl.wholesale_price, nl.price, nl.quantity, nl.quantity, nl.quantity, nl.flow_id, store_id),
+                )
             ow, op = float(old["wholesale_price"] or 0), float(old["price"] or 0)
             if abs(ow - nl.wholesale_price) > 1e-9 or abs(op - nl.price) > 1e-9:
                 cost_changes.append(
@@ -659,12 +710,14 @@ def _rewrite_lines(cur, bill: dict, old_lines: List[dict], new_lines: List[Corre
         if len(prices) != len(pids):
             raise HTTPException(status_code=400, detail="منتج غير موجود")
         for nl, amount in inserts:
+            snap = _line_snapshot(nl) or (None, None, None)
             cur.execute(
                 """
-                INSERT INTO products_flow (store_id, bill_id, product_id, amount, wholesale_price, price, time)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO products_flow (store_id, bill_id, product_id, amount, wholesale_price, price, time,
+                                           package_id, package_units, package_name)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (store_id, bill_id, nl.product_id, amount, nl.wholesale_price, nl.price, bill["time"]),
+                (store_id, bill_id, nl.product_id, amount, nl.wholesale_price, nl.price, bill["time"], *snap),
             )
         # A buy-line insert re-prices the product; a correction must not.
         if btype == "buy":
@@ -1408,7 +1461,8 @@ def _revert_request(entry: dict) -> tuple:
     pair = next((b for b in bills if b is not main), None)
 
     def lines(b):
-        return [CorrectionLine(**{k: l[k] for k in ("flow_id", "product_id", "quantity", "wholesale_price", "price")}) for l in b["lines"]]
+        keys = ("flow_id", "product_id", "quantity", "wholesale_price", "price", "package_id", "package_units", "package_name")
+        return [CorrectionLine(**{k: l.get(k) for k in keys}) for l in b["lines"]]
 
     req = CorrectionRequest(
         store_id=main["store_id"], bill_id=main["bill_id"], action="edit",

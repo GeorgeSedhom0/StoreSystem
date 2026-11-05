@@ -2,7 +2,6 @@ import {
   AppBar,
   Button,
   Toolbar,
-  Grid2,
   FormControl,
   Select,
   MenuItem,
@@ -12,24 +11,74 @@ import {
   Drawer,
   List,
   ListItemButton,
+  ListItemIcon,
   ListItemText,
   Divider,
+  Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
+import AddIcon from "@mui/icons-material/Add";
+import LogoutIcon from "@mui/icons-material/SwapHoriz";
+import PointOfSaleIcon from "@mui/icons-material/PointOfSale";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
+import AddBoxIcon from "@mui/icons-material/AddBox";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import GroupsIcon from "@mui/icons-material/Groups";
+import Inventory2Icon from "@mui/icons-material/Inventory2";
+import PaymentsIcon from "@mui/icons-material/Payments";
+import InsightsIcon from "@mui/icons-material/Insights";
+import SettingsIcon from "@mui/icons-material/Settings";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import BadgeIcon from "@mui/icons-material/Badge";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import BuildIcon from "@mui/icons-material/Build";
+import StorefrontIcon from "@mui/icons-material/Storefront";
+import AssignmentReturnedIcon from "@mui/icons-material/AssignmentReturned";
 import { ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ReactNode, useContext, useEffect, useRef, useState } from "react";
+import {
+  ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { NavLink } from "react-router-dom";
 import { StoreContext } from "./StoreDataProvider";
 import axios from "axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import SetBaseUrl from "./SetBaseUrl";
 import { StoreData } from "./pages/utils/types";
-import LoadingScreen from "./pages/Shared/LoadingScreen";
-import AddIcon from "@mui/icons-material/Add";
 import NotificationBell from "./pages/Shared/NotificationBell";
+import { PAGE_LABELS } from "./pageLabels";
+
+const IS_WEB = Boolean((window as any).__IS_WEB__);
+
+const PAGE_ICONS: Record<string, ReactNode> = {
+  "/sell": <PointOfSaleIcon />,
+  "/admin/sell": <AdminPanelSettingsIcon />,
+  "/buy": <ShoppingCartIcon />,
+  "/add-to-storage": <AddBoxIcon />,
+  "/admin/move-products": <LocalShippingIcon />,
+  "/bills": <ReceiptLongIcon />,
+  "/parties-bills": <GroupsIcon />,
+  "/admin/bills": <ReceiptLongIcon />,
+  "/products": <Inventory2Icon />,
+  "/admin/products": <Inventory2Icon />,
+  "/cash": <PaymentsIcon />,
+  "/analytics": <InsightsIcon />,
+  "/settings": <SettingsIcon />,
+  "/installments": <CalendarMonthIcon />,
+  "/employees": <BadgeIcon />,
+  "/accounts": <AccountBalanceWalletIcon />,
+  "/bill-corrections": <BuildIcon />,
+  "/restock-requests": <AssignmentReturnedIcon />,
+};
 
 const logoutWihtoutEndingShift = async () => {
   await axios.get("/switch", {
@@ -57,16 +106,18 @@ const Layout = ({
   if (!isBaseUrlSet) {
     return <SetBaseUrl />;
   }
+  return <Shell>{children}</Shell>;
+};
 
+// All hooks live here and always run in the same order (the login page used
+// to return early before them, which breaks React's hook order on navigation).
+const Shell = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
-  if (location.pathname === "/login") {
-    return <>{children}</>;
-  }
-
-  const { profile, storeId, setGlobalStoreId } = useContext(StoreContext);
+  const isLogin = location.pathname === "/login";
+  const { profile, storeId, store, setGlobalStoreId } =
+    useContext(StoreContext);
   const navigate = useNavigate();
   const [currentStoreId, setCurrentStoreId] = useState<number>(storeId);
-  const [isCheckingShift, setIsCheckingShift] = useState(true);
   const topNavRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -76,33 +127,30 @@ const Layout = ({
   const { data: shiftData, isLoading: isShiftLoading } = useQuery({
     queryKey: ["currentShift", storeId],
     queryFn: () => getCurrentShift(storeId),
-    enabled: !!storeId && location.pathname !== "/login",
+    enabled: !!storeId && !isLogin,
   });
 
-  // Effect to check if user has a valid shift and redirect if not
+  // A user without an open shift goes to the login page.
   useEffect(() => {
     if (
       !isShiftLoading &&
       shiftData &&
       !shiftData.start_date_time &&
-      location.pathname !== "/login"
+      !isLogin
     ) {
       navigate("/login");
     }
-
-    if (!isShiftLoading) {
-      setIsCheckingShift(false);
-    }
-  }, [shiftData, isShiftLoading, navigate, location.pathname]);
+  }, [shiftData, isShiftLoading, navigate, isLogin]);
 
   useEffect(() => {
     if (
+      !isLogin &&
       profile &&
       !profile.user.paths.some((path) => location.pathname.startsWith(path))
     ) {
       navigate("/sell");
     }
-  }, [location.pathname, profile, navigate]);
+  }, [location.pathname, profile, navigate, isLogin]);
 
   const { mutate: switchAccount } = useMutation({
     mutationFn: logoutWihtoutEndingShift,
@@ -118,20 +166,47 @@ const Layout = ({
   const { data: storesData } = useQuery({
     queryKey: ["storesData"],
     queryFn: getStoresData,
+    enabled: !isLogin,
   });
 
-  // If we're still checking for shift data, don't render the full layout yet
-  if (isCheckingShift) {
-    <LoadingScreen loading={true} />;
+  const navItems = useMemo(
+    () =>
+      profile?.user.pages
+        .map((page, index) => ({ page, path: profile.user.paths[index] }))
+        .filter(({ page }) => page !== "admin" && page !== "الإشعارات")
+        .map(({ page, path }) => ({ page: PAGE_LABELS[path] ?? page, path })) ||
+      [],
+    [profile],
+  );
+
+  // Longest matching path = the current page (so /admin/bills beats /bills).
+  const currentPage = useMemo(
+    () =>
+      [...navItems]
+        .sort((a, b) => b.path.length - a.path.length)
+        .find(({ path }) => location.pathname.startsWith(path)),
+    [navItems, location.pathname],
+  );
+
+  // Pages outside the menu (notifications) still get a title.
+  const pageTitle =
+    currentPage?.page ??
+    Object.entries(PAGE_LABELS).find(([path]) =>
+      location.pathname.startsWith(path),
+    )?.[1] ??
+    "OpenStore";
+
+  useEffect(() => {
+    document.title =
+      pageTitle === "OpenStore" ? "OpenStore" : `${pageTitle} — OpenStore`;
+  }, [pageTitle]);
+
+  if (isLogin) {
+    return <>{children}</>;
   }
 
-  const navItems =
-    profile?.user.pages
-      .map((page, index) => ({ page, path: profile.user.paths[index] }))
-      .filter(({ page }) => page !== "admin" && page !== "الإشعارات") || [];
-
   const storeSelector = profile?.user.paths.includes("/admin") && (
-    <FormControl size="small" fullWidth={isMobile}>
+    <FormControl size="small" fullWidth={isMobile} sx={{ minWidth: 140 }}>
       <InputLabel size="small">المتجر</InputLabel>
       <Select
         size="small"
@@ -157,22 +232,23 @@ const Layout = ({
     <>
       <AppBar
         position="sticky"
+        elevation={isMobile ? 1 : 4}
         sx={{
           bgcolor: "background.paper",
-          display: location.pathname === "/login" ? "none" : "block",
+          color: "text.primary",
           width: "100%",
+          pt: "env(safe-area-inset-top)",
         }}
         ref={topNavRef}
       >
-        <Toolbar sx={{ width: "100%" }}>
+        <Toolbar sx={{ width: "100%", px: { xs: 1, md: 2 } }}>
           {isMobile ? (
             <Box
               sx={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
                 width: "100%",
-                py: 1,
+                gap: 1,
               }}
             >
               <IconButton
@@ -183,20 +259,47 @@ const Layout = ({
               >
                 <MenuIcon />
               </IconButton>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography noWrap sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                  {pageTitle}
+                </Typography>
+                {store?.name && (
+                  <Typography
+                    noWrap
+                    variant="caption"
+                    color="text.secondary"
+                    component="div"
+                  >
+                    {store.name}
+                  </Typography>
+                )}
+              </Box>
               {profile?.user.paths.includes("/notifications") && (
                 <NotificationBell />
               )}
             </Box>
           ) : (
-            <Grid2 container spacing={2} py={2} px={1} width="100%">
-              <Grid2
-                container
-                size={9.5}
-                gap={2}
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 2,
+                py: 2,
+                px: 1,
+                width: "100%",
+              }}
+            >
+              <Box
                 sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 1,
+                  flex: 1,
                   ".active > Button": {
-                    borderBottom: 1,
-                    borderColor: "primary.dark",
+                    borderBottom: 2,
+                    borderColor: "primary.main",
+                    borderRadius: 0,
+                    color: "primary.main",
                   },
                   Button: {
                     color: "text.primary",
@@ -208,13 +311,14 @@ const Layout = ({
                     <Button>{page}</Button>
                   </NavLink>
                 ))}
-              </Grid2>
-              <Grid2
-                container
-                size={2.5}
-                gap={2}
-                justifyContent="flex-end"
-                alignItems="flex-start"
+              </Box>
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 2,
+                  alignItems: "flex-start",
+                  flexShrink: 0,
+                }}
               >
                 {storeSelector}
                 <Button
@@ -227,16 +331,19 @@ const Layout = ({
                 {profile?.user.paths.includes("/notifications") && (
                   <NotificationBell />
                 )}
-                <IconButton
-                  onClick={() => {
-                    window.electron.ipcRenderer.invoke("open-new-window");
-                  }}
-                  color="primary"
-                >
-                  <AddIcon />
-                </IconButton>
-              </Grid2>
-            </Grid2>
+                {!IS_WEB && (
+                  <IconButton
+                    onClick={() => {
+                      window.electron.ipcRenderer.invoke("open-new-window");
+                    }}
+                    color="primary"
+                    aria-label="نافذة جديدة"
+                  >
+                    <AddIcon />
+                  </IconButton>
+                )}
+              </Box>
+            </Box>
           )}
         </Toolbar>
       </AppBar>
@@ -245,27 +352,74 @@ const Layout = ({
         anchor="right"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+        PaperProps={{ sx: { width: 290, maxWidth: "85vw" } }}
       >
-        <Box sx={{ width: 270, display: "flex", flexDirection: "column" }}>
-          <List sx={{ ".active > .MuiButtonBase-root": { bgcolor: "action.selected" } }}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            pt: "env(safe-area-inset-top)",
+            pb: "env(safe-area-inset-bottom)",
+          }}
+        >
+          <Box sx={{ p: 2, display: "flex", alignItems: "center", gap: 1.5 }}>
+            <StorefrontIcon color="primary" />
+            <Box sx={{ minWidth: 0 }}>
+              <Typography noWrap sx={{ fontWeight: 700 }}>
+                {store?.name || "OpenStore"}
+              </Typography>
+              {profile?.user.name && (
+                <Typography
+                  noWrap
+                  variant="caption"
+                  color="text.secondary"
+                  component="div"
+                >
+                  {profile.user.name}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+          <Divider />
+          <List
+            sx={{
+              flex: 1,
+              overflowY: "auto",
+              ".active > .MuiButtonBase-root": {
+                bgcolor: "action.selected",
+                color: "primary.main",
+                "& .MuiListItemIcon-root": { color: "primary.main" },
+              },
+            }}
+          >
             {navItems.map(({ page, path }) => (
               <NavLink
                 key={path}
                 to={path}
                 style={{ textDecoration: "none", color: "inherit" }}
               >
-                <ListItemButton onClick={() => setDrawerOpen(false)}>
+                <ListItemButton
+                  onClick={() => setDrawerOpen(false)}
+                  sx={{ minHeight: 48 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    {PAGE_ICONS[path] ?? <ReceiptLongIcon />}
+                  </ListItemIcon>
                   <ListItemText primary={page} />
                 </ListItemButton>
               </NavLink>
             ))}
           </List>
           <Divider />
-          <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+          <Box
+            sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}
+          >
             {storeSelector}
             <Button
-              variant="contained"
+              variant="outlined"
               color="error"
+              startIcon={<LogoutIcon />}
               onClick={() => {
                 setDrawerOpen(false);
                 switchAccount();
@@ -273,27 +427,23 @@ const Layout = ({
             >
               تبديل المستخدم
             </Button>
-            <Button
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={() => {
-                setDrawerOpen(false);
-                window.electron.ipcRenderer.invoke("open-new-window");
-              }}
-            >
-              نافذة جديدة
-            </Button>
+            {!IS_WEB && (
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  setDrawerOpen(false);
+                  window.electron.ipcRenderer.invoke("open-new-window");
+                }}
+              >
+                نافذة جديدة
+              </Button>
+            )}
           </Box>
         </Box>
       </Drawer>
 
-      <ViewContainer
-        sx={{
-          height: `calc(100vh - ${(topNavRef.current?.clientHeight || 0) + 140}px)`,
-        }}
-      >
-        {children}
-      </ViewContainer>
+      <ViewContainer>{children}</ViewContainer>
     </>
   );
 };

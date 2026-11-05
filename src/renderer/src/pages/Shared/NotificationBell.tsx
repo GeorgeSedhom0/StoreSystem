@@ -6,7 +6,7 @@ import {
   Box,
   Typography,
   List,
-  ListItem,
+  ListItemButton,
   ListItemText,
   Button,
   Divider,
@@ -98,6 +98,7 @@ const NotificationBell = () => {
   const {
     data: notificationsData,
     isLoading,
+    isError,
     refetch,
   } = useQuery({
     queryKey: ["notificationsPreview", storeId],
@@ -137,7 +138,10 @@ const NotificationBell = () => {
       markRead(notification.id);
     }
     handleClose();
-    // Navigate to notifications page
+    if (notification.type === "restock" && notification.reference_id) {
+      navigate(`/restock-requests?id=${notification.reference_id}`);
+      return;
+    }
     navigate("/notifications");
   };
 
@@ -183,12 +187,17 @@ const NotificationBell = () => {
           vertical: "top",
           horizontal: "left",
         }}
-        PaperProps={{
-          sx: {
-            width: 360,
-            maxHeight: 450,
+        slotProps={{
+          paper: {
+            sx: {
+              width: "min(360px, calc(100vw - 24px))",
+              maxHeight: "min(450px, calc(100dvh - 80px))",
+              display: "flex",
+              flexDirection: "column",
+            },
           },
         }}
+        marginThreshold={12}
       >
         <Box
           sx={{
@@ -196,6 +205,7 @@ const NotificationBell = () => {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            gap: 1,
             borderBottom: 1,
             borderColor: "divider",
           }}
@@ -204,7 +214,7 @@ const NotificationBell = () => {
             الإشعارات
           </Typography>
           {unreadCount > 0 && (
-            <Button size="small" onClick={() => markAllRead()}>
+            <Button onClick={() => markAllRead()} sx={{ minHeight: 40 }}>
               تحديد الكل كمقروء
             </Button>
           )}
@@ -214,18 +224,24 @@ const NotificationBell = () => {
           <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
             <CircularProgress size={24} />
           </Box>
-        ) : notificationsData?.notifications.length === 0 ? (
+        ) : isError ? (
+          <Box sx={{ p: 3, textAlign: "center" }}>
+            <Typography color="error" sx={{ mb: 1 }}>
+              تعذر تحميل الإشعارات
+            </Typography>
+            <Button onClick={() => refetch()}>إعادة المحاولة</Button>
+          </Box>
+        ) : !notificationsData?.notifications.length ? (
           <Box sx={{ p: 3, textAlign: "center" }}>
             <Typography color="text.secondary">لا توجد إشعارات</Typography>
           </Box>
         ) : (
-          <List sx={{ p: 0, maxHeight: 320, overflow: "auto" }}>
+          <List sx={{ p: 0, flex: 1, minHeight: 0, overflow: "auto" }}>
             {notificationsData?.notifications.map((notification, index) => (
               <Box key={notification.id}>
-                <ListItem
+                <ListItemButton
                   onClick={() => handleNotificationClick(notification)}
                   sx={{
-                    cursor: "pointer",
                     bgcolor: notification.is_read
                       ? "transparent"
                       : "action.hover",
@@ -235,6 +251,7 @@ const NotificationBell = () => {
                   }}
                 >
                   <ListItemText
+                    secondaryTypographyProps={{ component: "div" }}
                     primary={
                       <Typography
                         variant="body2"
@@ -273,7 +290,7 @@ const NotificationBell = () => {
                       </Box>
                     }
                   />
-                </ListItem>
+                </ListItemButton>
                 {index < (notificationsData?.notifications.length || 0) - 1 && (
                   <Divider />
                 )}
@@ -284,7 +301,7 @@ const NotificationBell = () => {
 
         <Divider />
         <Box sx={{ p: 1, textAlign: "center" }}>
-          <Button fullWidth onClick={handleSeeAll}>
+          <Button fullWidth onClick={handleSeeAll} sx={{ minHeight: 40 }}>
             عرض كل الإشعارات
           </Button>
         </Box>

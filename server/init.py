@@ -57,6 +57,12 @@ def drop_all_tables(cur):
     cur.execute("DROP TABLE IF EXISTS account_transactions CASCADE")
     cur.execute("DROP TABLE IF EXISTS db_meta CASCADE")
     cur.execute("DROP TABLE IF EXISTS bill_corrections CASCADE")
+    cur.execute("DROP TABLE IF EXISTS bills_pairs CASCADE")
+    cur.execute("DROP TABLE IF EXISTS product_packages CASCADE")
+    cur.execute("DROP TABLE IF EXISTS employee_attendance CASCADE")
+    cur.execute("DROP TABLE IF EXISTS restock_fulfillments CASCADE")
+    cur.execute("DROP TABLE IF EXISTS restock_request_lines CASCADE")
+    cur.execute("DROP TABLE IF EXISTS restock_requests CASCADE")
     cur.execute("SET TIME ZONE 'Africa/Cairo'")
     cur.execute(f"ALTER DATABASE {DATABASE} SET timezone TO 'Africa/Cairo';")
 
@@ -76,12 +82,12 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
+    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20])
     """)
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('cashier', ARRAY[1, 5, 14])
+    ('cashier', ARRAY[1, 5, 14, 20])
     """)
 
     # Create pages table
@@ -113,10 +119,13 @@ def create_all_tables(cur):
     ('الإشعارات', '/notifications'),
     ('admin', '/admin'),
     ('الحسابات', '/accounts'),
-    ('تصحيح الفواتير', '/bill-corrections')
+    ('تصحيح الفواتير', '/bill-corrections'),
+    ('طلبات البضاعة', '/restock-requests')
     """)
     # /bill-corrections (kept in sync with update_db_24.py) is deliberately in
     # no scope: it rewrites history, so it is granted explicitly per scope.
+    # /restock-requests (id 20, kept in sync with update_db_27.py) goes to admin
+    # and to every scope that has /admin/move-products (cashier here).
 
     # Create the users table
     cur.execute("""
@@ -176,6 +185,28 @@ def create_all_tables(cur):
       price FLOAT,
       category VARCHAR
     )
+    """)
+
+    # Product packages (kept in sync with update_db_26.py): a named multiple of
+    # a product's base unit with its own price and optional barcode.
+    cur.execute("""
+    CREATE TABLE product_packages (
+        id BIGSERIAL PRIMARY KEY,
+        product_id BIGINT NOT NULL REFERENCES products(id),
+        name VARCHAR NOT NULL,
+        units INT NOT NULL CHECK (units >= 2),
+        price FLOAT NOT NULL DEFAULT 0,
+        bar_code VARCHAR,
+        is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+    )
+    """)
+    cur.execute("""
+        CREATE INDEX idx_product_packages_product
+        ON product_packages (product_id) WHERE is_deleted = FALSE;
+        CREATE UNIQUE INDEX idx_product_packages_unique_barcode
+        ON product_packages (bar_code)
+        WHERE is_deleted = FALSE AND bar_code IS NOT NULL AND bar_code <> '';
     """)
 
     # Create the product_inventory table
@@ -239,7 +270,7 @@ def create_all_tables(cur):
     )
     """)
     cur.execute("""
-    INSERT INTO db_meta (key, value) VALUES ('version', '25')
+    INSERT INTO db_meta (key, value) VALUES ('version', '27')
     """)
 
     # Create the payment_methods table (dynamic, user-managed payment methods)
@@ -425,6 +456,9 @@ def create_all_tables(cur):
       amount INT,
       time TIMESTAMP NOT NULL,
       total INT,
+      package_id BIGINT,
+      package_units INT,
+      package_name VARCHAR,
       PRIMARY KEY (id, store_id),
       FOREIGN KEY (store_id, bill_id) REFERENCES bills(store_id, id),
       FOREIGN KEY (product_id) REFERENCES products(id)
@@ -454,9 +488,32 @@ def create_all_tables(cur):
         address VARCHAR,
         salary FLOAT,
         started_on TIMESTAMP,
-        stopped_on TIMESTAMP
+        stopped_on TIMESTAMP,
+        pay_type VARCHAR NOT NULL DEFAULT 'monthly',
+        off_days INT[] NOT NULL DEFAULT '{}',
+        daily_hours FLOAT NOT NULL DEFAULT 8,
+        shift_start TIME,
+        track_attendance BOOLEAN NOT NULL DEFAULT TRUE
     )
     """)
+    cur.execute("CREATE INDEX idx_employee_store ON employee (store_id)")
+
+    # Attendance (kept in sync with update_db_26.py): one row per employee/day.
+    cur.execute("""
+    CREATE TABLE employee_attendance (
+        id BIGSERIAL PRIMARY KEY,
+        employee_id BIGINT NOT NULL REFERENCES employee(id) ON DELETE CASCADE,
+        day DATE NOT NULL,
+        status VARCHAR NOT NULL,
+        check_in TIMESTAMP,
+        check_out TIMESTAMP,
+        note TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (employee_id, day)
+    )
+    """)
+    cur.execute("CREATE INDEX idx_employee_attendance_day ON employee_attendance (day)")
 
     # Create salaries table
     cur.execute("""
@@ -467,7 +524,11 @@ def create_all_tables(cur):
         bonus FLOAT,
         deductions FLOAT,
         time TIMESTAMP,
-        payment_method_id BIGINT REFERENCES payment_methods(id)
+        payment_method_id BIGINT REFERENCES payment_methods(id),
+        period_start DATE,
+        period_end DATE,
+        details JSONB,
+        note TEXT
     )
     """)
 
@@ -539,6 +600,63 @@ def create_all_tables(cur):
     cur.execute("""
         CREATE INDEX idx_bill_corrections_bill ON bill_corrections (store_id, bill_id);
         CREATE INDEX idx_products_flow_product_time ON products_flow (product_id, time);
+    """)
+
+    # Restock requests (kept in sync with update_db_27.py).
+    cur.execute("""
+    CREATE TABLE restock_requests (
+        id BIGSERIAL PRIMARY KEY,
+        from_store_id BIGINT NOT NULL REFERENCES store_data(id),
+        to_store_id BIGINT NOT NULL REFERENCES store_data(id),
+        status VARCHAR NOT NULL DEFAULT 'open'
+            CHECK (status IN ('open', 'closed')),
+        note TEXT,
+        created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        seen_at TIMESTAMP,
+        closed_at TIMESTAMP,
+        closed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        closed_side VARCHAR
+            CHECK (closed_side IN ('requester', 'supplier', 'auto')),
+        close_note TEXT,
+        followed_up_at TIMESTAMP,
+        followup_request_id BIGINT
+            REFERENCES restock_requests(id) ON DELETE SET NULL,
+        CHECK (from_store_id <> to_store_id)
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE restock_request_lines (
+        id BIGSERIAL PRIMARY KEY,
+        request_id BIGINT NOT NULL
+            REFERENCES restock_requests(id) ON DELETE CASCADE,
+        product_id BIGINT NOT NULL REFERENCES products(id),
+        quantity INT NOT NULL CHECK (quantity > 0),
+        package_id BIGINT REFERENCES product_packages(id) ON DELETE SET NULL,
+        package_units INT,
+        package_name VARCHAR,
+        UNIQUE (request_id, product_id)
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE restock_fulfillments (
+        id BIGSERIAL PRIMARY KEY,
+        request_id BIGINT NOT NULL
+            REFERENCES restock_requests(id) ON DELETE CASCADE,
+        line_id BIGINT NOT NULL
+            REFERENCES restock_request_lines(id) ON DELETE CASCADE,
+        bill_id BIGINT,
+        store_id BIGINT,
+        quantity INT NOT NULL CHECK (quantity > 0),
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+    """)
+    cur.execute("""
+        CREATE INDEX idx_restock_requests_to ON restock_requests (to_store_id, status);
+        CREATE INDEX idx_restock_requests_from ON restock_requests (from_store_id, status);
+        CREATE INDEX idx_restock_fulfillments_line ON restock_fulfillments (line_id);
+        CREATE INDEX idx_restock_fulfillments_request ON restock_fulfillments (request_id);
     """)
 
     # Performance indexes (kept in sync with update_db_21.py).
@@ -1238,6 +1356,11 @@ def create_all_triggers(cur):
     WHEN (NEW.amount IS DISTINCT FROM OLD.amount)
     EXECUTE FUNCTION mirror_cash_flow_to_accounts();
     """)
+
+    # The seeded stores were inserted before the store -> party sync trigger
+    # existed; touch them so each gets its store party (used by transfers and
+    # off-store payment forwarding).
+    cur.execute("UPDATE store_data SET name = name")
 
 
 def main():

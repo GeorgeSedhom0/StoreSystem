@@ -19,6 +19,9 @@ import {
   TableHead,
   TableRow,
   Paper,
+  Box,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import {
   TrendingUp as TrendingUpIcon,
@@ -36,12 +39,13 @@ import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { Bill as BillType, DBProducts, Product } from "../utils/types";
 import { localTimestamp } from "../utils/functions";
-import { TableVirtuoso } from "react-virtuoso";
+import { TableVirtuoso, Virtuoso } from "react-virtuoso";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
   fixedHeaderContent,
   VirtuosoTableComponents,
 } from "./Components/VirtualTableHelpers";
+import Bill from "./Components/Bill";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import useParties from "../Shared/hooks/useParties";
@@ -106,6 +110,8 @@ const getBills = async (
 };
 
 const Bills = () => {
+  const muiTheme = useTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
   const [showExpandedBill, setShowExpandedBill] = useState<boolean>(() => {
     const showExpandedBill = localStorage.getItem("showExpandedBill");
     if (showExpandedBill === "true") return true;
@@ -362,7 +368,9 @@ const Bills = () => {
         startDate: hasActiveBillIdSearch
           ? "-"
           : startDate.format("YYYY/MM/DD HH:mm"),
-        endDate: hasActiveBillIdSearch ? "-" : endDate.format("YYYY/MM/DD HH:mm"),
+        endDate: hasActiveBillIdSearch
+          ? "-"
+          : endDate.format("YYYY/MM/DD HH:mm"),
         typesLabel,
         partyLabel,
         productLabel,
@@ -465,7 +473,20 @@ const Bills = () => {
                   قم بتحديد الفترة لعرض الفواتير
                 </Typography>
               </Grid2>
-              <Grid2 container gap={3} size={12}>
+              <Grid2
+                container
+                gap={{ xs: 1.5, md: 3 }}
+                size={12}
+                sx={{
+                  "& > *": { flex: { xs: "1 1 100%", sm: "0 0 auto" } },
+                  "& > .MuiTextField-root": {
+                    width: { xs: "100% !important", sm: 220 },
+                  },
+                  "& > .MuiFormControl-root": {
+                    minWidth: { xs: "100%", sm: 160 },
+                  },
+                }}
+              >
                 <TextField
                   label="رقم الفاتورة"
                   type="number"
@@ -493,7 +514,20 @@ const Bills = () => {
                 </ButtonGroup>
               </Grid2>
 
-              <Grid2 container gap={3} size={12}>
+              <Grid2
+                container
+                gap={{ xs: 1.5, md: 3 }}
+                size={12}
+                sx={{
+                  "& > *": { flex: { xs: "1 1 100%", sm: "0 0 auto" } },
+                  "& > .MuiTextField-root": {
+                    width: { xs: "100% !important", sm: 220 },
+                  },
+                  "& > .MuiFormControl-root": {
+                    minWidth: { xs: "100%", sm: 160 },
+                  },
+                }}
+              >
                 <LocalizationProvider
                   dateAdapter={AdapterDayjs}
                   adapterLocale="ar-sa"
@@ -526,7 +560,7 @@ const Bills = () => {
                 </LocalizationProvider>
 
                 <FormControl>
-                  <InputLabel>نوع الفانورة</InputLabel>
+                  <InputLabel>نوع الفاتورة</InputLabel>
                   <Select
                     value={filters}
                     disabled={isBillIdMode}
@@ -578,7 +612,7 @@ const Bills = () => {
                     onClick={() => setRange("shift")}
                     disabled={isBillIdMode}
                   >
-                    اخر شيفت
+                    آخر شيفت
                   </Button>
                   <Button
                     onClick={() => setRange("day")}
@@ -590,7 +624,7 @@ const Bills = () => {
                     onClick={() => setRange("week")}
                     disabled={isBillIdMode}
                   >
-                    هذا الاسبوع
+                    هذا الأسبوع
                   </Button>
                   <Button
                     onClick={() => setRange("month")}
@@ -620,7 +654,7 @@ const Bills = () => {
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label="الطرف الثانى"
+                      label="الطرف الثاني"
                       variant="outlined"
                     />
                   )}
@@ -712,24 +746,56 @@ const Bills = () => {
         )}
 
         <Grid2 size={12}>
-          <Card
-            elevation={3}
-            sx={{
-              position: "relative",
-              height: 600,
-            }}
-          >
-            <LoadingScreen loading={loading} />
-            <TableVirtuoso
-              fixedHeaderContent={fixedHeaderContent}
-              components={VirtuosoTableComponents}
-              data={filteredBills}
-              context={{
-                setMsg: setMsg,
-                getBills: refetchBills,
+          {isMobile ? (
+            <Box sx={{ position: "relative", minHeight: 120 }}>
+              <LoadingScreen loading={loading} />
+              {filteredBills.length === 0 && !loading && (
+                <Typography
+                  align="center"
+                  color="text.secondary"
+                  sx={{ py: 4 }}
+                >
+                  لا توجد فواتير في هذه الفترة
+                </Typography>
+              )}
+              {/* Window scrolling: no nested scroll box on phones. */}
+              <Virtuoso
+                useWindowScroll
+                increaseViewportBy={{ top: 600, bottom: 1600 }}
+                data={filteredBills}
+                itemContent={(_, bill) => (
+                  <Bill
+                    item={bill}
+                    context={{
+                      setMsg,
+                      getBills: refetchBills,
+                      isMobile: true,
+                      expandAll: showExpandedBill || hasActiveBillIdSearch,
+                    }}
+                  />
+                )}
+              />
+            </Box>
+          ) : (
+            <Card
+              elevation={3}
+              sx={{
+                position: "relative",
+                height: 600,
               }}
-            />
-          </Card>
+            >
+              <LoadingScreen loading={loading} />
+              <TableVirtuoso
+                fixedHeaderContent={fixedHeaderContent}
+                components={VirtuosoTableComponents}
+                data={filteredBills}
+                context={{
+                  setMsg: setMsg,
+                  getBills: refetchBills,
+                }}
+              />
+            </Card>
+          )}
         </Grid2>
       </Grid2>
     </>

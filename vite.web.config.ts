@@ -26,12 +26,12 @@ export default defineConfig(({ command }) => ({
   server:
     command === "serve"
       ? {
-          port: 5173,
+          port: Number(process.env.VITE_WEB_PORT) || 5173,
           proxy: {
             // Everything that isn't the root document, a vite-internal path,
             // or a static asset is an API call → proxy to the backend.
             "^/(?!$|@|src/|node_modules/|favicon|assets/).+": {
-              target: "https://localhost:8000",
+              target: process.env.VITE_API_TARGET || "https://localhost:8000",
               changeOrigin: true,
               secure: false,
               configure: (proxy) => {

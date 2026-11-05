@@ -1,3 +1,4 @@
+from typing import Optional
 import bcrypt
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
@@ -5,6 +6,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi import Cookie, Form, Depends
 from datetime import datetime
+from clock import local_now
 import logging
 from dotenv import load_dotenv
 from os import getenv
@@ -172,7 +174,7 @@ def auth_user(
                     VALUES (%s, %s, %s, %s)
                     RETURNING start_date_time
                     """,
-                    (datetime.now(), True, user["id"], store_id),
+                    (local_now(), True, user["id"], store_id),
                 )
 
                 # Send due installments notification as background task
@@ -348,7 +350,7 @@ def logout_user(
                 SET end_date_time = %s, current = False
                 WHERE current = True AND store_id = %s
                 """,
-                (datetime.now(), store_id),
+                (local_now(), store_id),
             )
 
             response = JSONResponse(content={"message": "Logged out successfully"})
@@ -442,42 +444,80 @@ def get_users(current_user: dict = Depends(get_current_user)) -> JSONResponse:
 @router.put("/user")
 def update_user(
     username: str = Form(...),
-    password: str = Form(...),
-    email: str = Form(...),
-    phone: str = Form(...),
+    email: str = Form(""),
+    phone: str = Form(""),
     scope_id: int = Form(...),
+    password: Optional[str] = Form(None),
+    id: Optional[int] = Form(None),
     current_user: dict = Depends(get_current_user),
 ) -> JSONResponse:
     """
-    Update a user
+    Update a user.
+
+    The user is found by `id` (so the username itself can be changed); old
+    clients that send no id are matched by username as before. An empty
+    password keeps the current one. Renaming the logged-in user re-issues
+    their login cookie (the token carries the username).
     """
+    new_username = (username or "").strip()
+    if not new_username:
+        raise HTTPException(status_code=400, detail="اسم المستخدم مطلوب")
     try:
         with Database(HOST, DATABASE, USER, PASS) as cur:
-            hashed_password = bcrypt.hashpw(
-                password.encode("utf-8"),
-                bcrypt.gensalt(),
-            ).decode("utf-8")
+            if id is not None:
+                cur.execute("SELECT * FROM users WHERE id = %s", (id,))
+            else:
+                cur.execute("SELECT * FROM users WHERE username = %s", (new_username,))
+            existing = cur.fetchone()
+            if not existing:
+                raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+            if new_username != existing["username"]:
+                cur.execute(
+                    "SELECT 1 FROM users WHERE username = %s AND id <> %s",
+                    (new_username, existing["id"]),
+                )
+                if cur.fetchone():
+                    raise HTTPException(
+                        status_code=400, detail="اسم المستخدم مستخدم بالفعل"
+                    )
+
+            cur.execute("SELECT 1 FROM scopes WHERE id = %s", (scope_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=400, detail="الصلاحية غير موجودة")
+
+            hashed_password = existing["password"]
+            if password:
+                hashed_password = bcrypt.hashpw(
+                    password.encode("utf-8"), bcrypt.gensalt()
+                ).decode("utf-8")
+
             cur.execute(
                 """
                 UPDATE users
-                SET password = %s, email = %s, phone = %s, scope_id = %s
-                WHERE username = %s
-                RETURNING *
+                SET username = %s, password = %s, email = %s, phone = %s, scope_id = %s
+                WHERE id = %s
+                RETURNING id, username, email, phone, language, scope_id
                 """,
-                (hashed_password, email, phone, scope_id, username),
+                (new_username, hashed_password, email, phone, scope_id, existing["id"]),
             )
             user = cur.fetchone()
 
-            cur.execute(
-                """
-                UPDATE users
-                SET username = %s
-                WHERE id = %s
-                """,
-                (username, user["id"]),
+        response = JSONResponse(content=dict(user))
+        if (
+            current_user.get("username") == existing["username"]
+            and new_username != existing["username"]
+        ):
+            response.set_cookie(
+                key="access_token",
+                value=jwt.encode({"sub": new_username}, SECRET, algorithm=ALGORITHM),
+                httponly=True,
+                samesite="none",
+                secure=True,
             )
-
-            return JSONResponse(content=user)
+        return response
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e

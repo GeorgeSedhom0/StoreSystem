@@ -7,6 +7,9 @@ export interface CorrectionLine {
   quantity: number;
   wholesale_price: number;
   price: number;
+  /** v26: the line was sold as a package (quantities here are in units). */
+  package_units?: number | null;
+  package_name?: string | null;
 }
 
 export interface BillSnapshot {

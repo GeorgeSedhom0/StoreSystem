@@ -1,3 +1,4 @@
+import { lineKey } from "../../Shared/packages";
 import {
   Dialog,
   DialogTitle,
@@ -31,7 +32,7 @@ interface BulkEditDialogProps {
   open: boolean;
   onClose: () => void;
   products: SCProduct[];
-  selectedProductIds: Set<number>;
+  selectedProductIds: Set<string>;
   onApply: (updatedProducts: SCProduct[]) => void;
 }
 
@@ -62,7 +63,7 @@ const BulkEditDialog = ({
   const [applyToAll, setApplyToAll] = useState(false);
 
   const selectedProducts = useMemo(
-    () => products.filter((p) => selectedProductIds.has(p.id)),
+    () => products.filter((p) => selectedProductIds.has(lineKey(p))),
     [products, selectedProductIds],
   );
 
@@ -106,10 +107,23 @@ const BulkEditDialog = ({
     return newValue;
   };
 
+  // Absolute amounts are per unit; a package line's cost is per package.
+  const inputFor = (product: SCProduct) =>
+    field === "wholesale_price" &&
+    !changeType.endsWith("percent") &&
+    (product.package_units || 0) >= 2
+      ? value * (product.package_units as number)
+      : value;
+
   const preview = useMemo(() => {
     return targetProducts.slice(0, 3).map((product) => {
       const currentValue = product[field];
-      const newValue = calculateNewValue(currentValue, changeType, value, field);
+      const newValue = calculateNewValue(
+        currentValue,
+        changeType,
+        inputFor(product),
+        field,
+      );
       return {
         name: product.name,
         currentValue,
@@ -119,13 +133,18 @@ const BulkEditDialog = ({
   }, [targetProducts, field, changeType, value]);
 
   const handleApply = () => {
-    const targetIds = new Set(targetProducts.map((p) => p.id));
+    const targetIds = new Set(targetProducts.map((p) => lineKey(p)));
 
     const updatedProducts = products.map((product) => {
-      if (!targetIds.has(product.id)) return product;
+      if (!targetIds.has(lineKey(product))) return product;
 
       const currentValue = product[field];
-      const newValue = calculateNewValue(currentValue, changeType, value, field);
+      const newValue = calculateNewValue(
+        currentValue,
+        changeType,
+        inputFor(product),
+        field,
+      );
 
       return { ...product, [field]: newValue };
     });
@@ -148,9 +167,7 @@ const BulkEditDialog = ({
       <DialogContent>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
           <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-            <Typography>
-              المنتجات المحددة: {selectedProducts.length}
-            </Typography>
+            <Typography>المنتجات المحددة: {selectedProducts.length}</Typography>
             <FormControlLabel
               control={
                 <Radio

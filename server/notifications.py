@@ -3,11 +3,14 @@ Notifications API endpoints for in-app notifications.
 Handles CRUD operations for notifications including expiration alerts.
 """
 
+import json
+
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from datetime import datetime
+from clock import local_now
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
@@ -224,7 +227,10 @@ def create_notification(
             )
             result = cur.fetchone()
 
-            return JSONResponse(content={"notification": result})
+            # Timestamps aren't JSON-serializable as-is.
+            return JSONResponse(
+                content={"notification": json.loads(json.dumps(result, default=str))}
+            )
 
     except Exception as e:
         print(f"Error creating notification: {e}")
@@ -628,7 +634,7 @@ def create_due_installments_notification(
                 due_date = datetime.fromisoformat(
                     str(next_due_date).replace("Z", "+00:00")
                 )
-                days_overdue = (datetime.now().date() - due_date.date()).days
+                days_overdue = (local_now().date() - due_date.date()).days
                 formatted_due_date = due_date.strftime("%Y-%m-%d")
 
                 if days_overdue > 0:

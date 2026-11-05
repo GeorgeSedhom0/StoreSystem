@@ -71,6 +71,11 @@ def get_installments(
          JOIN assosiated_parties ap ON b_party.party_id = ap.id
          WHERE b_party.id = i.bill_id
          LIMIT 1) AS party_name,
+        (SELECT COALESCE(ap.phone, '')
+         FROM bills b_party
+         JOIN assosiated_parties ap ON b_party.party_id = ap.id
+         WHERE b_party.id = i.bill_id
+         LIMIT 1) AS party_phone,
         -- Installment Flow
         COALESCE(flow_agg.flow, '[]'::json) AS flow,
         -- Product/Bill details *only if* the bill belongs to the target store
@@ -148,6 +153,7 @@ def get_installments(
                         "installments_count": row["installments_count"],
                         "time": time_str,
                         "party_name": row["party_name"] or "",
+                        "party_phone": row.get("party_phone") or "",
                         "flow": flow_data,
                         "total": total,
                         "products": product_data,

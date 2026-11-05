@@ -1,4 +1,5 @@
 import { Button, DialogActions } from "@mui/material";
+import { lineView } from "../Shared/packages";
 import { forwardRef, useContext } from "react";
 import { CollectionBill } from "./types";
 import { StoreContext } from "../../StoreDataProvider";
@@ -281,68 +282,80 @@ const BillCollectionView = forwardRef<HTMLDivElement, BillCollectionViewProps>(
                   </tr>
                 </thead>
                 <tbody>
-                  {bill.products.map((product, i) => (
-                    <tr
-                      key={i}
-                      style={{
-                        backgroundColor:
-                          i % 2 === 0 ? "white" : "rgba(0, 0, 0, 0.20)",
-                      }}
-                    >
-                      <td
+                  {bill.products.map((product, i) => {
+                    // A package line shows packages and per-package prices.
+                    const lv = lineView(product);
+                    const u = lv.isPackage
+                      ? (product.package_units as number)
+                      : 1;
+                    return (
+                      <tr
+                        key={i}
                         style={{
-                          fontSize: "1.2em",
-                          textAlign: "center",
-                          padding: "4px",
-                          wordBreak: "break-word",
-                          whiteSpace: "normal",
+                          backgroundColor:
+                            i % 2 === 0 ? "white" : "rgba(0, 0, 0, 0.20)",
                         }}
                       >
-                        {product.name}
-                      </td>
-                      <td
-                        style={{
-                          fontSize: "1.2em",
-                          textAlign: "center",
-                          padding: "4px",
-                        }}
-                      >
-                        {product.wholesale_price}
-                      </td>
-                      <td
-                        style={{
-                          fontSize: "1.2em",
-                          textAlign: "center",
-                          padding: "4px",
-                        }}
-                      >
-                        {product.price}
-                      </td>
-                      <td
-                        style={{
-                          fontSize: "1.2em",
-                          textAlign: "center",
-                          padding: "4px",
-                        }}
-                      >
-                        {formatProductAmount(product.amount, bill.type)}
-                      </td>
-                      <td
-                        style={{
-                          fontSize: "1.2em",
-                          textAlign: "center",
-                          padding: "4px",
-                        }}
-                      >
-                        {formatProductTotal(
-                          product.price,
-                          product.wholesale_price,
-                          product.amount,
-                          bill.type,
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td
+                          style={{
+                            fontSize: "1.2em",
+                            textAlign: "center",
+                            padding: "4px",
+                            wordBreak: "break-word",
+                            whiteSpace: "normal",
+                          }}
+                        >
+                          {product.name}
+                          {lv.unitLabel && (
+                            <div style={{ fontSize: "0.8em" }}>
+                              {lv.unitLabel}
+                            </div>
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: "1.2em",
+                            textAlign: "center",
+                            padding: "4px",
+                          }}
+                        >
+                          {lv.wholesale}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: "1.2em",
+                            textAlign: "center",
+                            padding: "4px",
+                          }}
+                        >
+                          {lv.price}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: "1.2em",
+                            textAlign: "center",
+                            padding: "4px",
+                          }}
+                        >
+                          {formatProductAmount(product.amount / u, bill.type)}
+                        </td>
+                        <td
+                          style={{
+                            fontSize: "1.2em",
+                            textAlign: "center",
+                            padding: "4px",
+                          }}
+                        >
+                          {formatProductTotal(
+                            product.price,
+                            product.wholesale_price,
+                            product.amount,
+                            bill.type,
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 

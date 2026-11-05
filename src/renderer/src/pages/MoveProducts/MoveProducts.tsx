@@ -2,13 +2,7 @@ import {
   Button,
   Card,
   Grid2,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
-  Table,
-  TableBody,
   FormControl,
   InputLabel,
   Select,
@@ -22,12 +16,23 @@ import {
   Switch,
   Chip,
   Box,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { useCallback, useState, useContext, useRef, useEffect } from "react";
-import { Product, SCProduct, StoreData } from "../utils/types";
+import { Product, ProductPackage, SCProduct, StoreData } from "../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import ProductInCart from "../Shared/ProductInCart";
+import CartView from "../Shared/CartView";
+import { apiError } from "../utils/errors";
+import MobileCheckoutBar, {
+  MobileBarSpacer,
+} from "../Shared/MobileCheckoutBar";
+import { addToCartLines, makeCartLine } from "../Shared/packages";
+import RestockPicker, { RestockFill } from "./RestockPicker";
+import RestockResultDialog, { RestockOutcome } from "./RestockResultDialog";
+import { useSearchParams } from "react-router-dom";
+import { restockApi } from "../Restock/api";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { localTimestamp } from "../utils/functions";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
@@ -37,7 +42,7 @@ import useProducts from "../Shared/hooks/useProducts";
 import usePaymentMethods from "../Shared/hooks/usePaymentMethods";
 import useAccounts from "../Shared/hooks/useAccounts";
 import { StoreContext } from "@renderer/StoreDataProvider";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePersistentCart } from "../Shared/hooks/usePersistentCart";
 import {
   usePosUi,
@@ -67,6 +72,8 @@ const MoveProducts = () => {
     isLoading: isProductsLoading,
   } = useProducts();
 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [shoppingCart, setShoppingCart] = usePersistentCart(
     "MoveProducts",
     [],
@@ -101,6 +108,134 @@ const MoveProducts = () => {
   const [sourceMethodId, setSourceMethodId] = useState<number | "">("");
   const [destMethodId, setDestMethodId] = useState<number | "">("");
   const [settleFromDebt, setSettleFromDebt] = useState<boolean>(false);
+
+  // ─── Restock requests linked to this transfer (v27) ───────────────────────
+  const queryClient = useQueryClient();
+  const linkKey = `moveRestock_${storeId}`;
+  const [linked, setLinkedState] = useState<{
+    dest: number;
+    ids: number[];
+  } | null>(() => {
+    try {
+      const v = JSON.parse(
+        localStorage.getItem(`moveRestock_${storeId}`) || "null",
+      );
+      return v && Array.isArray(v.ids) && v.ids.length ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const setLinked = useCallback(
+    (v: { dest: number; ids: number[] } | null) => {
+      setLinkedState(v);
+      try {
+        if (v) localStorage.setItem(linkKey, JSON.stringify(v));
+        else localStorage.removeItem(linkKey);
+      } catch {
+        // ignore
+      }
+    },
+    [linkKey],
+  );
+  // Restore the destination of a linked (persisted) transfer after a reload.
+  useEffect(() => {
+    if (linked && destinationStoreId == null)
+      setDestinationStoreId(linked.dest);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [preselect, setPreselect] = useState<number[] | undefined>();
+  const [shortNote, setShortNote] = useState<string>("");
+  const [outcome, setOutcome] = useState<RestockOutcome[] | null>(null);
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const raw = params.get("restock");
+    if (!raw) return;
+    const ids = raw.split(",").map(Number).filter(Boolean);
+    params.delete("restock");
+    setParams(params, { replace: true });
+    if (ids.length) {
+      setPreselect(ids);
+      setPickerOpen(true);
+    }
+  }, [params, setParams]);
+
+  // Open requests addressed to this store (to offer linking). Users without
+  // the restock page get a 403 here and simply see no restock controls.
+  const { data: incomingReqs } = useQuery({
+    queryKey: ["restock", "list", "incoming-open", storeId],
+    queryFn: () => restockApi.list(storeId, "incoming", "open"),
+    retry: false,
+    staleTime: 30_000,
+  });
+  const destOpenReqs = (incomingReqs || []).filter(
+    (r) =>
+      r.status === "open" &&
+      r.from_store_id === destinationStoreId &&
+      r.totals.lines_open > 0,
+  );
+  const linkedHere =
+    linked && linked.dest === destinationStoreId ? linked.ids : [];
+
+  const applyFill = useCallback(
+    (fill: RestockFill) => {
+      // A cart prepared for another store doesn't belong in this transfer.
+      const otherStore =
+        destinationStoreId != null && destinationStoreId !== fill.destStoreId;
+      setDestinationStoreId(fill.destStoreId);
+      setShoppingCart((prev) => {
+        let cart = otherStore ? [] : [...prev];
+        for (const { product, qty } of fill.lines) {
+          const i = cart.findIndex((l) => l.id === product.id && !l.package_id);
+          if (i >= 0) {
+            // Starting twice must not double the line. Batch picks were for
+            // the old quantity, so they're re-picked (FEFO) if it changes.
+            const q = Math.max(cart[i].quantity, qty);
+            cart[i] =
+              q === cart[i].quantity
+                ? cart[i]
+                : {
+                    ...cart[i],
+                    quantity: q,
+                    batches: undefined,
+                    batch_id: undefined,
+                  };
+          } else if (cart.some((l) => l.id === product.id)) {
+            cart = addToCartLines(cart, product, null, "buy", qty);
+          } else {
+            cart.push(makeCartLine(product, null, "buy", qty));
+          }
+        }
+        return cart;
+      });
+      const prevIds =
+        linked && linked.dest === fill.destStoreId ? linked.ids : [];
+      setLinked({
+        dest: fill.destStoreId,
+        ids: Array.from(new Set([...prevIds, ...fill.ids])),
+      });
+      const notes: string[] = [];
+      if (fill.partial.length)
+        notes.push(
+          `جزئي: ${fill.partial
+            .map((p) => `${p.name} (${p.qty} من ${p.remaining})`)
+            .join("، ")}`,
+        );
+      if (fill.unavailable.length)
+        notes.push(`غير متوفر: ${fill.unavailable.join("، ")}`);
+      setShortNote(notes.join(" — "));
+      setPickerOpen(false);
+      setPreselect(undefined);
+      setMsg({
+        type: "success",
+        text: `${otherStore ? "استُبدلت السلة — " : ""}أُضيف ${fill.lines.length} صنف من الطلب ${fill.ids
+          .map((i) => `#${i}`)
+          .join("، ")}`,
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [linked, setLinked, destinationStoreId],
+  );
 
   // Get stores data for dropdown
   const { data: storesData, isLoading: isStoresLoading } = useQuery({
@@ -145,33 +280,16 @@ const MoveProducts = () => {
     (m) => m.home_store_id == null || m.home_store_id === destinationStoreId,
   );
 
-  const addToCart = useCallback((product: Product | null) => {
-    if (!product) return;
-    setShoppingCart((prev) => {
-      if (!product.id) return prev;
-      const productExists = prev.find((item) => item.id === product.id);
-      if (productExists) {
-        return prev.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        );
-      } else {
-        return [
-          ...prev,
-          {
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            wholesale_price: product.wholesale_price,
-            quantity: 1,
-            stock: product.stock,
-            barCode: product.bar_code,
-          },
-        ];
-      }
-    });
-  }, []);
+  // Transfers move base units: a scanned/selected package adds its units.
+  const addToCart = useCallback(
+    (product: Product | null, pkg?: ProductPackage | null) => {
+      if (!product) return;
+      setShoppingCart((prev) =>
+        addToCartLines(prev, product, null, "buy", pkg ? pkg.units : 1),
+      );
+    },
+    [],
+  );
   useBarcodeDetection(products, addToCart, setMsg);
   useQuickHandle(shoppingCart, setShoppingCart);
 
@@ -235,7 +353,7 @@ const MoveProducts = () => {
           })),
         };
 
-        await axios.post("/admin/move-products", bill, {
+        const { data } = await axios.post("/admin/move-products", bill, {
           params: {
             source_store_id: storeId,
             destination_store_id: destinationStoreId,
@@ -244,8 +362,36 @@ const MoveProducts = () => {
             destination_payment_method_id:
               destMethodId === "" ? undefined : destMethodId,
             settle_from_debt: settleFromDebt,
+            restock_request_ids: linkedHere.length ? linkedHere : undefined,
           },
+          // FastAPI wants repeated keys: restock_request_ids=1&restock_request_ids=2
+          paramsSerializer: { indexes: null },
         });
+        if (linkedHere.length) {
+          const all: RestockOutcome[] = data?.restock || [];
+          // Only requests this transfer actually sent something to.
+          const restockOutcome = all.filter(
+            (r) => !r.skipped && (r.sent_now || 0) > 0,
+          );
+          const skipped = all.filter((r) => r.skipped);
+          if (skipped.length)
+            setTimeout(
+              () =>
+                setMsg({
+                  type: "warning",
+                  text: `تم النقل، لكن لم يُسجَّل على الطلب ${skipped
+                    .map((r) => `#${r.id}`)
+                    .join(
+                      "، ",
+                    )} (أُغلق أو تعذر الربط) — راجعه من صفحة طلبات البضاعة`,
+                }),
+              0,
+            );
+          setLinked(null);
+          setShortNote("");
+          queryClient.invalidateQueries({ queryKey: ["restock"] });
+          if (restockOutcome.length) setOutcome(restockOutcome);
+        }
 
         // Remember the account choice for this store-pair
         localStorage.setItem(
@@ -263,7 +409,7 @@ const MoveProducts = () => {
         console.log(error);
         setMsg({
           type: "error",
-          text: "حدث خطأ أثناء نقل المنتجات",
+          text: apiError(error, "حدث خطأ أثناء نقل المنتجات"),
         });
       } finally {
         // Always reset submission state
@@ -279,6 +425,9 @@ const MoveProducts = () => {
       sourceMethodId,
       destMethodId,
       settleFromDebt,
+      linkedHere,
+      setLinked,
+      queryClient,
     ],
   );
 
@@ -375,6 +524,23 @@ const MoveProducts = () => {
           isSubmitting
         }
       />
+      <RestockPicker
+        open={pickerOpen}
+        onClose={() => {
+          setPickerOpen(false);
+          setPreselect(undefined);
+        }}
+        storeId={storeId}
+        products={products}
+        preselect={preselect}
+        onApply={applyFill}
+      />
+      <RestockResultDialog
+        outcome={outcome}
+        storeId={storeId}
+        onClose={() => setOutcome(null)}
+        onError={(text) => setMsg({ type: "error", text })}
+      />
       {/* Bill ID Dialog */}
       <Dialog open={billDialogOpen} onClose={() => setBillDialogOpen(false)}>
         <DialogTitle>ابدأ من فاتورة</DialogTitle>
@@ -406,7 +572,17 @@ const MoveProducts = () => {
           </Button>
         </DialogActions>
       </Dialog>
-      <Grid2 size={cardSizes.actions}>
+      {isMobile && (
+        <Grid2 size={12} sx={{ order: 1 }}>
+          <ProductAutocomplete
+            label="ابحث عن منتج أو امسح الباركود"
+            onProductSelect={addToCart}
+            withPackages
+            products={products}
+          />
+        </Grid2>
+      )}
+      <Grid2 size={cardSizes.actions} sx={{ order: { xs: 3, md: 0 } }}>
         <Card elevation={3} sx={posActionsCardSx(density)}>
           <Grid2 container spacing={density.spacing} alignItems="center">
             <Grid2 size={12}>
@@ -423,9 +599,14 @@ const MoveProducts = () => {
                   size="small"
                   value={destinationStoreId ?? ""}
                   label="المتجر الوجهة"
-                  onChange={(e) =>
-                    setDestinationStoreId(Number(e.target.value))
-                  }
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setDestinationStoreId(v);
+                    if (linked && linked.dest !== v) {
+                      setLinked(null);
+                      setShortNote("");
+                    }
+                  }}
                   fullWidth
                 >
                   {destinationStores.map((store) => (
@@ -448,25 +629,95 @@ const MoveProducts = () => {
               </Button>
             </Grid2>
 
-            <Grid2 size={splitField(density.isSplit, 2, 6)}>
-              <Button
-                variant="contained"
-                onClick={() => submitBill(shoppingCart)}
-                disabled={
-                  shoppingCart.length === 0 ||
-                  destinationStoreId === null ||
-                  destinationStoreId === undefined ||
-                  isSubmitting
-                }
-                fullWidth
-              >
-                {isSubmitting ? "جاري النقل..." : "نقل المنتجات"}
-              </Button>
-            </Grid2>
+            {incomingReqs !== undefined && (
+              <Grid2 size={splitField(density.isSplit, 2, 6)}>
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  onClick={() => {
+                    setPreselect(undefined);
+                    setPickerOpen(true);
+                  }}
+                  fullWidth
+                >
+                  ابدأ من طلب
+                  {incomingReqs.length > 0 && ` (${incomingReqs.length})`}
+                </Button>
+              </Grid2>
+            )}
 
-            <Grid2 size={splitField(density.isSplit, 4, 12)}>
+            {(linkedHere.length > 0 || destOpenReqs.length > 0) && (
+              <Grid2 size={12}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  {linkedHere.map((id) => (
+                    <Chip
+                      key={id}
+                      color="primary"
+                      label={`مرتبط بطلب #${id}`}
+                      onDelete={() => {
+                        const ids = linkedHere.filter((x) => x !== id);
+                        setLinked(
+                          ids.length && destinationStoreId != null
+                            ? { dest: destinationStoreId, ids }
+                            : null,
+                        );
+                      }}
+                    />
+                  ))}
+                  {linkedHere.length === 0 && destOpenReqs.length > 0 && (
+                    <Chip
+                      color="warning"
+                      variant="outlined"
+                      label={`لهذا المتجر ${destOpenReqs.length} طلب مفتوح — اضغط لربط النقل به`}
+                      onClick={() =>
+                        destinationStoreId != null &&
+                        setLinked({
+                          dest: destinationStoreId,
+                          ids: destOpenReqs.map((r) => r.id),
+                        })
+                      }
+                    />
+                  )}
+                  {linkedHere.length > 0 && shortNote && (
+                    <Typography variant="caption" color="warning.main">
+                      {shortNote}
+                    </Typography>
+                  )}
+                </Box>
+              </Grid2>
+            )}
+
+            {!isMobile && (
+              <Grid2 size={splitField(density.isSplit, 2, 6)}>
+                <Button
+                  variant="contained"
+                  onClick={() => submitBill(shoppingCart)}
+                  disabled={
+                    shoppingCart.length === 0 ||
+                    destinationStoreId === null ||
+                    destinationStoreId === undefined ||
+                    isSubmitting
+                  }
+                  fullWidth
+                >
+                  {isSubmitting ? "جاري النقل..." : "نقل المنتجات"}
+                </Button>
+              </Grid2>
+            )}
+
+            <Grid2
+              size={splitField(density.isSplit, 4, 12)}
+              sx={{ display: { xs: "none", md: "block" } }}
+            >
               <Typography variant="h6" align="center">
-                الاجمالي:{" "}
+                الإجمالي:{" "}
                 {shoppingCart
                   .reduce(
                     (acc, item) => acc + item.wholesale_price * item.quantity,
@@ -486,7 +737,9 @@ const MoveProducts = () => {
                     <Select
                       label="حساب الاستلام (هذا المتجر)"
                       value={sourceMethodId}
-                      onChange={(e) => setSourceMethodId(Number(e.target.value))}
+                      onChange={(e) =>
+                        setSourceMethodId(Number(e.target.value))
+                      }
                       disabled={settleFromDebt}
                     >
                       {sourceMethods.map((m) => (
@@ -550,57 +803,61 @@ const MoveProducts = () => {
               </>
             )}
 
-            <Grid2 size={12}>
-              <ProductAutocomplete
-                onProductSelect={addToCart}
-                products={products}
-              />
-            </Grid2>
+            {!isMobile && (
+              <Grid2 size={12}>
+                <ProductAutocomplete
+                  onProductSelect={addToCart}
+                  withPackages
+                  products={products}
+                />
+              </Grid2>
+            )}
           </Grid2>
         </Card>
       </Grid2>{" "}
-      <Grid2 size={cardSizes.cart}>
+      <Grid2 size={cardSizes.cart} sx={{ order: { xs: 2, md: 0 } }}>
         <Card elevation={3} sx={posCartCardSx(density)}>
-          <TableContainer
+          <CartView
             ref={cartTableRef}
-            sx={{
-              ...posCartScrollSx(density),
-              overflowY: "auto",
-            }}
-          >
-            <Table
-              stickyHeader
-              sx={{
-                "& .MuiTableCell-head": {
-                  bgcolor: "background.paper",
-                },
-              }}
-            >
-              <TableHead>
-                <TableRow>
-                  <TableCell>المنتج</TableCell>
-                  <TableCell>الكمية</TableCell>
-                  <TableCell>سعر الشراء</TableCell>
-                  <TableCell>الاجمالي</TableCell>
-                  <TableCell></TableCell>
-                  <TableCell>الكمية المتاحة</TableCell>
-                  <TableCell>الصلاحية</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {shoppingCart.map((product) => (
-                  <ProductInCart
-                    key={product.id}
-                    product={product}
-                    setShoppingCart={setShoppingCart}
-                    type="transfer"
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+            cart={shoppingCart}
+            setCart={setShoppingCart}
+            type="transfer"
+            scrollSx={posCartScrollSx(density)}
+            emptyHint="امسح باركود أو ابحث عن منتج لنقله"
+          />
         </Card>
       </Grid2>
+      {isMobile && (
+        <>
+          <Grid2 size={12} sx={{ order: 4 }}>
+            <MobileBarSpacer />
+          </Grid2>
+          <MobileCheckoutBar
+            total={
+              Math.round(
+                shoppingCart.reduce(
+                  (a, i) => a + i.wholesale_price * i.quantity,
+                  0,
+                ) * 100,
+              ) / 100
+            }
+            count={shoppingCart.length}
+            onSave={() => submitBill(shoppingCart)}
+            disabled={
+              shoppingCart.length === 0 ||
+              destinationStoreId === null ||
+              destinationStoreId === undefined ||
+              isSubmitting
+            }
+            saveLabel={isSubmitting ? "جاري النقل..." : "نقل المنتجات"}
+            caption={
+              destinationStoreId == null
+                ? "اختر المتجر المستلم أولاً"
+                : undefined
+            }
+          />
+        </>
+      )}
     </Grid2>
   );
 };

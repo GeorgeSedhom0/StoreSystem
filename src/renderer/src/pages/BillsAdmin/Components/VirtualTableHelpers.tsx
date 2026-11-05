@@ -21,9 +21,9 @@ export const fixedHeaderContent = () => {
       <TableCell>نوع الفاتورة</TableCell>
       <TableCell>الوقت</TableCell>
       <TableCell>الخصم</TableCell>
-      <TableCell>الاجمالى</TableCell>
+      <TableCell>الإجمالي</TableCell>
       <TableCell>معاينة او طباعة</TableCell>
-      <TableCell>الطرف الثانى</TableCell>
+      <TableCell>الطرف الثاني</TableCell>
     </TableRow>
   );
 };

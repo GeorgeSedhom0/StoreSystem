@@ -14,11 +14,16 @@ services:
       - TZ=Africa/Cairo
       - PGTZ=Africa/Cairo
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      # Automatic backups (backup_scheduler.py) are written here; the
+      # host folder below keeps them when the container is rebuilt.
+      - BACKUP_DIR=/backups
     depends_on:
       - db
     volumes:
       - ./:/app
       - ssl_certs:/app/ssl
+      # Outside the repo so a clean checkout / rebuild never touches it.
+      - ${BACKUP_HOST_DIR:-../../openstore-backups}:/backups
     networks:
       - app-network
     command: uvicorn main_wrapper:app --host 0.0.0.0 --port 8000 --ssl-keyfile=/app/ssl/key.pem --ssl-certfile=/app/ssl/cert.pem --reload

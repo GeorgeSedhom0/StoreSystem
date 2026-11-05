@@ -4,7 +4,6 @@ import {
   CardActions,
   CardContent,
   Grid2,
-  TextField,
   Typography,
   Box,
   Stack,
@@ -25,12 +24,17 @@ import {
   Schedule,
 } from "@mui/icons-material";
 import { Installment } from "../Installments";
+import { fmtMoney } from "../format";
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import { Dispatch, SetStateAction, useState, useEffect } from "react";
 import { AlertMsg } from "../../Shared/AlertMessage";
-import FormatedNumber from "../../Shared/FormatedNumber";
+import NumberField from "../../Shared/NumberField";
+import useConfirm from "../../Shared/useConfirm";
+import { apiError } from "../../utils/errors";
 import { localTimestamp } from "../../utils/functions";
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const payInstallment = async ({
   id,
@@ -62,10 +66,9 @@ const PayInstallment = ({
   setMsg: Dispatch<SetStateAction<AlertMsg>>;
   refetchInstallments: () => void;
 }) => {
-  if (!selectedInstallment) {
-    setSelectedInstallment(null);
-    return null;
-  }
+  // The parent only renders this with an installment that exists (and goes
+  // back to the list when it disappears), so every hook below always runs.
+  const [confirm, confirmDialog] = useConfirm();
 
   // Calculations
   const totalBill = Math.abs(selectedInstallment.total);
@@ -99,7 +102,7 @@ const PayInstallment = ({
 
   // State for payment amount with validation
   const [amount, setAmount] = useState<number>(
-    Math.min(installmentSize, remainingAmount),
+    round2(Math.min(installmentSize, remainingAmount)),
   );
   const [amountError, setAmountError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -111,7 +114,7 @@ const PayInstallment = ({
     } else if (amount > remainingAmount + 0.01) {
       // Small tolerance for floating point
       setAmountError(
-        `المبلغ لا يمكن أن يزيد عن المتبقي (${remainingAmount.toFixed(2)} جنيه)`,
+        `المبلغ لا يمكن أن يزيد عن المتبقي (${fmtMoney(remainingAmount)})`,
       );
     } else {
       setAmountError("");
@@ -130,7 +133,7 @@ const PayInstallment = ({
       console.error("Payment error:", error);
       setMsg({
         type: "error",
-        text: "حدث خطأ أثناء الدفع. يرجى المحاولة مرة أخرى",
+        text: apiError(error, "حدث خطأ أثناء الدفع. يرجى المحاولة مرة أخرى"),
       });
     },
     onSettled: () => {
@@ -142,6 +145,19 @@ const PayInstallment = ({
     if (amountError || amount <= 0 || amount > remainingAmount + 0.01) {
       return;
     }
+    const ok = await confirm({
+      title: "تأكيد دفع القسط",
+      message: (
+        <Typography>
+          تسجيل دفعة بقيمة <b>{fmtMoney(amount)}</b> من{" "}
+          {selectedInstallment.party_name || "عميل غير معروف"}؟
+          <br />
+          المتبقي بعد الدفع: {fmtMoney(Math.max(0, remainingAmount - amount))}
+        </Typography>
+      ),
+      confirmText: "دفع",
+    });
+    if (!ok) return;
 
     setIsSubmitting(true);
     try {
@@ -164,11 +180,18 @@ const PayInstallment = ({
 
   return (
     <Grid2 size={12}>
+      {confirmDialog}
       <Card elevation={3} sx={{ maxWidth: 800, mx: "auto" }}>
-        <CardContent sx={{ p: 4 }}>
+        <CardContent sx={{ p: { xs: 2, md: 4 } }}>
           {/* Header */}
           <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-            <Avatar sx={{ bgcolor: "primary.main", width: 56, height: 56 }}>
+            <Avatar
+              sx={{
+                bgcolor: "primary.main",
+                width: { xs: 44, md: 56 },
+                height: { xs: 44, md: 56 },
+              }}
+            >
               <Payment sx={{ fontSize: 28 }} />
             </Avatar>
             <Box>
@@ -181,9 +204,12 @@ const PayInstallment = ({
             </Box>
           </Stack>
           <Divider sx={{ mb: 3 }} /> {/* Customer and Status Info */}
-          <Grid2 container spacing={3} sx={{ mb: 3 }}>
+          <Grid2 container spacing={{ xs: 2, md: 3 }} sx={{ mb: 3 }}>
             <Grid2 size={{ xs: 12, md: 6 }}>
-              <Paper variant="outlined" sx={{ p: 3, height: "100%" }}>
+              <Paper
+                variant="outlined"
+                sx={{ p: { xs: 2, md: 3 }, height: "100%" }}
+              >
                 <Stack
                   direction="row"
                   alignItems="center"
@@ -200,7 +226,7 @@ const PayInstallment = ({
                 <Typography variant="body1" sx={{ mb: 1 }}>
                   <strong>رقم القسط:</strong> #{selectedInstallment.id}
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body1" component="div">
                   <strong>الحالة:</strong>{" "}
                   {status === "completed" && (
                     <Chip
@@ -231,7 +257,10 @@ const PayInstallment = ({
             </Grid2>
 
             <Grid2 size={{ xs: 12, md: 6 }}>
-              <Paper variant="outlined" sx={{ p: 3, height: "100%" }}>
+              <Paper
+                variant="outlined"
+                sx={{ p: { xs: 2, md: 3 }, height: "100%" }}
+              >
                 <Stack
                   direction="row"
                   alignItems="center"
@@ -247,7 +276,7 @@ const PayInstallment = ({
                       إجمالي الفاتورة:
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      <FormatedNumber money>{totalBill}</FormatedNumber>
+                      {fmtMoney(totalBill)}
                     </Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between">
@@ -255,9 +284,7 @@ const PayInstallment = ({
                       المقدم:
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      <FormatedNumber money>
-                        {selectedInstallment.paid}
-                      </FormatedNumber>
+                      {fmtMoney(selectedInstallment.paid)}
                     </Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between">
@@ -265,9 +292,7 @@ const PayInstallment = ({
                       إجمالي المدفوع:
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      <FormatedNumber money>
-                        {totalPaidIncludingDeposit}
-                      </FormatedNumber>
+                      {fmtMoney(totalPaidIncludingDeposit)}
                     </Typography>
                   </Stack>
                   <Divider />
@@ -283,9 +308,7 @@ const PayInstallment = ({
                           remainingAmount > 0 ? "warning.main" : "success.main",
                       }}
                     >
-                      <FormatedNumber money>
-                        {Math.max(0, remainingAmount)}
-                      </FormatedNumber>
+                      {fmtMoney(Math.max(0, remainingAmount))}
                     </Typography>
                   </Stack>
                 </Stack>
@@ -294,7 +317,7 @@ const PayInstallment = ({
           </Grid2>
           {/* Payment Form */}
           {!selectedInstallment.ended && remainingAmount > 0 && (
-            <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, mb: 3 }}>
               <Typography
                 variant="h6"
                 sx={{ mb: 3, display: "flex", alignItems: "center", gap: 1 }}
@@ -311,7 +334,7 @@ const PayInstallment = ({
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       <strong>قيمة القسط المقترحة:</strong>{" "}
-                      <FormatedNumber money>{installmentSize}</FormatedNumber>
+                      {fmtMoney(installmentSize)}
                     </Typography>
                     <Typography
                       variant="body2"
@@ -326,20 +349,15 @@ const PayInstallment = ({
                 </Grid2>
 
                 <Grid2 size={{ xs: 12, md: 6 }}>
-                  <TextField
+                  <NumberField
                     label="مبلغ الدفع"
-                    type="number"
                     value={amount}
-                    onChange={(e) => {
-                      const value = parseFloat(e.target.value) || 0;
-                      setAmount(value);
-                    }}
+                    onValueChange={setAmount}
                     error={!!amountError}
                     helperText={amountError || "أدخل المبلغ المراد دفعه"}
                     fullWidth
                     slotProps={{
                       input: {
-                        inputMode: "decimal",
                         startAdornment: (
                           <InputAdornment position="start">ج.م</InputAdornment>
                         ),
@@ -349,15 +367,17 @@ const PayInstallment = ({
                   />
 
                   <Stack
-                    direction={{ xs: "column", sm: "row" }}
+                    direction="row"
                     spacing={1}
-                    sx={{ mb: 2 }}
+                    sx={{ mb: 2, "& .MuiButton-root": { minHeight: 40 } }}
                   >
                     <Button
                       size="small"
                       variant="outlined"
                       onClick={() =>
-                        setAmount(Math.min(installmentSize, remainingAmount))
+                        setAmount(
+                          round2(Math.min(installmentSize, remainingAmount)),
+                        )
                       }
                       disabled={remainingAmount <= 0}
                       fullWidth
@@ -367,7 +387,7 @@ const PayInstallment = ({
                     <Button
                       size="small"
                       variant="outlined"
-                      onClick={() => setAmount(remainingAmount)}
+                      onClick={() => setAmount(round2(remainingAmount))}
                       disabled={remainingAmount <= 0}
                       fullWidth
                     >
@@ -393,7 +413,7 @@ const PayInstallment = ({
             </Alert>
           )}
         </CardContent>{" "}
-        <CardActions sx={{ px: 4, pb: 3, pt: 0 }}>
+        <CardActions sx={{ px: { xs: 2, md: 4 }, pb: 3, pt: 0 }}>
           <Stack
             direction={{ xs: "column", sm: "row" }}
             spacing={2}
@@ -403,7 +423,7 @@ const PayInstallment = ({
               variant="outlined"
               startIcon={<ArrowBack />}
               onClick={() => setSelectedInstallment(null)}
-              sx={{ minWidth: 120 }}
+              sx={{ minWidth: 120, minHeight: 44 }}
               fullWidth
             >
               رجوع
@@ -416,7 +436,7 @@ const PayInstallment = ({
                 startIcon={<Payment />}
                 onClick={handlePayment}
                 disabled={!!amountError || amount <= 0 || isSubmitting}
-                sx={{ minWidth: 120 }}
+                sx={{ minWidth: 120, minHeight: 44 }}
                 fullWidth
               >
                 {isSubmitting

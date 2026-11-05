@@ -18,20 +18,33 @@ import {
   MenuItem,
   Select,
   Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { AutoAwesome as AutoAwesomeIcon } from "@mui/icons-material";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Bill, Party, Product, SCProduct } from "../utils/types";
+import {
+  Bill,
+  Party,
+  Product,
+  ProductPackage,
+  SCProduct,
+} from "../utils/types";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import ProductInCart from "../Shared/ProductInCart";
+import NumberField from "../Shared/NumberField";
+import useConfirm from "../Shared/useConfirm";
+import { apiError } from "../utils/errors";
+import CartView from "../Shared/CartView";
+import MobileCheckoutBar, {
+  MobileBarSpacer,
+} from "../Shared/MobileCheckoutBar";
+import {
+  addToCartLines,
+  autoConvert,
+  cartLineToFlow,
+} from "../Shared/packages";
 import ShiftDialog from "../Sell/Components/ShiftDialog";
 import BillView from "../utils/BillView";
 import LoadingScreen from "../Shared/LoadingScreen";
@@ -71,6 +84,8 @@ const AdminSell = () => {
     updateProducts,
   } = useProducts();
 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [shoppingCart, setShoppingCart] = usePersistentCart(
     "AdminSell",
     [],
@@ -127,6 +142,7 @@ const AdminSell = () => {
   const { storeId } = useContext(StoreContext);
 
   const navigate = useNavigate();
+  const [confirm, confirmDialog] = useConfirm();
 
   const { shift, isShiftLoading, isShiftError } = useShift();
 
@@ -135,14 +151,14 @@ const AdminSell = () => {
 
   const { paymentMethods } = usePaymentMethods(setMsg);
 
-  const { density, partiesPolicy, paymentsPolicy } = usePosUi("AdminSell");
+  const { density, partiesPolicy, paymentsPolicy, packagesPolicy } =
+    usePosUi("AdminSell");
   const cardSizes = posCardSizes(density.isSplit);
   const pairInputs = density.isCompact && !density.isSplit;
   const showParties = resolveVisibility(partiesPolicy, usingThirdParties);
   const showPay = resolveVisibility(paymentsPolicy, showPaymentMethods);
 
-  const usesPaymentMethods =
-    billPayment === "sell" || billPayment === "return";
+  const usesPaymentMethods = billPayment === "sell" || billPayment === "return";
 
   const selectableParties = parties.filter(
     (party) => !party.extra_info?.store_id,
@@ -188,33 +204,16 @@ const AdminSell = () => {
   }, [shoppingCart]);
 
   const loading = isProductsLoading || isShiftLoading;
-  const addToCart = useCallback((product: Product | null) => {
-    if (!product) return;
-    setShoppingCart((prev) => {
-      if (!product.id) return prev;
-      const productExists = prev.find((item) => item.id === product.id);
-      if (productExists) {
-        return prev.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        );
-      } else {
-        return [
-          ...prev,
-          {
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            wholesale_price: product.wholesale_price,
-            quantity: 1,
-            stock: product.stock,
-            barCode: product.bar_code,
-          },
-        ];
-      }
-    });
-  }, []);
+  const addToCart = useCallback(
+    (product: Product | null, pkg?: ProductPackage | null) => {
+      if (!product) return;
+      setShoppingCart((prev) => {
+        const next = addToCartLines(prev, product, pkg ?? null, "sell");
+        return packagesPolicy === "auto" ? autoConvert(next) : next;
+      });
+    },
+    [packagesPolicy],
+  );
 
   useQuickHandle(shoppingCart, setShoppingCart);
   useBarcodeDetection(products, addToCart, setMsg);
@@ -257,7 +256,9 @@ const AdminSell = () => {
           discount: discount,
           total: billTotal,
           note: billNote.trim() ? billNote.trim() : null,
-          products_flow: shoppingCart,
+          products_flow: shoppingCart.map((item) =>
+            cartLineToFlow(item, "sell"),
+          ),
           payments:
             billPayment === "sell" || billPayment === "return"
               ? buildPayments(billTotal, paymentMethods, paymentLines)
@@ -311,21 +312,29 @@ const AdminSell = () => {
         await updateProducts();
         setMsg({
           type: "success",
-          text: "تم اضافة الفاتورة بنجاح",
+          text: "تم حفظ الفاتورة بنجاح",
         });
 
         if (shouldPrint) {
           printBill(billRef, setMsg, setLastBillOpen);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.log(error);
-        setMsg({
-          type: "error",
-          text: "حدث خطأ ما",
-        });
-        window.alert(
-          "حدث خطا ما اثناء اضافة الفاتورة يرجى التاكد فى صفحة الفواتير ان كانت الفاتورة محفوظة",
-        );
+        if (error?.response) {
+          // The server answered: the bill was NOT saved; say why.
+          setMsg({ type: "error", text: apiError(error, "تعذر حفظ الفاتورة") });
+        } else {
+          // No answer (network/timeout): it may or may not have been saved.
+          setMsg({ type: "error", text: "تعذر الاتصال بالخادم" });
+          const openBills = await confirm({
+            title: "لم نتأكد من حفظ الفاتورة",
+            message:
+              "انقطع الاتصال أثناء الحفظ. راجع صفحة الفواتير قبل إعادة المحاولة حتى لا تُسجَّل الفاتورة مرتين.",
+            confirmText: "فتح الفواتير",
+            cancelText: "إغلاق",
+          });
+          if (openBills) navigate("/bills");
+        }
       } finally {
         // Always ensure we reset the submission state, even in case of errors
         setIsSubmitting(false);
@@ -349,6 +358,8 @@ const AdminSell = () => {
       createBill,
       paymentMethods,
       paymentLines,
+      confirm,
+      navigate,
     ],
   );
 
@@ -380,7 +391,7 @@ const AdminSell = () => {
       if (discount >= cartTotal) {
         setMsg({
           type: "error",
-          text: "الخصم اكبر من الاجمالي",
+          text: "الخصم اكبر من الإجمالي",
         });
         setIsSubmitting(false);
         submissionInProgress.current = false;
@@ -462,15 +473,22 @@ const AdminSell = () => {
   // Handle keyboard shortcuts using a single event listener that remains stable
   const handleKeyDown = useCallback(
     async (e: KeyboardEvent) => {
+      if (e.key !== "F1" && e.key !== "F2") return;
+      e.preventDefault();
+      // Same rules as the buttons: nothing while a dialog is open, and a new
+      // customer needs a name and phone first.
+      if (document.querySelector(".MuiDialog-root")) return;
+      if (addingParty && (!newParty.name || !newParty.phone)) {
+        setMsg({ type: "error", text: "أدخل اسم ورقم هاتف العميل الجديد" });
+        return;
+      }
       if (e.key === "F2") {
-        e.preventDefault();
         await submitBill(shoppingCart, discount, false);
-      } else if (e.key === "F1") {
-        e.preventDefault();
+      } else {
         await submitBill(shoppingCart, discount, true);
       }
     },
-    [shoppingCart, discount, submitBill],
+    [shoppingCart, discount, submitBill, addingParty, newParty],
   );
 
   // Set up keyboard listener only once with a stable callback reference
@@ -504,6 +522,7 @@ const AdminSell = () => {
       />
       <LoadingScreen loading={loading} />
       <AlertMessage message={msg} setMessage={setMsg} />
+      {confirmDialog}
       {/* High Discount Confirmation Dialog */}
       <Dialog
         open={highDiscountDialogOpen}
@@ -563,7 +582,17 @@ const AdminSell = () => {
         shift={shift}
         admin
       />
-      <Grid2 size={cardSizes.actions}>
+      {isMobile && (
+        <Grid2 size={12} sx={{ order: 1 }}>
+          <ProductAutocomplete
+            label="ابحث عن منتج أو امسح الباركود"
+            onProductSelect={addToCart}
+            products={products}
+            withPackages
+          />
+        </Grid2>
+      )}
+      <Grid2 size={cardSizes.actions} sx={{ order: { xs: 3, md: 0 } }}>
         <Card elevation={3} sx={posActionsCardSx(density)}>
           <Grid2 container spacing={density.spacing} alignItems="center">
             <Grid2
@@ -609,13 +638,15 @@ const AdminSell = () => {
                       );
                       setUsingThirdParties((prev) => !prev);
                     }}
-                    label="اظهار العملاء"
+                    label="إظهار العملاء"
                   />
                 )}
               </Box>
             </Grid2>
 
-            <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 6)}>
+            <Grid2
+              size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 6)}
+            >
               <FormControl fullWidth>
                 <InputLabel>نوع الفاتورة</InputLabel>
                 <Select
@@ -627,7 +658,7 @@ const AdminSell = () => {
                   size="small"
                 >
                   <MenuItem value="sell">نقدي</MenuItem>
-                  <MenuItem value="BNPL">اجل</MenuItem>
+                  <MenuItem value="BNPL">آجل</MenuItem>
                   <MenuItem value="return">مرتجع</MenuItem>
                   <MenuItem value="reserve">حجز</MenuItem>
                   <MenuItem value="installment">تقسيط</MenuItem>
@@ -635,20 +666,23 @@ const AdminSell = () => {
               </FormControl>
             </Grid2>
 
-            <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 6)}>
-              <TextField
+            <Grid2
+              size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 6)}
+            >
+              <NumberField
                 label="الخصم"
-                type="number"
                 value={discount}
-                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                onValueChange={setDiscount}
+                min={0}
                 fullWidth
                 size="small"
                 disabled={["return", "installment"].includes(billPayment)}
-                inputMode="decimal"
               />
             </Grid2>
 
-            <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 12)}>
+            <Grid2
+              size={splitField(density.isSplit, { xs: 6, sm: 4, md: 2 }, 12)}
+            >
               <Button
                 fullWidth
                 variant="outlined"
@@ -659,39 +693,49 @@ const AdminSell = () => {
               </Button>
             </Grid2>
 
-            <Grid2 size={splitField(density.isSplit, { xs: 12, sm: 8, md: 4 }, 12)}>
-              <ButtonGroup fullWidth>
-                <Button
-                  variant="contained"
-                  onClick={() => submitBill(shoppingCart, discount, false)}
-                  disabled={isSubmitDisabled}
-                >
-                  حفظ الفاتورة (F2)
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={submitAndPrint}
-                  disabled={isSubmitDisabled}
-                >
-                  حفظ و طباعة الفاتورة (F1)
-                </Button>
-              </ButtonGroup>
-            </Grid2>
-
-            <Grid2 size={splitField(density.isSplit, { xs: 12, sm: 4, md: 2 }, 12)}>
-              <Typography variant="h6" align="center">
-                الاجمالي{": "}
-                {shoppingCart.reduce(
-                  (acc, item) => acc + item.price * item.quantity,
-                  0,
-                ) - discount}{" "}
-                جنيه
-              </Typography>
-              <Typography variant="body1" align="center"></Typography>
-            </Grid2>
-            {showPay &&
-              usesPaymentMethods &&
-              paymentMethods.length > 0 && (
+            {!isMobile && (
+              <Grid2
+                size={splitField(density.isSplit, { xs: 12, sm: 8, md: 4 }, 12)}
+              >
+                <ButtonGroup fullWidth>
+                  <Button
+                    variant="contained"
+                    onClick={() => submitBill(shoppingCart, discount, false)}
+                    disabled={isSubmitDisabled}
+                  >
+                    حفظ الفاتورة (F2)
+                  </Button>
+                  <Button
+                    variant="contained"
+                    onClick={submitAndPrint}
+                    disabled={isSubmitDisabled}
+                  >
+                    حفظ و طباعة الفاتورة (F1)
+                  </Button>
+                </ButtonGroup>
+              </Grid2>
+            )}
+            {!isMobile && (
+              <Grid2
+                size={splitField(density.isSplit, { xs: 12, sm: 4, md: 2 }, 12)}
+              >
+                <Typography variant="h6" align="center">
+                  الإجمالي{": "}
+                  {(
+                    Math.round(
+                      (shoppingCart.reduce(
+                        (a, i) => a + i.price * i.quantity,
+                        0,
+                      ) -
+                        discount) *
+                        100,
+                    ) / 100
+                  ).toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
+                  جنيه
+                </Typography>
+              </Grid2>
+            )}
+            {showPay && usesPaymentMethods && paymentMethods.length > 0 && (
               <Grid2 size={12}>
                 <PaymentSplit
                   total={
@@ -721,12 +765,15 @@ const AdminSell = () => {
               />
             )}
 
-            <Grid2 size={pairInputs && showParties ? { xs: 12, sm: 6 } : 12}>
-              <ProductAutocomplete
-                onProductSelect={addToCart}
-                products={products}
-              />
-            </Grid2>
+            {!isMobile && (
+              <Grid2 size={pairInputs && showParties ? { xs: 12, sm: 6 } : 12}>
+                <ProductAutocomplete
+                  onProductSelect={addToCart}
+                  products={products}
+                  withPackages
+                />
+              </Grid2>
+            )}
             {showParties && (
               <Grid2 size={pairInputs ? { xs: 12, sm: 6 } : 12}>
                 <Autocomplete
@@ -832,48 +879,39 @@ const AdminSell = () => {
           </Grid2>
         </Card>
       </Grid2>{" "}
-      <Grid2 size={cardSizes.cart}>
+      <Grid2 size={cardSizes.cart} sx={{ order: { xs: 2, md: 0 } }}>
         <Card elevation={3} sx={posCartCardSx(density)}>
-          <TableContainer
+          <CartView
             ref={cartTableRef}
-            sx={{
-              ...posCartScrollSx(density),
-              overflowY: "auto",
-            }}
-          >
-            <Table
-              stickyHeader
-              sx={{
-                "& .MuiTableCell-head": {
-                  bgcolor: "background.paper",
-                },
-              }}
-            >
-              <TableHead>
-                <TableRow>
-                  <TableCell>المنتج</TableCell>
-                  <TableCell>الكمية</TableCell>
-                  <TableCell>السعر</TableCell>
-                  <TableCell>الاجمالي</TableCell>
-                  <TableCell>حذف</TableCell>
-                  <TableCell>الكمية المتاحة بالمخزن</TableCell>
-                  <TableCell>الصلاحية</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {shoppingCart.map((product) => (
-                  <ProductInCart
-                    key={product.id}
-                    product={product}
-                    setShoppingCart={setShoppingCart}
-                    type="sell-admin"
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+            cart={shoppingCart}
+            setCart={setShoppingCart}
+            type="sell-admin"
+            packagesPolicy={packagesPolicy}
+            scrollSx={posCartScrollSx(density)}
+          />
         </Card>
       </Grid2>
+      {isMobile && (
+        <>
+          <Grid2 size={12} sx={{ order: 4 }}>
+            <MobileBarSpacer />
+          </Grid2>
+          <MobileCheckoutBar
+            total={
+              Math.round(
+                (shoppingCart.reduce((a, i) => a + i.price * i.quantity, 0) -
+                  discount) *
+                  100,
+              ) / 100
+            }
+            count={shoppingCart.length}
+            onSave={() => submitBill(shoppingCart, discount, false)}
+            onSavePrint={submitAndPrint}
+            disabled={isSubmitDisabled}
+            saveLabel="حفظ الفاتورة"
+          />
+        </>
+      )}
     </Grid2>
   );
 };

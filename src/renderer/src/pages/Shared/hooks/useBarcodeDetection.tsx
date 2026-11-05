@@ -1,14 +1,18 @@
-import { Dispatch, SetStateAction, useEffect } from "react";
-import { Product } from "../../utils/types";
+import { Dispatch, SetStateAction, useEffect, useMemo } from "react";
+import { Product, ProductPackage } from "../../utils/types";
 import { AlertMsg } from "../AlertMessage";
+import { buildBarcodeIndex } from "../packages";
 
 const CLIENT_BARCODE_PREFIX = "CL";
 
 const useBarcodeDetection = (
   products: Product[],
-  addToCart: (product: Product) => void,
+  addToCart: (product: Product, pkg?: ProductPackage | null) => void,
   setMsg: Dispatch<SetStateAction<AlertMsg>>,
 ) => {
+  // O(1) lookup; package barcodes add the package (a carton of 10).
+  const index = useMemo(() => buildBarcodeIndex(products), [products]);
+
   useEffect(() => {
     let code = "";
     let reading = false;
@@ -27,9 +31,9 @@ const useBarcodeDetection = (
             return;
           }
 
-          const product = products.find((prod) => prod.bar_code === code);
-          if (product) {
-            addToCart(product);
+          const hit = index.get(code);
+          if (hit) {
+            addToCart(hit.product, hit.pkg);
           } else {
             setMsg({
               type: "error",
@@ -56,7 +60,7 @@ const useBarcodeDetection = (
     return () => {
       window.removeEventListener("keypress", handleKeyPress);
     };
-  }, [products, addToCart, setMsg]);
+  }, [index, addToCart, setMsg]);
 };
 
 export default useBarcodeDetection;

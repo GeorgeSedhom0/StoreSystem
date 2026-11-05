@@ -6,6 +6,7 @@ Runs daily to create/update notifications for products nearing expiration.
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from clock import local_now
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
@@ -168,7 +169,7 @@ def check_expiring_products_for_store(store_id: int, threshold_days: int):
         conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        threshold_date = datetime.now().date() + timedelta(days=threshold_days)
+        threshold_date = local_now().date() + timedelta(days=threshold_days)
 
         # Get products with expiring batches
         cur.execute(
@@ -221,7 +222,7 @@ def check_expiring_products_for_store(store_id: int, threshold_days: int):
             processed_products.add(product_id)
 
             # Calculate days until earliest expiration
-            days_until = (earliest_exp - datetime.now().date()).days
+            days_until = (earliest_exp - local_now().date()).days
 
             # Format batch data for notification
             batch_info = [
@@ -317,7 +318,7 @@ async def store_expiration_scheduler_loop(store_id: int):
             check_minute = settings["check_minute"]
             alert_days = settings["alert_days"]
 
-            now = datetime.now()
+            now = local_now()
             current_time = (now.hour, now.minute)
             scheduled_time = (check_hour, check_minute)
 
@@ -382,7 +383,7 @@ async def expiration_scheduler_loop():
             check_minute = settings["check_minute"]
 
             # Calculate time until next run
-            now = datetime.now()
+            now = local_now()
             next_run = now.replace(
                 hour=check_hour, minute=check_minute, second=0, microsecond=0
             )

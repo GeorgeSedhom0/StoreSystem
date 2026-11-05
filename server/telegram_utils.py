@@ -1,6 +1,21 @@
-from typing import List, Dict, Any, Optional
+"""
+Telegram transport + notification formatting.
+
+Transport (call_telegram_api / send_telegram_message / send_telegram_document)
+never raises: network errors, timeouts and Telegram errors come back as
+{"success": False, "message", "error_code"}. 429 rate limits are retried after
+Telegram's retry_after, HTML that Telegram can't parse is resent as plain text,
+and long messages are split under the 4096-char limit.
+
+Settings live in store_data.extra_info (bot token on store 0 / first store,
+chat id per store) and small bot state in db_meta (no schema change).
+"""
+
+from typing import List, Dict, Any, Optional, Tuple
 import logging
 from os import getenv
+import os
+import re
 import requests
 import json
 import html
@@ -8,6 +23,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import time
+from datetime import datetime, date
 
 # Load environment variables
 load_dotenv()
@@ -18,11 +34,116 @@ logger = logging.getLogger(__name__)
 TELEGRAM_BOT_TOKEN = getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_API_BASE = "https://api.telegram.org/bot"
 
+# Telegram limits
+MAX_MESSAGE_CHARS = 3900  # hard limit is 4096 (after entity parsing); keep a margin
+MAX_UPLOAD_BYTES = 49 * 1024 * 1024  # bots may upload up to 50 MB
+
 # Database connection details
 HOST = getenv("HOST")
 DATABASE = getenv("DATABASE")
 USER = getenv("USER")
 PASS = getenv("PASS")
+
+
+def _db_connect():
+    return psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
+
+
+# ─── Formatting helpers ─────────────────────────────────────────────────────
+
+
+def _e(text) -> str:
+    """HTML-escape dynamic text for Telegram HTML parse mode"""
+    if text is None:
+        return ""
+    return html.escape(str(text))
+
+
+esc = _e
+
+
+def _to_float(value) -> float:
+    try:
+        v = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if v != v:  # NaN
+        return 0.0
+    return v
+
+
+def fmt_money(value) -> str:
+    """1234.5 -> '1,234.50 ج.م' (never a raw float, never '-0.00')."""
+    v = _to_float(value)
+    if abs(v) < 0.005:
+        v = 0.0
+    return f"{v:,.2f} ج.م"
+
+
+def fmt_signed_money(value) -> str:
+    v = _to_float(value)
+    if abs(v) < 0.005:
+        return fmt_money(0)
+    return ("+" if v > 0 else "") + fmt_money(v)
+
+
+def fmt_qty(value) -> str:
+    """Stock / quantities: integers without decimals, fractions trimmed."""
+    v = _to_float(value)
+    if abs(v - round(v)) < 1e-9:
+        return f"{int(round(v)):,}"
+    return f"{v:,.3f}".rstrip("0").rstrip(".")
+
+
+from clock import _local_zone, local_now  # noqa: E402,F401  (shared store clock)
+
+
+def _parse_dt(value) -> Optional[datetime]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    text = str(value).strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        try:
+            dt = datetime.fromisoformat(text[:19])
+        except ValueError:
+            return None
+    if dt.tzinfo is not None:
+        # Times reach us either naive local (DB) or ISO UTC from the browser.
+        zone = _local_zone()
+        dt = (dt.astimezone(zone) if zone is not None else dt.astimezone()).replace(
+            tzinfo=None
+        )
+    return dt
+
+
+def fmt_dt(value, with_time: bool = True) -> str:
+    dt = _parse_dt(value)
+    if dt is None:
+        return _e(value) if value else "-"
+    return dt.strftime("%Y-%m-%d %H:%M" if with_time else "%Y-%m-%d")
+
+
+def fmt_size(num_bytes) -> str:
+    n = _to_float(num_bytes)
+    if n >= 1024 * 1024 * 1024:
+        return f"{n / 1024 / 1024 / 1024:.2f} GB"
+    if n >= 1024 * 1024:
+        return f"{n / 1024 / 1024:.1f} MB"
+    if n >= 1024:
+        return f"{n / 1024:.0f} KB"
+    return f"{int(n)} B"
+
+
+SEPARATOR = "━━━━━━━━━━━━━━━━━━"
+
+
+# ─── Settings storage ───────────────────────────────────────────────────────
 
 
 def _get_preferred_store_id_for_settings(cur) -> Optional[int]:
@@ -39,32 +160,73 @@ def _get_preferred_store_id_for_settings(cur) -> Optional[int]:
     return row["id"] if row else None
 
 
+def _merge_store_extra_info(cur, store_id: int, values: Dict[str, Any]) -> None:
+    """Atomically merge keys into store_data.extra_info (no read-modify-write race)."""
+    cur.execute(
+        """
+        UPDATE store_data
+        SET extra_info = COALESCE(extra_info, '{}'::jsonb) || %s::jsonb
+        WHERE id = %s
+        """,
+        (json.dumps(values), store_id),
+    )
+
+
+def meta_get_json(key: str, default: Any = None) -> Any:
+    """Read a JSON value from db_meta (key/value table, v18+)."""
+    try:
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT value FROM db_meta WHERE key = %s", (key,))
+            row = cur.fetchone()
+            cur.close()
+        finally:
+            conn.close()
+        if not row or row.get("value") is None:
+            return default
+        return json.loads(row["value"])
+    except Exception as e:
+        logger.debug(f"db_meta read failed for {key}: {e}")
+        return default
+
+
+def meta_set_json(key: str, value: Any) -> bool:
+    try:
+        conn = _db_connect()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO db_meta (key, value) VALUES (%s, %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                """,
+                (key, json.dumps(value, ensure_ascii=False, default=str)),
+            )
+            conn.commit()
+            cur.close()
+        finally:
+            conn.close()
+        return True
+    except Exception as e:
+        logger.warning(f"db_meta write failed for {key}: {e}")
+        return False
+
+
 def save_telegram_bot_token(token: str) -> bool:
     """Persist Telegram bot token in store_data.extra_info so it survives restarts."""
     try:
-        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        store_id = _get_preferred_store_id_for_settings(cur)
-        if store_id is None:
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            store_id = _get_preferred_store_id_for_settings(cur)
+            if store_id is None:
+                return False
+            _merge_store_extra_info(cur, store_id, {"telegram_bot_token": token})
+            conn.commit()
             cur.close()
+        finally:
             conn.close()
-            return False
-
-        cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
-        result = cur.fetchone()
-
-        extra_info = result["extra_info"] if result and result["extra_info"] else {}
-        extra_info["telegram_bot_token"] = token
-
-        cur.execute(
-            "UPDATE store_data SET extra_info = %s WHERE id = %s",
-            (json.dumps(extra_info), store_id),
-        )
-
-        conn.commit()
-        cur.close()
-        conn.close()
         return True
     except Exception as e:
         logger.error(f"Error saving Telegram bot token: {e}")
@@ -79,20 +241,19 @@ def load_telegram_bot_token() -> str:
         return TELEGRAM_BOT_TOKEN
 
     try:
-        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        store_id = _get_preferred_store_id_for_settings(cur)
-        if store_id is None:
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            store_id = _get_preferred_store_id_for_settings(cur)
+            result = None
+            if store_id is not None:
+                cur.execute(
+                    "SELECT extra_info FROM store_data WHERE id = %s", (store_id,)
+                )
+                result = cur.fetchone()
             cur.close()
+        finally:
             conn.close()
-            return ""
-
-        cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
-        result = cur.fetchone()
-
-        cur.close()
-        conn.close()
 
         if result and result.get("extra_info"):
             token = result["extra_info"].get("telegram_bot_token")
@@ -105,114 +266,202 @@ def load_telegram_bot_token() -> str:
     return ""
 
 
+def current_bot_token() -> str:
+    return TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
+
+
 def get_store_telegram_chat_id(store_id: int):
     """Get Telegram chat ID for a specific store"""
     try:
-        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
-        result = cur.fetchone()
-
-        cur.close()
-        conn.close()
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
+            result = cur.fetchone()
+            cur.close()
+        finally:
+            conn.close()
 
         if result and result["extra_info"]:
-            extra_info = result["extra_info"]
-            return extra_info.get("telegram_chat_id")
+            chat_id = result["extra_info"].get("telegram_chat_id")
+            return str(chat_id).strip() if chat_id not in (None, "") else None
         return None
     except Exception as e:
         logger.error(f"Error getting store Telegram chat ID: {e}")
         return None
 
 
+def get_all_store_chats() -> List[Dict[str, Any]]:
+    """Every store with a linked chat: [{store_id, name, chat_id}]."""
+    try:
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                """
+                SELECT id, name, extra_info->>'telegram_chat_id' AS chat_id
+                FROM store_data
+                WHERE COALESCE(extra_info->>'telegram_chat_id', '') <> ''
+                ORDER BY id
+                """
+            )
+            rows = cur.fetchall()
+            cur.close()
+        finally:
+            conn.close()
+        return [
+            {"store_id": r["id"], "name": r["name"], "chat_id": str(r["chat_id"]).strip()}
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error listing store chats: {e}")
+        return []
+
+
 def save_store_telegram_chat_id(store_id: int, chat_id: str):
     """Save Telegram chat ID for a specific store"""
     try:
-        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        cur.execute("SELECT extra_info FROM store_data WHERE id = %s", (store_id,))
-        result = cur.fetchone()
-
-        extra_info = result["extra_info"] if result and result["extra_info"] else {}
-        extra_info["telegram_chat_id"] = chat_id
-
-        cur.execute(
-            "UPDATE store_data SET extra_info = %s WHERE id = %s",
-            (json.dumps(extra_info), store_id),
-        )
-
-        conn.commit()
-        cur.close()
-        conn.close()
-
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            _merge_store_extra_info(
+                cur, store_id, {"telegram_chat_id": str(chat_id or "").strip()}
+            )
+            conn.commit()
+            cur.close()
+        finally:
+            conn.close()
         return True
     except Exception as e:
         logger.error(f"Error saving store Telegram chat ID: {e}")
         return False
 
 
-def call_telegram_api(method: str, data: dict = None, timeout: int = 30) -> dict:
-    """Call the Telegram Bot API directly"""
-    try:
-        token = TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
-        if not token:
-            return {"success": False, "message": "Telegram bot token not configured"}
+# ─── Bot API transport ──────────────────────────────────────────────────────
 
-        url = f"{TELEGRAM_API_BASE}{token}/{method}"
-        response = requests.post(url, json=data, timeout=timeout)
-        result = response.json()
+
+def _redact(text: Any) -> str:
+    """Never let the bot token reach logs or API responses."""
+    s = str(text)
+    token = TELEGRAM_BOT_TOKEN
+    if token:
+        s = s.replace(token, "***")
+    return re.sub(r"bot\d+:[A-Za-z0-9_-]{20,}", "bot***", s)
+
+
+def call_telegram_api(
+    method: str,
+    data: Optional[dict] = None,
+    timeout: int = 30,
+    files: Optional[Dict[str, Tuple[str, str]]] = None,
+    max_retries: int = 2,
+    token: Optional[str] = None,
+) -> dict:
+    """
+    Call the Telegram Bot API. Never raises.
+
+    files: {field: (filename, local_path)} -> multipart upload (data sent as
+    form fields). 429 is retried after retry_after (capped); a dropped
+    connection is retried once for non-polling methods.
+    """
+    use_token = token or current_bot_token()
+    if not use_token:
+        return {
+            "success": False,
+            "message": "Telegram bot token not configured",
+            "error_code": None,
+        }
+
+    url = f"{TELEGRAM_API_BASE}{use_token}/{method}"
+    attempt = 0
+    while True:
+        try:
+            if files:
+                handles = {}
+                try:
+                    for field, (filename, path) in files.items():
+                        handles[field] = (filename, open(path, "rb"))
+                    form = {
+                        k: (json.dumps(v) if isinstance(v, (dict, list)) else str(v))
+                        for k, v in (data or {}).items()
+                        if v is not None
+                    }
+                    response = requests.post(
+                        url, data=form, files=handles, timeout=timeout
+                    )
+                finally:
+                    for _name, fh in handles.values():
+                        try:
+                            fh.close()
+                        except Exception:
+                            pass
+            else:
+                response = requests.post(url, json=data or {}, timeout=timeout)
+            try:
+                result = response.json()
+            except ValueError:
+                result = {
+                    "ok": False,
+                    "error_code": response.status_code,
+                    "description": f"HTTP {response.status_code}",
+                }
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            is_timeout = isinstance(e, requests.exceptions.Timeout)
+            if method != "getUpdates" and attempt < min(max_retries, 1):
+                attempt += 1
+                time.sleep(2)
+                continue
+            msg = (
+                "Telegram API request timeout"
+                if is_timeout
+                else "Cannot connect to Telegram API"
+            )
+            logger.warning(f"{msg} ({method})")
+            return {"success": False, "message": msg, "error_code": None}
+        except Exception as e:
+            logger.error(f"Unexpected error calling Telegram API {method}: {_redact(e)}")
+            return {"success": False, "message": _redact(e), "error_code": None}
 
         if result.get("ok"):
             return {"success": True, "result": result.get("result")}
-        else:
-            return {
-                "success": False,
-                "message": result.get("description", "Unknown error"),
-            }
-    except requests.exceptions.ConnectionError:
-        logger.error("Cannot connect to Telegram API")
-        return {"success": False, "message": "Cannot connect to Telegram API"}
-    except requests.exceptions.Timeout:
-        logger.error(f"Timeout calling Telegram API: {method}")
-        return {"success": False, "message": "Telegram API request timeout"}
-    except Exception as e:
-        logger.error(f"Unexpected error calling Telegram API: {e}")
-        return {"success": False, "message": str(e)}
+
+        code = result.get("error_code")
+        params = result.get("parameters") or {}
+        retry_after = params.get("retry_after")
+        if code == 429 and attempt < max_retries:
+            wait = min(max(int(retry_after or 1), 1), 60)
+            logger.warning(f"Telegram rate limit on {method}; retrying in {wait}s")
+            time.sleep(wait)
+            attempt += 1
+            continue
+
+        return {
+            "success": False,
+            "message": _redact(result.get("description", "Unknown error")),
+            "error_code": code,
+            "retry_after": retry_after,
+        }
 
 
 def validate_bot_token(token: str = None) -> dict:
     """Validate a Telegram bot token by calling getMe"""
-    try:
-        use_token = token or TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
-        if not use_token:
-            return {"success": False, "message": "No bot token provided"}
-
-        url = f"{TELEGRAM_API_BASE}{use_token}/getMe"
-        response = requests.get(url, timeout=10)
-        result = response.json()
-
-        if result.get("ok"):
-            bot_info = result.get("result", {})
-            return {
-                "success": True,
-                "bot_username": bot_info.get("username"),
-                "bot_name": bot_info.get("first_name"),
-            }
-        else:
-            return {
-                "success": False,
-                "message": result.get("description", "Invalid bot token"),
-            }
-    except Exception as e:
-        logger.error(f"Error validating bot token: {e}")
-        return {"success": False, "message": str(e)}
+    use_token = (token or "").strip() or current_bot_token()
+    if not use_token:
+        return {"success": False, "message": "No bot token provided"}
+    result = call_telegram_api("getMe", {}, timeout=10, max_retries=0, token=use_token)
+    if result.get("success"):
+        bot_info = result.get("result") or {}
+        return {
+            "success": True,
+            "bot_username": bot_info.get("username"),
+            "bot_name": bot_info.get("first_name"),
+        }
+    return {"success": False, "message": result.get("message", "Invalid bot token")}
 
 
 def get_telegram_status() -> dict:
     """Get current Telegram bot status by validating the token"""
-    token = TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
+    token = current_bot_token()
     if not token:
         return {"connected": False, "bot_username": None}
 
@@ -222,104 +471,182 @@ def get_telegram_status() -> dict:
             "connected": True,
             "bot_username": result.get("bot_username"),
         }
-    else:
-        return {"connected": False, "bot_username": None}
+    return {"connected": False, "bot_username": None}
+
+
+def chat_info_from_update(update: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Pull the chat out of any update kind (message, button press, bot added)."""
+    message = (
+        update.get("message")
+        or update.get("edited_message")
+        or (update.get("callback_query") or {}).get("message")
+        or update.get("my_chat_member")
+        or {}
+    )
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    if chat_id is None:
+        return None
+    return {
+        "chat_id": str(chat_id),
+        "username": chat.get("username"),
+        "first_name": chat.get("first_name", "") or "",
+        "last_name": chat.get("last_name", "") or "",
+        "type": chat.get("type", "private"),
+        "title": chat.get("title"),  # For groups
+    }
 
 
 def get_telegram_updates(token: str = None) -> list:
-    """Fetch recent messages sent to the bot to detect chat_ids from /start commands"""
+    """
+    Chats that recently talked to the bot (for the Settings auto-detect).
+
+    The command worker long-polls getUpdates and confirms every update, so a
+    second getUpdates here would both conflict with it (HTTP 409) and find
+    nothing. Chats are taken from what the worker has seen; getUpdates is only
+    used directly when the worker isn't polling.
+    """
+    seen: Dict[str, Dict[str, Any]] = {}
+    polling = False
     try:
-        use_token = token or TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
-        if not use_token:
-            return []
+        from telegram_commands import get_recent_chats, is_worker_polling
 
-        url = f"{TELEGRAM_API_BASE}{use_token}/getUpdates"
-        response = requests.get(url, timeout=10)
-        result = response.json()
-
-        if not result.get("ok"):
-            return []
-
-        updates = result.get("result", [])
-        seen_chats = {}
-
-        for update in updates:
-            message = update.get("message", {})
-            chat = message.get("chat", {})
-            chat_id = str(chat.get("id", ""))
-
-            if chat_id and chat_id not in seen_chats:
-                seen_chats[chat_id] = {
-                    "chat_id": chat_id,
-                    "username": chat.get("username"),
-                    "first_name": chat.get("first_name", ""),
-                    "last_name": chat.get("last_name", ""),
-                    "type": chat.get("type", "private"),
-                    "title": chat.get("title"),  # For groups
-                }
-
-        return list(seen_chats.values())
+        polling = is_worker_polling()
+        for chat in get_recent_chats():
+            seen[str(chat["chat_id"])] = chat
     except Exception as e:
-        logger.error(f"Error getting Telegram updates: {e}")
-        return []
+        logger.debug(f"Recent chats unavailable: {e}")
+
+    if not polling:
+        result = call_telegram_api(
+            "getUpdates",
+            {"timeout": 0, "allowed_updates": ["message", "callback_query", "my_chat_member"]},
+            timeout=10,
+            max_retries=0,
+            token=token,
+        )
+        updates = (result.get("result") or []) if result.get("success") else []
+        for update in updates:
+            info = chat_info_from_update(update)
+            if info and info["chat_id"] not in seen:
+                seen[info["chat_id"]] = info
+
+    return list(seen.values())
 
 
-def split_message(message: str, max_length: int = 4096) -> list:
-    """Split a long message into multiple messages at newline boundaries"""
+def split_message(message: str, max_length: int = MAX_MESSAGE_CHARS) -> list:
+    """Split a long message into chunks at line boundaries (hard-split long lines)."""
+    message = message or ""
     if len(message) <= max_length:
         return [message]
 
-    messages = []
+    chunks: List[str] = []
     current = ""
-
     for line in message.split("\n"):
-        if len(current) + len(line) + 1 > max_length:
+        while len(line) > max_length:
             if current:
-                messages.append(current.rstrip("\n"))
+                chunks.append(current.rstrip("\n"))
+                current = ""
+            chunks.append(line[:max_length])
+            line = line[max_length:]
+        if len(current) + len(line) + 1 > max_length:
+            if current.strip():
+                chunks.append(current.rstrip("\n"))
             current = line + "\n"
         else:
             current += line + "\n"
 
     if current.strip():
-        messages.append(current.rstrip("\n"))
+        chunks.append(current.rstrip("\n"))
+    return chunks
 
-    return messages
+
+def strip_html(text: str) -> str:
+    return html.unescape(re.sub(r"<[^>]+>", "", text or ""))
 
 
-def send_telegram_message(chat_id: str, message: str, parse_mode: str = "HTML") -> dict:
-    """Send a message via Telegram Bot API"""
-    messages = split_message(message)
-    last_result = None
+def send_telegram_message(
+    chat_id: str,
+    message: str,
+    parse_mode: Optional[str] = "HTML",
+    reply_markup: Optional[dict] = None,
+) -> dict:
+    """Send a message (split if long). reply_markup goes on the last chunk."""
+    chunks = split_message(message)
+    last_result: dict = {"success": False, "message": "Empty message"}
 
-    for msg in messages:
-        result = call_telegram_api(
-            "sendMessage",
-            {
-                "chat_id": chat_id,
-                "text": msg,
-                "parse_mode": parse_mode,
-            },
-        )
+    for index, chunk in enumerate(chunks):
+        if not chunk.strip():
+            continue
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": chunk,
+            "disable_web_page_preview": True,
+        }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        if reply_markup and index == len(chunks) - 1:
+            payload["reply_markup"] = reply_markup
+
+        result = call_telegram_api("sendMessage", payload)
+        if (
+            not result.get("success")
+            and parse_mode
+            and "parse" in str(result.get("message", "")).lower()
+        ):
+            # Broken markup must not lose the message: resend as plain text.
+            payload.pop("parse_mode", None)
+            payload["text"] = strip_html(chunk)
+            result = call_telegram_api("sendMessage", payload)
+
         last_result = result
         if not result.get("success"):
             return result
-        if len(messages) > 1:
-            time.sleep(0.5)
+        if len(chunks) > 1:
+            time.sleep(0.35)
 
     return last_result
+
+
+def send_telegram_document(
+    chat_id: str,
+    file_path: str,
+    caption: str = "",
+    filename: Optional[str] = None,
+) -> dict:
+    """Upload a file (<= 50 MB bot limit). Caption is HTML, max 1024 chars."""
+    try:
+        size = os.path.getsize(file_path)
+    except OSError as e:
+        return {"success": False, "message": str(e)}
+    if size > MAX_UPLOAD_BYTES:
+        return {"success": False, "message": "file too large", "too_large": True}
+
+    caption = caption or ""
+    if len(caption) > 1000:
+        caption = caption[:1000]
+    # Upload time grows with size; allow ~10 s per MB on a slow shop link.
+    timeout = int(min(900, 60 + size / (100 * 1024)))
+    return call_telegram_api(
+        "sendDocument",
+        {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
+        timeout=timeout,
+        files={"document": (filename or os.path.basename(file_path), file_path)},
+        max_retries=1,
+    )
 
 
 def send_notification_to_store(store_id: int, message: str) -> bool:
     """Send Telegram notification to a specific store's configured chat"""
     try:
-        token = TELEGRAM_BOT_TOKEN or load_telegram_bot_token()
+        token = current_bot_token()
         if not token:
-            logger.warning("Telegram bot token not configured")
+            logger.info("Telegram bot token not configured; notification skipped")
             return False
 
         chat_id = get_store_telegram_chat_id(store_id)
         if not chat_id:
-            logger.warning(f"No Telegram chat_id configured for store {store_id}")
+            logger.info(f"No Telegram chat_id configured for store {store_id}")
             return False
 
         result = send_telegram_message(chat_id, message)
@@ -327,14 +654,13 @@ def send_notification_to_store(store_id: int, message: str) -> bool:
         if result.get("success"):
             logger.info(f"Notification sent to store {store_id}")
             return True
-        else:
-            logger.error(
-                f"Failed to send notification to store {store_id}: {result.get('message')}"
-            )
-            return False
+        logger.error(
+            f"Failed to send notification to store {store_id}: {result.get('message')}"
+        )
+        return False
 
     except Exception as e:
-        logger.error(f"Error sending notification to store {store_id}: {e}")
+        logger.error(f"Error sending notification to store {store_id}: {_redact(e)}")
         return False
 
 
@@ -342,26 +668,16 @@ def send_telegram_notification_background(store_id: int, message: str):
     """Background task to send Telegram notification"""
     try:
         success = send_notification_to_store(store_id, message)
-
+        preview = message[:50] + "..." if len(message) > 50 else message
         if success:
-            logging.info(
-                "Telegram notification %s was sent",
-                message[:50] + "..." if len(message) > 50 else message,
-            )
+            logging.info("Telegram notification %s was sent", preview)
         else:
-            logging.warning(
-                "Failed to send Telegram notification %s",
-                message[:50] + "..." if len(message) > 50 else message,
-            )
+            logging.info("Telegram notification %s was not sent", preview)
     except Exception as e:
         logging.error("Error in background task sending Telegram notification: %s", e)
 
 
-def _e(text) -> str:
-    """HTML-escape dynamic text for Telegram HTML parse mode"""
-    if text is None:
-        return ""
-    return html.escape(str(text))
+# ─── Notification messages ──────────────────────────────────────────────────
 
 
 def format_excessive_discount_message(
@@ -376,104 +692,55 @@ def format_excessive_discount_message(
     store_name: str = None,
     user_name: str = None,
 ) -> str:
-    """
-    Format Telegram message for excessive discount notification in Arabic
-
-    Args:
-        bill_id: The bill ID
-        move_type: Type of transaction
-        party_name: Customer/party name
-        bill_time: Bill timestamp
-        wholesale_sum: Total wholesale cost
-        bill_total: Final bill total after discount
-        actual_discount: Actual discount amount applied
-        product_details: List of product details
-        store_name: Name of the store where transaction occurred
-        user_name: Username who created the bill
-
-    Returns:
-        Formatted Arabic message string
-    """
-
-    # Calculate loss amount (how much below wholesale cost)
+    """Arabic alert for a sale whose discount pushed it below cost."""
+    wholesale_sum = _to_float(wholesale_sum)
+    bill_total = _to_float(bill_total)
     loss_amount = wholesale_sum - bill_total
     loss_percentage = (loss_amount / wholesale_sum) * 100 if wholesale_sum > 0 else 0
 
-    # Calculate what the total should be without excessive discount
     expected_total = sum(
-        product["quantity"] * product["sale_price"] for product in product_details
+        _to_float(p.get("quantity")) * _to_float(p.get("sale_price"))
+        for p in product_details
     )
 
-    # Format transaction type in Arabic
     type_mapping = {"sell": "بيع", "BNPL": "بيع آجل", "installment": "بيع بالتقسيط"}
     arabic_type = type_mapping.get(move_type, move_type)
 
-    # Format date nicely
-    try:
-        from datetime import datetime
-
-        dt = datetime.fromisoformat(bill_time.replace("Z", "+00:00"))
-        formatted_date = dt.strftime("%Y-%m-%d %H:%M")
-    except Exception as e:
-        logger.error("Error formatting date: %s", e)
-        formatted_date = bill_time
-
-    # Format store and user information
     store_display = _e(store_name) if store_name else "غير محدد"
     user_display = _e(user_name) if user_name else "غير محدد"
 
-    # Create products list - simple and clean format
-    products_text = ""
+    product_lines = []
     for i, product in enumerate(product_details, 1):
-        name = _e(product["name"])
-        qty = product["quantity"]
-        price = product["sale_price"]
-        total_item = qty * price
+        qty = _to_float(product.get("quantity"))
+        price = _to_float(product.get("sale_price"))
+        product_lines.append(
+            f"{i}. {_e(product.get('name'))}\n"
+            f"   {fmt_qty(qty)} × {fmt_money(price)} = {fmt_money(qty * price)}"
+        )
 
-        products_text += f"{i}. {name}\n"
-        products_text += f"   🔢 الكمية: {qty} قطعة\n"
-        products_text += f"   💰 السعر: {price:.2f} ج.م\n"
-        products_text += f"   📊 الإجمالي: {total_item:.2f} ج.م\n"
-
-        # Add spacing between products except for the last one
-        if i < len(product_details):
-            products_text += "\n"
-
-    message = f"""🚨 <b>تنبيه عاجل: فاتورة بخصم مفرط</b> 🚨
-
-🆔 <b>رقم الفاتورة:</b> {bill_id}
-🏪 <b>المتجر:</b> {store_display}
-👨‍💼 <b>الموظف:</b> {user_display}
-📝 <b>نوع العملية:</b> {arabic_type}
-👤 <b>العميل:</b> {_e(party_name)}
-📅 <b>التاريخ:</b> {formatted_date}
-
-━━━━━━━━━━━━━━━━━━━━
-
-💰 <b>الملخص المالي:</b>
-
-🏷️ <b>إجمالي سعر الشراء:</b> {wholesale_sum:.2f} ج.م
-💵 <b>قيمة الفاتورة قبل الخصم:</b> {expected_total:.2f} ج.م
-🎯 <b>قيمة الخصم المطبق:</b> {actual_discount:.2f} ج.م
-💳 <b>إجمالي الفاتورة النهائي:</b> {bill_total:.2f} ج.م
-
-⚠️ <b>مقدار الخسارة:</b> {loss_amount:.2f} ج.م ({loss_percentage:.1f}%)
-
-━━━━━━━━━━━━━━━━━━━━
-
-🛍️ <b>تفاصيل المنتجات:</b>
-
-{products_text}
-
-━━━━━━━━━━━━━━━━━━━━
-
-🔴 <b>تحذير مهم:</b>
-⚠️ إجمالي الفاتورة أقل من سعر الشراء
-💸 هذا يعني خسارة مالية في هذه الصفقة
-📞 يرجى المراجعة الفورية والتأكد من صحة الخصم
-"""
-
-    return message
+    return "\n".join(
+        [
+            "🚨 <b>تنبيه: فاتورة بخصم أقل من التكلفة</b>",
+            "",
+            f"🆔 <b>رقم الفاتورة:</b> {_e(bill_id)}",
+            f"🏪 <b>المتجر:</b> {store_display}",
+            f"👨‍💼 <b>الموظف:</b> {user_display}",
+            f"📝 <b>نوع العملية:</b> {_e(arabic_type)}",
+            f"👤 <b>العميل:</b> {_e(party_name)}",
+            f"📅 <b>التاريخ:</b> {fmt_dt(bill_time)}",
+            SEPARATOR,
+            f"🏷️ إجمالي سعر الشراء: {fmt_money(wholesale_sum)}",
+            f"💵 قبل الخصم: {fmt_money(expected_total)}",
+            f"🎯 الخصم: {fmt_money(actual_discount)}",
+            f"💳 الإجمالي النهائي: {fmt_money(bill_total)}",
+            f"⚠️ <b>الخسارة:</b> {fmt_money(loss_amount)} ({loss_percentage:.1f}%)",
+            SEPARATOR,
+            "🛍️ <b>المنتجات:</b>",
+            *product_lines,
+            SEPARATOR,
+            "📞 يرجى مراجعة الخصم.",
+        ]
+    )
 
 
 def format_low_stock_message(
@@ -481,122 +748,71 @@ def format_low_stock_message(
     store_name: str = None,
     user_name: str = None,
 ) -> str:
-    """
-    Format Telegram message for low/negative stock notification in Arabic
-
-    Args:
-        products_below_zero: List of products with stock below 0
-        store_name: Name of the store where transaction occurred
-        user_name: Username who created the bill
-
-    Returns:
-        Formatted Arabic message string
-    """
-    from datetime import datetime
-
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # Format store and user information
+    """Arabic alert for products that reached zero/negative stock after a sale."""
+    current_time = local_now().strftime("%Y-%m-%d %H:%M")
     store_display = _e(store_name) if store_name else "غير محدد"
     user_display = _e(user_name) if user_name else "غير محدد"
 
-    # Create products list
-    products_text = ""
+    lines = [
+        "⚠️ <b>تنبيه: منتجات نفد مخزونها</b>",
+        "",
+        f"🏪 <b>المتجر:</b> {store_display}",
+        f"👨‍💼 <b>الموظف:</b> {user_display}",
+        f"📅 <b>التاريخ:</b> {current_time}",
+        SEPARATOR,
+    ]
     for i, product in enumerate(products_below_zero, 1):
-        name = _e(product["name"])
-        current_stock = product["stock"]
-        quantity_sold = product.get("quantity_sold", "غير متاح")
-
-        products_text += f"{i}. {name}\n"
-        products_text += f"   🛒 الكمية المباعة: {quantity_sold} قطعة\n"
-        products_text += f"   ⚠️ المخزون الحالي: {current_stock} قطعة\n"
-
-        if i < len(products_below_zero):
-            products_text += "\n"
-
-    message = f"""⚠️ <b>تنبيه مخزون سالب</b> ⚠️
-
-🏪 <b>المتجر:</b> {store_display}
-👨‍💼 <b>الموظف:</b> {user_display}
-📅 <b>التاريخ:</b> {current_time}
-
-━━━━━━━━━━━━━━━━━━━━
-
-📦 <b>منتجات بمخزون سالب:</b>
-
-{products_text}"""
-
-    return message
+        sold = product.get("quantity_sold")
+        sold_text = fmt_qty(sold) if sold is not None else "-"
+        lines.append(
+            f"{i}. {_e(product.get('name'))}\n"
+            f"   🛒 المباع الآن: {sold_text} | 📦 المخزون: {fmt_qty(product.get('stock'))}"
+        )
+    return "\n".join(lines)
 
 
 def check_stock_levels_after_sale(store_id: int, sold_products: List[Dict[str, Any]]):
-    """
-    Check stock levels after a sale and return products that are below or equal to 0
-
-    Args:
-        store_id: Store ID
-        sold_products: List of products that were sold with their quantities
-
-    Returns:
-        List of products with stock <= 0
-    """
+    """Products from this sale whose stock is now <= 0."""
     try:
-        # Wait 1 second for database triggers to complete
+        # Give the stock triggers of the bill transaction a moment to land.
         time.sleep(1)
 
         if not sold_products:
-            logger.info("No products sold, skipping stock check")
             return []
 
-        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        quantities: Dict[int, float] = {}
+        for p in sold_products:
+            pid = int(p["id"])
+            quantities[pid] = quantities.get(pid, 0) + _to_float(p.get("quantity"))
 
-        products_below_zero = []
-
-        for sold_product in sold_products:
-            product_id = sold_product["id"]
-            quantity_sold = sold_product["quantity"]
-
-            # Get current stock after the sale
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(
                 """
-                SELECT p.name, pi.stock
+                SELECT p.id, p.name, pi.stock
                 FROM products p
                 JOIN product_inventory pi ON p.id = pi.product_id
-                WHERE p.id = %s AND pi.store_id = %s
+                WHERE p.id IN %s AND pi.store_id = %s
+                  AND pi.is_deleted = FALSE AND pi.stock <= 0
+                ORDER BY p.name
                 """,
-                (product_id, store_id),
+                (tuple(quantities), store_id),
             )
+            rows = cur.fetchall()
+            cur.close()
+        finally:
+            conn.close()
 
-            result = cur.fetchone()
-            if result:
-                current_stock = result["stock"]
-
-                # Check if the product stock is <= 0
-                if current_stock <= 0:
-                    logger.warning(
-                        f"Product '{result['name']}' stock is low/negative: {current_stock}"
-                    )
-                    products_below_zero.append(
-                        {
-                            "name": result["name"],
-                            "stock": current_stock,
-                            "product_id": product_id,
-                            "quantity_sold": quantity_sold,
-                        }
-                    )
-            else:
-                logger.warning(
-                    f"Product ID {product_id} not found in inventory for store {store_id}"
-                )
-
-        if products_below_zero:
-            logger.info(f"Found {len(products_below_zero)} products with stock <= 0")
-
-        cur.close()
-        conn.close()
-
-        return products_below_zero
+        return [
+            {
+                "name": r["name"],
+                "stock": r["stock"],
+                "product_id": r["id"],
+                "quantity_sold": quantities.get(int(r["id"])),
+            }
+            for r in rows
+        ]
 
     except Exception as e:
         logger.error(f"Error checking stock levels: {e}")
@@ -609,12 +825,11 @@ def send_low_stock_notification_background(
     store_name: str = None,
     user_name: str = None,
 ):
-    """Background task to send low stock Telegram notification and create in-app notification"""
+    """Background task: in-app notification + Telegram message for low stock"""
     try:
         if not products_below_zero:
             return
 
-        # Create in-app notification
         from notifications import create_low_stock_notification
 
         create_low_stock_notification(store_id, products_below_zero)
@@ -624,19 +839,7 @@ def send_low_stock_notification_background(
             store_name=store_name,
             user_name=user_name,
         )
-
-        success = send_notification_to_store(store_id, message)
-
-        if success:
-            logging.info(
-                "Low stock Telegram notification sent for %d products",
-                len(products_below_zero),
-            )
-        else:
-            logging.warning(
-                "Failed to send low stock Telegram notification for %d products",
-                len(products_below_zero),
-            )
+        send_notification_to_store(store_id, message)
     except Exception as e:
         logging.error(
             "Error in background task sending low stock Telegram notification: %s", e
@@ -649,21 +852,13 @@ def check_and_send_low_stock_notification(
     store_name: str = None,
     user_name: str = None,
 ):
-    """
-    Background task wrapper that checks stock levels and sends notification if needed
-    """
+    """Background task wrapper that checks stock levels and notifies if needed"""
     try:
-        # Check stock levels (includes 1-second wait)
         products_below_zero = check_stock_levels_after_sale(store_id, sold_products)
-
-        # Send notification if any products are below zero
         if products_below_zero:
             send_low_stock_notification_background(
                 store_id, products_below_zero, store_name, user_name
             )
-        else:
-            logging.info("All products have positive stock")
-
     except Exception as e:
         logging.error(f"Error in background stock check task: {e}")
 
@@ -675,143 +870,127 @@ def format_store_transfer_message(
     transfer_time: str,
     user_name: str = None,
 ) -> str:
-    """
-    Format Telegram message for store transfer notification in Arabic
-
-    Args:
-        source_store_name: Name of the source store
-        destination_store_name: Name of the destination store
-        products: List of transferred products with details
-        transfer_time: Transfer timestamp
-        user_name: Username who performed the transfer
-
-    Returns:
-        Formatted Arabic message string
-    """
-    # Format user information
+    """Arabic notification for a product move between stores."""
     user_display = _e(user_name) if user_name else "غير محدد"
-
-    # Create products list
-    products_text = ""
+    lines = [
+        "🔄 <b>نقل منتجات بين المتاجر</b>",
+        "",
+        f"📅 <b>التاريخ:</b> {fmt_dt(transfer_time)}",
+        f"👤 <b>المستخدم:</b> {user_display}",
+        f"🏪 <b>من:</b> {_e(source_store_name)}",
+        f"🏬 <b>إلى:</b> {_e(destination_store_name)}",
+        SEPARATOR,
+    ]
+    total_value = 0.0
     for i, product in enumerate(products, 1):
-        name = _e(product.get("name", "منتج غير محدد"))
-        quantity = product.get("quantity", 0)
-
-        products_text += f"{i}. {name}\n"
-        products_text += f"   📦 الكمية: {quantity} قطعة\n"
-
-    message = f"""🔄 <b>تنبيه نقل منتجات بين المتاجر</b>
-
-━━━━━━━━━━━━━━━━━━━━
-
-📅 <b>تاريخ النقل:</b> {_e(transfer_time)}
-👤 <b>المستخدم:</b> {user_display}
-
-🏪 <b>من المتجر:</b> {_e(source_store_name)}
-🏬 <b>إلى المتجر:</b> {_e(destination_store_name)}
-
-
-━━━━━━━━━━━━━━━━━━━━
-
-🛍️ <b>تفاصيل المنتجات المنقولة:</b>
-
-{products_text}━━━━━━━━━━━━━━━━━━━━
-"""
-
-    return message
+        qty = _to_float(product.get("quantity"))
+        cost = _to_float(product.get("wholesale_price"))
+        total_value += qty * cost
+        lines.append(f"{i}. {_e(product.get('name', 'منتج'))} — {fmt_qty(qty)}")
+    lines.append(SEPARATOR)
+    lines.append(f"📦 عدد الأصناف: {len(products)}")
+    if total_value:
+        lines.append(f"💰 القيمة بسعر الشراء: {fmt_money(total_value)}")
+    return "\n".join(lines)
 
 
 def check_due_installments(store_id: int):
     """
-    Check for installments that are due today or overdue
+    Installments of this store that are due today or overdue and not fully paid.
 
-    Args:
-        store_id: Store ID to check installments for
-
-    Returns:
-        List of due installments with full details
+    Due date = last payment (or the bill date) + installment_interval days.
+    Paid = deposit (installments.paid) + every installments_flow payment,
+    total = the bill's lines value (same as the installments page).
     """
     try:
-        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        # Query to get installments with their flow and calculate due dates
-        query = """
-        WITH installment_details AS (
-            SELECT
-                i.id,
-                i.paid,
-                i.installments_count,
-                i.installment_interval,
-                i.bill_id,
-                -- Party information
-                COALESCE(ap.name, 'عميل غير معروف') AS party_name,
-                COALESCE(ap.phone, '') AS party_phone,
-                -- Bill total from products_flow
-                ABS(COALESCE(SUM(pf.price * pf.amount), 0)) as total,
-                -- Last payment date (either from flow or bill creation)
-                COALESCE(
-                    (SELECT MAX(time) FROM installments_flow WHERE installment_id = i.id),
-                    (SELECT time FROM bills WHERE id = i.bill_id)
-                ) as last_payment_date,
-                -- Products in the installment
-                json_agg(
-                    json_build_object(
-                        'name', p.name,
-                        'price', ABS(pf.price),
-                        'amount', ABS(pf.amount),
-                        'total', ABS(pf.price * pf.amount)
-                    )
-                ) as products,
-                -- Payment flow
-                (SELECT json_agg(
-                    json_build_object(
-                        'amount', amount,
-                        'time', time::text
-                    ) ORDER BY time
-                ) FROM installments_flow WHERE installment_id = i.id) as flow
-            FROM installments i
-            JOIN bills b ON i.bill_id = b.id
-            LEFT JOIN assosiated_parties ap ON b.party_id = ap.id
-            LEFT JOIN products_flow pf ON b.id = pf.bill_id AND b.store_id = pf.store_id
-            LEFT JOIN products p ON pf.product_id = p.id
-            WHERE i.store_id = %s
-            GROUP BY i.id, i.paid, i.installments_count, i.installment_interval, i.bill_id, ap.name, ap.phone
-        ),
-        due_installments AS (
-            SELECT
-                *,
-                -- Calculate total paid (deposit + flow payments)
-                paid + COALESCE((
-                    SELECT SUM(amount)
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                """
+                WITH inst AS (
+                    SELECT
+                        i.id, i.bill_id, COALESCE(i.paid, 0) AS paid,
+                        i.installments_count, i.installment_interval,
+                        b.time AS bill_time,
+                        COALESCE(ap.name, 'عميل غير معروف') AS party_name,
+                        COALESCE(ap.phone, '') AS party_phone
+                    FROM installments i
+                    JOIN bills b ON b.id = i.bill_id AND b.store_id = i.store_id
+                    LEFT JOIN assosiated_parties ap ON ap.id = b.party_id
+                    WHERE i.store_id = %s
+                ),
+                lines AS (
+                    SELECT
+                        pf.bill_id,
+                        ABS(COALESCE(SUM(pf.price * pf.amount), 0)) AS total,
+                        json_agg(json_build_object(
+                            'name', p.name,
+                            'price', ABS(pf.price),
+                            'amount', ABS(pf.amount),
+                            'total', ABS(pf.price * pf.amount)
+                        ) ORDER BY pf.id) AS products
+                    FROM products_flow pf
+                    JOIN products p ON p.id = pf.product_id
+                    WHERE pf.store_id = %s
+                      AND pf.bill_id IN (SELECT bill_id FROM inst)
+                    GROUP BY pf.bill_id
+                ),
+                flows AS (
+                    SELECT
+                        installment_id,
+                        COALESCE(SUM(amount), 0) AS flow_sum,
+                        MAX(time) AS last_payment,
+                        json_agg(json_build_object(
+                            'amount', amount, 'time', time::text
+                        ) ORDER BY time) AS flow
                     FROM installments_flow
-                    WHERE installment_id = id
-                ), 0) as total_paid,
-                -- Calculate next due date
-                last_payment_date + (installment_interval || ' days')::interval as next_due_date
-            FROM installment_details
-        )
-        SELECT *
-        FROM due_installments
-        WHERE
-            -- Not fully paid
-            total_paid < total
-            -- Due today or overdue
-            AND next_due_date::date <= CURRENT_DATE
-        ORDER BY next_due_date ASC
-        """
+                    WHERE installment_id IN (SELECT id FROM inst)
+                    GROUP BY installment_id
+                )
+                SELECT
+                    inst.id, inst.bill_id, inst.paid, inst.installments_count,
+                    inst.installment_interval, inst.party_name, inst.party_phone,
+                    COALESCE(l.total, 0) AS total,
+                    COALESCE(l.products, '[]'::json) AS products,
+                    COALESCE(f.flow, '[]'::json) AS flow,
+                    inst.paid + COALESCE(f.flow_sum, 0) AS total_paid,
+                    COALESCE(f.last_payment, inst.bill_time) AS last_payment_date,
+                    COALESCE(f.last_payment, inst.bill_time)
+                        + make_interval(days => COALESCE(inst.installment_interval, 0))
+                        AS next_due_date
+                FROM inst
+                LEFT JOIN lines l ON l.bill_id = inst.bill_id
+                LEFT JOIN flows f ON f.installment_id = inst.id
+                WHERE inst.paid + COALESCE(f.flow_sum, 0) < COALESCE(l.total, 0) - 0.009
+                  AND (COALESCE(f.last_payment, inst.bill_time)
+                        + make_interval(days => COALESCE(inst.installment_interval, 0)))::date
+                      <= CURRENT_DATE
+                ORDER BY next_due_date ASC
+                """,
+                (store_id, store_id),
+            )
+            rows = cur.fetchall()
+            cur.close()
+        finally:
+            conn.close()
 
-        cur.execute(query, (store_id,))
-        due_installments = cur.fetchall()
-
-        cur.close()
-        conn.close()
-
-        return due_installments
+        for row in rows:
+            row["total"] = _to_float(row.get("total"))
+            row["total_paid"] = _to_float(row.get("total_paid"))
+            row["paid"] = _to_float(row.get("paid"))
+        return rows
 
     except Exception as e:
         logger.error(f"Error checking due installments: {e}")
         return []
+
+
+def installment_days_overdue(installment: Dict[str, Any]) -> int:
+    due = _parse_dt(installment.get("next_due_date"))
+    if due is None:
+        return 0
+    return max(0, (local_now().date() - due.date()).days)
 
 
 def format_due_installments_message(
@@ -819,129 +998,62 @@ def format_due_installments_message(
     store_name: str = None,
     user_name: str = None,
 ) -> str:
-    """
-    Format Telegram message for due installments notification in Arabic
-
-    Args:
-        due_installments: List of due installments with full details
-        store_name: Name of the store
-        user_name: Username who logged in
-
-    Returns:
-        Formatted Arabic message string
-    """
-    from datetime import datetime
-
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # Format store and user information
+    """Shift-open message, with the due/overdue installments if any."""
+    current_time = local_now().strftime("%Y-%m-%d %H:%M")
     store_display = _e(store_name) if store_name else "غير محدد"
     user_display = _e(user_name) if user_name else "غير محدد"
 
+    lines = [
+        "✅ <b>تم فتح شيفت جديد</b>",
+        "",
+        f"🏪 <b>المتجر:</b> {store_display}",
+        f"👨‍💼 <b>المستخدم:</b> {user_display}",
+        f"📅 <b>الوقت:</b> {current_time}",
+    ]
     if not due_installments:
-        return f"""✅ <b>تم فتح شيفت جديد</b>
+        return "\n".join(lines)
 
-🏪 <b>المتجر:</b> {store_display}
-👨‍💼 <b>المستخدم:</b> {user_display}
-📅 <b>الوقت:</b> {current_time}
-"""
+    total_remaining = sum(
+        _to_float(i.get("total")) - _to_float(i.get("total_paid"))
+        for i in due_installments
+    )
+    lines += [
+        SEPARATOR,
+        f"📅 <b>أقساط مستحقة: {len(due_installments)}</b> — المتبقي {fmt_money(total_remaining)}",
+        "",
+    ]
 
-    # Create installments list
-    installments_text = ""
-
-    for i, installment in enumerate(due_installments, 1):
-        party_name = _e(installment.get("party_name", "عميل غير معروف"))
-        party_phone = _e(installment.get("party_phone", "غير متاح"))
-        installment_id = installment.get("id")
-        total = installment.get("total", 0)
-        total_paid = installment.get("total_paid", 0)
-        remaining = total - total_paid
-        next_due_date = installment.get("next_due_date")
-        flow = installment.get("flow") or []
+    for installment in due_installments:
+        total = _to_float(installment.get("total"))
+        total_paid = _to_float(installment.get("total_paid"))
+        days = installment_days_overdue(installment)
+        status = f"متأخر {days} يوم ⚠️" if days > 0 else "مستحق اليوم"
+        lines.append(
+            f"🔸 <b>{_e(installment.get('party_name'))}</b>"
+            + (f" — {_e(installment.get('party_phone'))}" if installment.get("party_phone") else "")
+        )
+        lines.append(
+            f"   قسط #{_e(installment.get('id'))} (فاتورة #{_e(installment.get('bill_id'))}) • "
+            f"{fmt_dt(installment.get('next_due_date'), with_time=False)} • {status}"
+        )
+        lines.append(
+            f"   الإجمالي {fmt_money(total)} • المدفوع {fmt_money(total_paid)} • "
+            f"<b>المتبقي {fmt_money(total - total_paid)}</b>"
+        )
         products = installment.get("products") or []
-
-        # Format due date
-        try:
-            due_date = datetime.fromisoformat(str(next_due_date).replace("Z", "+00:00"))
-            formatted_due_date = due_date.strftime("%Y-%m-%d")
-
-            # Check if overdue
-            days_overdue = (datetime.now().date() - due_date.date()).days
-            if days_overdue > 0:
-                due_status = f"متأخر {days_overdue} يوم ⚠️"
-            else:
-                due_status = "مستحق اليوم 📅"
-        except Exception as e:
-            logger.error(f"Error formatting due date: {e}")
-            formatted_due_date = str(next_due_date)
-            due_status = "مستحق اليوم 📅"
-
-        installments_text += f"🔸 <b>القسط رقم {installment_id}</b>\n"
-        installments_text += f"👤 <b>العميل:</b> {party_name}\n"
-        installments_text += f"📞 <b>الهاتف:</b> {party_phone}\n"
-        installments_text += f"📅 <b>تاريخ الاستحقاق:</b> {formatted_due_date}\n"
-        installments_text += f"⏰ <b>الحالة:</b> {due_status}\n"
-        installments_text += f"💰 <b>إجمالي الفاتورة:</b> {total:.2f} ج.م\n"
-        installments_text += f"✅ <b>المدفوع:</b> {total_paid:.2f} ج.م\n"
-        installments_text += f"💳 <b>المتبقي:</b> {remaining:.2f} ج.م\n\n"
-
-        # Add products details
+        if isinstance(products, str):
+            try:
+                products = json.loads(products)
+            except ValueError:
+                products = []
         if products:
-            installments_text += "🛍️ <b>منتجات القسط:</b>\n"
-            for j, product in enumerate(products, 1):
-                name = _e(product.get("name", "منتج غير محدد"))
-                amount = product.get("amount", 0)
-                price = product.get("price", 0)
-                product_total = product.get("total", 0)
+            names = "، ".join(_e(p.get("name")) for p in products[:4])
+            more = f" و{len(products) - 4} أخرى" if len(products) > 4 else ""
+            lines.append(f"   🛍️ {names}{more}")
+        lines.append("")
 
-                installments_text += f"   {j}. {name}\n"
-                installments_text += (
-                    f"      الكمية: {amount} × {price:.2f} = {product_total:.2f} ج.م\n"
-                )
-            installments_text += "\n"
-
-        # Add payment history if exists
-        if flow:
-            installments_text += "💰 <b>سجل المدفوعات:</b>\n"
-            for payment in flow:
-                amount = payment.get("amount", 0)
-                payment_time = payment.get("time", "")
-                try:
-                    payment_date = datetime.fromisoformat(
-                        payment_time.replace("Z", "+00:00")
-                    )
-                    formatted_payment_date = payment_date.strftime("%Y-%m-%d")
-                except Exception as e:
-                    logger.error(f"Error formatting payment date: {e}")
-                    formatted_payment_date = payment_time
-
-                installments_text += (
-                    f"   • {amount:.2f} ج.م في {formatted_payment_date}\n"
-                )
-
-        # Add separator between installments
-        if i < len(due_installments):
-            installments_text += "\n━━━━━━━━━━━━━━━━━━━━\n\n"
-
-        message = f"""✅ <b>تم فتح شيفت جديد</b>
-
-🏪 <b>المتجر:</b> {store_display}
-👨‍💼 <b>المستخدم:</b> {user_display}
-📅 <b>الوقت:</b> {current_time}
-
-━━━━━━━━━━━━━━━━━━━━
-
-📊 <b>عدد الأقساط المستحقة:</b> {len(due_installments)}
-
-━━━━━━━━━━━━━━━━━━━━
-
-{installments_text}
-
-━━━━━━━━━━━━━━━━━━━━
-
-⚠️ <b>يرجى متابعة العملاء لتحصيل المبالغ المستحقة</b>"""
-
-    return message
+    lines.append("⚠️ <b>يرجى متابعة العملاء لتحصيل المبالغ المستحقة</b>")
+    return "\n".join(lines)
 
 
 def send_due_installments_notification_background(
@@ -949,38 +1061,21 @@ def send_due_installments_notification_background(
     store_name: str = None,
     user_name: str = None,
 ):
-    """
-    Background task to check for due installments and send Telegram notification
-    Also creates in-app notifications for each due installment
-    """
+    """Shift open: in-app notifications for due installments + Telegram message."""
     try:
-        # Check for due installments
         due_installments = check_due_installments(store_id)
 
-        # Create in-app notifications for due installments
         if due_installments:
             from notifications import create_due_installments_notification
 
             create_due_installments_notification(store_id, due_installments)
 
-        # Always send a notification (even if no due installments)
         message = format_due_installments_message(
             due_installments=due_installments,
             store_name=store_name,
             user_name=user_name,
         )
-
-        success = send_notification_to_store(store_id, message)
-
-        if success:
-            count = len(due_installments)
-            logging.info(
-                f"Due installments Telegram notification sent for store {store_id}: {count} installments due"
-            )
-        else:
-            logging.warning(
-                f"Failed to send due installments Telegram notification for store {store_id}"
-            )
+        send_notification_to_store(store_id, message)
     except Exception as e:
         logging.error(
             f"Error in background task sending due installments Telegram notification: {e}"
@@ -989,72 +1084,97 @@ def send_due_installments_notification_background(
 
 def check_products_depleted_during_shift(store_id: int, shift_start_time: str):
     """
-    Check for products that reached 0 or negative stock during the current shift
-    (excluding products that were already at 0 or below when the shift started)
-
-    Args:
-        store_id: Store ID to check products for
-        shift_start_time: When the current shift started
-
-    Returns:
-        List of products that were depleted during this shift
+    Products that reached 0 or below during the shift and had positive stock
+    when it started.
     """
     try:
-        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        # Get products that were sold/affected during this shift
-        query = """
-        WITH shift_product_movements AS (
-            -- Get all product movements during this shift
-            SELECT
-                pf.product_id,
-                SUM(pf.amount) as total_shift_movement,
-                p.name as product_name
-            FROM products_flow pf
-            JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
-            JOIN products p ON pf.product_id = p.id
-            WHERE pf.store_id = %s
-            AND b.time >= %s
-            AND pf.bill_id > 0  -- Exclude manual adjustments (-1 bill)
-            GROUP BY pf.product_id, p.name
-            HAVING SUM(pf.amount) < 0  -- Only products that had net negative movement (were sold)
-        ),
-        current_and_pre_shift_stock AS (
-            SELECT
-                spm.product_id,
-                spm.product_name,
-                spm.total_shift_movement,
-                pi.stock as current_stock,
-                -- Calculate stock before shift started
-                pi.stock - spm.total_shift_movement as stock_before_shift
-            FROM shift_product_movements spm
-            JOIN product_inventory pi ON spm.product_id = pi.product_id
-                AND pi.store_id = %s
-            WHERE pi.is_deleted = FALSE
-        )
-        SELECT
-            product_id,
-            product_name,
-            current_stock,
-            stock_before_shift,
-            ABS(total_shift_movement) as consumed_amount
-        FROM current_and_pre_shift_stock
-        WHERE stock_before_shift > 0  -- Had positive stock before shift
-        AND current_stock <= 0  -- Now at zero or below
-        ORDER BY product_name
-        """
-
-        cur.execute(query, (store_id, shift_start_time, store_id))
-        depleted_products = cur.fetchall()
-
-        cur.close()
-        conn.close()
-
-        return depleted_products
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                """
+                WITH shift_product_movements AS (
+                    SELECT
+                        pf.product_id,
+                        SUM(pf.amount) AS total_shift_movement,
+                        p.name AS product_name
+                    FROM products_flow pf
+                    JOIN bills b ON pf.bill_id = b.id AND pf.store_id = b.store_id
+                    JOIN products p ON pf.product_id = p.id
+                    WHERE pf.store_id = %s
+                      AND b.time >= %s
+                      AND pf.bill_id > 0
+                    GROUP BY pf.product_id, p.name
+                    HAVING SUM(pf.amount) < 0
+                )
+                SELECT
+                    spm.product_id,
+                    spm.product_name,
+                    pi.stock AS current_stock,
+                    pi.stock - spm.total_shift_movement AS stock_before_shift,
+                    ABS(spm.total_shift_movement) AS consumed_amount
+                FROM shift_product_movements spm
+                JOIN product_inventory pi
+                  ON spm.product_id = pi.product_id AND pi.store_id = %s
+                WHERE pi.is_deleted = FALSE
+                  AND pi.stock - spm.total_shift_movement > 0
+                  AND pi.stock <= 0
+                ORDER BY spm.product_name
+                """,
+                (store_id, shift_start_time, store_id),
+            )
+            rows = cur.fetchall()
+            cur.close()
+        finally:
+            conn.close()
+        return rows
 
     except Exception as e:
         logger.error(f"Error checking products depleted during shift: {e}")
+        return []
+
+
+def get_shift_account_breakdown(store_id: int, since) -> List[Dict[str, Any]]:
+    """Per account: movement since `since` and current balance (like /shift-total)."""
+    try:
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                """
+                SELECT
+                    pm.name,
+                    COALESCE(SUM(at.amount) FILTER (WHERE at.time >= %s), 0) AS shift_total,
+                    COALESCE(SUM(at.amount), 0) AS balance
+                FROM payment_methods pm
+                LEFT JOIN account_transactions at
+                    ON at.payment_method_id = pm.id AND at.store_id = %s
+                WHERE pm.is_deleted = FALSE
+                   OR EXISTS (
+                        SELECT 1 FROM account_transactions at2
+                        WHERE at2.payment_method_id = pm.id AND at2.store_id = %s
+                   )
+                GROUP BY pm.id, pm.name, pm.is_default
+                HAVING COALESCE(SUM(at.amount), 0) <> 0
+                    OR COALESCE(SUM(at.amount) FILTER (WHERE at.time >= %s), 0) <> 0
+                ORDER BY pm.is_default DESC, pm.id ASC
+                """,
+                (since, store_id, store_id, since),
+            )
+            rows = cur.fetchall()
+            cur.close()
+        finally:
+            conn.close()
+        return [
+            {
+                "method": r["name"],
+                "shift_total": _to_float(r["shift_total"]),
+                "balance": _to_float(r["balance"]),
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error loading account breakdown: {e}")
         return []
 
 
@@ -1064,221 +1184,167 @@ def format_shift_closure_message(
     user_name: str = None,
     shift_start_time: str = None,
 ) -> str:
-    """
-    Format Telegram message for shift closure notification in Arabic (without depleted products)
-
-    Args:
-        shift_data: Dictionary containing shift financial summary
-        store_name: Name of the store
-        user_name: Username who closed the shift
-        shift_start_time: When the shift started
-
-    Returns:
-        Formatted Arabic message string for shift closure summary
-    """
-    from datetime import datetime
-
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # Format store and user information
+    """Shift closure summary (the figures come from /logout as before)."""
+    # Shift rows are stamped with the store clock (clock.local_now()).
+    current_time = local_now().strftime("%Y-%m-%d %H:%M")
     store_display = _e(store_name) if store_name else "غير محدد"
     user_display = _e(user_name) if user_name else "غير محدد"
 
-    # Format shift duration
     shift_duration = "غير محدد"
-    if shift_start_time:
-        try:
-            start_dt = datetime.fromisoformat(shift_start_time.replace("Z", "+00:00"))
-            end_dt = datetime.now()
-            duration = end_dt - start_dt
-            hours = int(duration.total_seconds() // 3600)
-            minutes = int((duration.total_seconds() % 3600) // 60)
-            shift_duration = f"{hours} ساعة و {minutes} دقيقة"
-            formatted_start_time = start_dt.strftime("%H:%M")
-        except Exception as e:
-            logger.error(f"Error formatting shift duration: {e}")
-            formatted_start_time = shift_start_time
-    else:
-        formatted_start_time = "غير محدد"
+    formatted_start_time = "غير محدد"
+    start_dt = _parse_dt(shift_start_time)
+    if start_dt is not None:
+        duration = local_now() - start_dt
+        hours = int(duration.total_seconds() // 3600)
+        minutes = int((duration.total_seconds() % 3600) // 60)
+        shift_duration = f"{hours} ساعة و {minutes} دقيقة"
+        formatted_start_time = start_dt.strftime("%Y-%m-%d %H:%M")
 
-    # Extract financial data
-    sell_total = shift_data.get("sell_total", 0)
-    buy_total = abs(shift_data.get("buy_total", 0))  # Make positive for display
-    return_total = abs(shift_data.get("return_total", 0))  # Make positive for display
-    installment_total = abs(shift_data.get("installment_total", 0))
-    cash_in = shift_data.get("cash_in", 0)
-    cash_out = shift_data.get("cash_out", 0)
-    net_cash_flow = shift_data.get("net_cash_flow", 0)
-    transaction_count = shift_data.get("transaction_count", 0)
+    sell_total = _to_float(shift_data.get("sell_total"))
+    return_total = abs(_to_float(shift_data.get("return_total")))
+    installment_total = abs(_to_float(shift_data.get("installment_total")))
+    buy_total = abs(_to_float(shift_data.get("buy_total")))
+    cash_in = _to_float(shift_data.get("cash_in"))
+    cash_out = _to_float(shift_data.get("cash_out"))
+    net_cash_flow = _to_float(shift_data.get("net_cash_flow"))
+    transaction_count = int(_to_float(shift_data.get("transaction_count")))
 
-    # Calculate gross revenue
     gross_revenue = sell_total - return_total
-
-    # Calculate average transaction value
     avg_transaction = gross_revenue / transaction_count if transaction_count > 0 else 0
 
-    # Get daily inventory summary
     inventory_summary = get_daily_inventory_summary(shift_data.get("store_id"))
 
-    message = f"""🔐 <b>تم إغلاق الشيفت</b> 🔐
+    lines = [
+        "🔐 <b>تم إغلاق الشيفت</b>",
+        "",
+        f"🏪 <b>المتجر:</b> {store_display}",
+        f"👨‍💼 <b>المستخدم:</b> {user_display}",
+        f"🚀 <b>البداية:</b> {formatted_start_time}",
+        f"🕐 <b>الإغلاق:</b> {current_time}",
+        f"⏱️ <b>المدة:</b> {shift_duration}",
+        SEPARATOR,
+        "💰 <b>الملخص المالي</b>",
+        f"💵 المبيعات: {fmt_money(sell_total)}",
+        f"🔄 المرتجعات: {fmt_money(return_total)}",
+        f"📈 <b>صافي المبيعات: {fmt_money(gross_revenue)}</b>",
+    ]
+    if buy_total:
+        lines.append(f"🚚 المشتريات: {fmt_money(buy_total)}")
+    lines += [
+        f"🏦 الأقساط المحصلة: {fmt_money(installment_total)}",
+        "",
+        "💳 <b>الحركة النقدية</b>",
+        f"⬆️ الداخل: {fmt_money(cash_in)}",
+        f"⬇️ الخارج: {fmt_money(cash_out)}",
+        f"💰 <b>الصافي: {fmt_money(net_cash_flow)}</b>",
+    ]
 
-🏪 <b>المتجر:</b> {store_display}
-👨‍💼 <b>المستخدم:</b> {user_display}
-🕐 <b>وقت الإغلاق:</b> {current_time}
-⏱️ <b>مدة الشيفت:</b> {shift_duration}
-🚀 <b>بداية الشيفت:</b> {formatted_start_time}
+    accounts = shift_data.get("account_breakdown") or []
+    if accounts:
+        lines += ["", "🏦 <b>الحسابات (حركة الشيفت • الرصيد)</b>"]
+        for acc in accounts:
+            lines.append(
+                f"• {_e(acc['method'])}: {fmt_signed_money(acc['shift_total'])} • {fmt_money(acc['balance'])}"
+            )
 
-━━━━━━━━━━━━━━━━━━━━
-
-💰 <b>الملخص المالي:</b>
-
-💵 <b>إجمالي المبيعات:</b> {sell_total:.2f} ج.م
-🔄 <b>المرتجعات:</b> {return_total:.2f} ج.م
-📈 <b>صافي المبيعات:</b> {gross_revenue:.2f} ج.م
-🏦 <b>الأقساط المحصلة:</b> {installment_total:.2f} ج.م
-
-💳 <b>الحركة النقدية:</b>
-📈 <b>إجمالي الدخول:</b> {cash_in:.2f} ج.م
-📉 <b>إجمالي الخروج:</b> {cash_out:.2f} ج.م
-💰 <b>صافي الحركة النقدية:</b> {net_cash_flow:.2f} ج.م
-
-━━━━━━━━━━━━━━━━━━━━
-
-📊 <b>إحصائيات الشيفت:</b>
-
-🧾 <b>عدد المعاملات:</b> {transaction_count}
-💸 <b>متوسط قيمة المعاملة:</b> {avg_transaction:.2f} ج.م
-
-━━━━━━━━━━━━━━━━━━━━
-
-📋 <b>الجرد اليومي:</b>
-
-🏷️ <b>قيمة المخزون (سعر الشراء):</b> {inventory_summary["wholesale_value"]:.2f} ج.م
-💰 <b>قيمة المخزون (سعر البيع):</b> {inventory_summary["retail_value"]:.2f} ج.م
-📦 <b>عدد الأصناف (الكل):</b> {inventory_summary["total_products"]}
-✅ <b>أصناف بمخزون موجب:</b> {inventory_summary["positive_stock_products"]}
-⚠️ <b>أصناف بصفر/سالب:</b> {inventory_summary["non_positive_stock_products"]}
-
-━━━━━━━━━━━━━━━━━━━━"""
-
-    return message
+    lines += [
+        SEPARATOR,
+        f"🧾 عدد المعاملات: {transaction_count}",
+        f"💸 متوسط المعاملة: {fmt_money(avg_transaction)}",
+        SEPARATOR,
+        "📋 <b>الجرد</b>",
+        f"🏷️ قيمة المخزون (شراء): {fmt_money(inventory_summary['wholesale_value'])}",
+        f"💰 قيمة المخزون (بيع): {fmt_money(inventory_summary['retail_value'])}",
+        f"📦 الأصناف: {fmt_qty(inventory_summary['total_products'])} "
+        f"(موجب {fmt_qty(inventory_summary['positive_stock_products'])} • "
+        f"صفر/سالب {fmt_qty(inventory_summary['non_positive_stock_products'])})",
+    ]
+    return "\n".join(lines)
 
 
 def get_daily_inventory_summary(store_id: int) -> Dict[str, float]:
-    """
-    Get daily inventory summary for a specific store
-
-    Args:
-        store_id: Store ID to get inventory for
-
-    Returns:
-        Dictionary containing inventory values and counts
-    """
+    """Inventory value (at purchase and sale prices) and product counts."""
+    empty = {
+        "wholesale_value": 0.0,
+        "retail_value": 0.0,
+        "total_products": 0,
+        "positive_stock_products": 0,
+        "non_positive_stock_products": 0,
+    }
+    if store_id is None:
+        return empty
     try:
-        conn = psycopg2.connect(host=HOST, database=DATABASE, user=USER, password=PASS)
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        conn = _db_connect()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(SUM(pi.stock * p.wholesale_price), 0) AS wholesale_value,
+                    COALESCE(SUM(pi.stock * p.price), 0) AS retail_value,
+                    COUNT(*) AS total_products,
+                    COUNT(CASE WHEN pi.stock > 0 THEN 1 END) AS positive_stock_products,
+                    COUNT(CASE WHEN pi.stock <= 0 THEN 1 END) AS non_positive_stock_products
+                FROM product_inventory pi
+                JOIN products p ON pi.product_id = p.id
+                WHERE pi.store_id = %s
+                  AND pi.is_deleted = FALSE
+                """,
+                (store_id,),
+            )
+            result = cur.fetchone()
+            cur.close()
+        finally:
+            conn.close()
 
-        # Get inventory summary with current stock values
-        query = """
-        SELECT
-            COALESCE(SUM(pi.stock * p.wholesale_price), 0) as wholesale_value,
-            COALESCE(SUM(pi.stock * p.price), 0) as retail_value,
-            COUNT(*) as total_products,
-            COUNT(CASE WHEN pi.stock > 0 THEN 1 END) as positive_stock_products,
-            COUNT(CASE WHEN pi.stock <= 0 THEN 1 END) as non_positive_stock_products
-        FROM product_inventory pi
-        JOIN products p ON pi.product_id = p.id
-        WHERE pi.store_id = %s
-        AND pi.is_deleted = FALSE
-        """
-
-        cur.execute(query, (store_id,))
-        result = cur.fetchone()
-
-        cur.close()
-        conn.close()
-
+        if not result:
+            return empty
         return {
-            "wholesale_value": result["wholesale_value"] if result else 0,
-            "retail_value": result["retail_value"] if result else 0,
-            "total_products": result["total_products"] if result else 0,
-            "positive_stock_products": result["positive_stock_products"]
-            if result
-            else 0,
-            "non_positive_stock_products": result["non_positive_stock_products"]
-            if result
-            else 0,
+            "wholesale_value": _to_float(result["wholesale_value"]),
+            "retail_value": _to_float(result["retail_value"]),
+            "total_products": int(result["total_products"] or 0),
+            "positive_stock_products": int(result["positive_stock_products"] or 0),
+            "non_positive_stock_products": int(
+                result["non_positive_stock_products"] or 0
+            ),
         }
 
     except Exception as e:
         logger.error(f"Error getting daily inventory summary: {e}")
-        return {
-            "wholesale_value": 0,
-            "retail_value": 0,
-            "total_products": 0,
-            "positive_stock_products": 0,
-            "non_positive_stock_products": 0,
-        }
+        return empty
 
 
 def format_depleted_products_message(
     depleted_products: List[Dict[str, Any]],
     store_name: str = None,
     user_name: str = None,
-) -> str:
-    """
-    Format Telegram message for depleted products notification in Arabic
-
-    Args:
-        depleted_products: List of products that reached zero during shift
-        store_name: Name of the store
-        user_name: Username who closed the shift
-
-    Returns:
-        Formatted Arabic message string for depleted products or None if no products depleted
-    """
-    # If no products depleted, return None to skip sending this message
+) -> Optional[str]:
+    """Products that ran out during the shift (None when there are none)."""
     if not depleted_products:
         return None
 
-    # Format store and user information
     store_display = _e(store_name) if store_name else "غير محدد"
     user_display = _e(user_name) if user_name else "غير محدد"
 
-    # Create depleted products list
-    products_text = ""
+    lines = [
+        "📦 <b>منتجات نفدت خلال الشيفت</b>",
+        "",
+        f"🏪 <b>المتجر:</b> {store_display}",
+        f"👨‍💼 <b>المستخدم:</b> {user_display}",
+        SEPARATOR,
+    ]
     for i, product in enumerate(depleted_products, 1):
-        name = _e(product.get("product_name", "منتج غير محدد"))
-        consumed = product.get("consumed_amount", 0)
-
-        products_text += f"{i}. {name}\n"
-        products_text += f"   📉 الكمية المستهلكة: {consumed} قطعة\n"
-        products_text += (
-            f"   ⚠️ المخزون الحالي: {product.get('current_stock', 0)} قطعة\n"
+        lines.append(
+            f"{i}. {_e(product.get('product_name', 'منتج'))} — "
+            f"استُهلك {fmt_qty(product.get('consumed_amount'))} • "
+            f"المخزون {fmt_qty(product.get('current_stock'))}"
         )
-
-        if i < len(depleted_products):
-            products_text += "\n"
-
-    message = f"""📦 <b>تنبيه: منتجات نفدت خلال الشيفت</b> 📦
-
-🏪 <b>المتجر:</b> {store_display}
-👨‍💼 <b>المستخدم:</b> {user_display}
-
-━━━━━━━━━━━━━━━━━━━━
-
-⚠️ <b>منتجات نفدت خلال الشيفت:</b>
-
-{products_text}
-
-━━━━━━━━━━━━━━━━━━━━
-
-📋 <b>إجمالي المنتجات المنتهية: {len(depleted_products)} منتج</b>
-🚚 <b>يرجى تجهيز هذه المنتجات للتوريد غداً</b>
-
-━━━━━━━━━━━━━━━━━━━━"""
-
-    return message
+    lines += [
+        SEPARATOR,
+        f"📋 الإجمالي: {len(depleted_products)} منتج",
+        "🚚 يرجى تجهيز هذه المنتجات للتوريد",
+    ]
+    return "\n".join(lines)
 
 
 def send_shift_closure_notification_background(
@@ -1288,62 +1354,36 @@ def send_shift_closure_notification_background(
     user_name: str = None,
     shift_start_time: str = None,
 ):
-    """
-    Background task to send shift closure Telegram notifications (split into two messages)
-    """
+    """Shift closure: summary message, then depleted products (if any)."""
     try:
-        # Add store_id to shift_data for inventory calculation
         shift_data["store_id"] = store_id
+        if shift_start_time and "account_breakdown" not in shift_data:
+            shift_data["account_breakdown"] = get_shift_account_breakdown(
+                store_id, shift_start_time
+            )
 
-        # Check for products that were depleted during the shift
         depleted_products = (
             check_products_depleted_during_shift(store_id, shift_start_time)
             if shift_start_time
             else []
         )
 
-        # Format and send the shift closure summary message
         closure_message = format_shift_closure_message(
             shift_data=shift_data,
             store_name=store_name,
             user_name=user_name,
             shift_start_time=shift_start_time,
         )
+        send_notification_to_store(store_id, closure_message)
 
-        success_closure = send_notification_to_store(store_id, closure_message)
-
-        if success_closure:
-            logging.info(
-                f"Shift closure summary Telegram notification sent for store {store_id}"
-            )
-        else:
-            logging.warning(
-                f"Failed to send shift closure summary Telegram notification for store {store_id}"
-            )
-
-        # Format and send the depleted products message (if any products depleted)
         depleted_message = format_depleted_products_message(
             depleted_products=depleted_products,
             store_name=store_name,
             user_name=user_name,
         )
-
-        if depleted_message:  # Only send if there are depleted products
-            # Add a small delay between messages
-            time.sleep(2)
-
-            success_depleted = send_notification_to_store(store_id, depleted_message)
-
-            if success_depleted:
-                logging.info(
-                    f"Depleted products Telegram notification sent for store {store_id}: {len(depleted_products)} products"
-                )
-            else:
-                logging.warning(
-                    f"Failed to send depleted products Telegram notification for store {store_id}"
-                )
-        else:
-            logging.info(f"No depleted products to notify for store {store_id}")
+        if depleted_message:
+            time.sleep(1)
+            send_notification_to_store(store_id, depleted_message)
 
     except Exception as e:
         logging.error(

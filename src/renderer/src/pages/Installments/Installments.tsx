@@ -1,29 +1,14 @@
 import {
   Button,
   Card,
-  CardActions,
-  CardContent,
   Grid2,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
   Chip,
   Box,
   Divider,
-  LinearProgress,
   Avatar,
   Stack,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  DialogContentText,
   TextField,
   FormControl,
   InputLabel,
@@ -32,15 +17,19 @@ import {
   InputAdornment,
   Collapse,
   Alert,
+  ToggleButton,
+  ToggleButtonGroup,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import {
-  Person,
-  Schedule,
+  Schedule as ScheduleIcon,
+  EventAvailable,
+  ViewAgenda,
+  ViewList,
   Payment,
   CheckCircle,
   Warning,
-  AttachMoney,
-  Delete,
   Search,
   ExpandMore,
   ExpandLess,
@@ -52,11 +41,17 @@ import {
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../Shared/LoadingScreen";
-import { useState, useContext } from "react";
+import { useState, useContext, useEffect, useMemo, useRef } from "react";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import PayInstallment from "./Components/PayInstallment";
 import { StoreContext } from "@renderer/StoreDataProvider";
-import FormatedNumber from "../Shared/FormatedNumber";
+import StatCard from "../Shared/StatCard";
+import useConfirm from "../Shared/useConfirm";
+import { apiError } from "../utils/errors";
+import { fmtMoney } from "./format";
+import { Schedule, scheduleOf } from "./schedule";
+import { InstallmentCard, InstallmentRow } from "./Components/InstallmentCard";
+import { normalizeArabic } from "../Shared/ProductAutocomplete";
 import {
   buildInstallmentsReportHtml,
   exportPdfDocument,
@@ -64,12 +59,13 @@ import {
 
 export interface Installment {
   id: number;
-  bill_id: number; // Add this line
+  bill_id: number;
   paid: number;
   time: string;
   installments_count: number;
   installment_interval: number;
   party_name: string;
+  party_phone?: string;
   flow: {
     id: number;
     amount: number;
@@ -84,6 +80,26 @@ export interface Installment {
   }[];
   ended: boolean;
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  all: "الكل",
+  overdue: "متأخر",
+  week: "مستحق خلال 7 أيام",
+  active: "نشط",
+  completed: "مكتمل",
+  unknown: "عملاء غير معروفين",
+};
+
+type ViewMode = "cards" | "list";
+const VIEW_KEY = "installmentsView";
+const readView = (): ViewMode => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "cards";
+  } catch {
+    return "cards";
+  }
+};
+
 const getInstallments = async (storeId: number) => {
   const { data } = await axios.get<Installment[]>("/installments", {
     params: {
@@ -102,22 +118,24 @@ const Installments = () => {
   const [selectedInstallment, setSelectedInstallment] = useState<number | null>(
     null,
   );
-  const [deleteDialog, setDeleteDialog] = useState<{
-    open: boolean;
-    flowId: number | null;
-    amount: number;
-    installmentId: number | null;
-  }>({
-    open: false,
-    flowId: null,
-    amount: 0,
-    installmentId: null,
-  });
+  const [confirm, confirmDialog] = useConfirm();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const topRef = useRef<HTMLDivElement>(null);
 
   // New search and filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("time");
+  const [sortBy, setSortBy] = useState("due");
+  const [view, setViewState] = useState<ViewMode>(readView);
+  const setView = (v: ViewMode) => {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [showFilters, setShowFilters] = useState(false);
 
@@ -141,103 +159,155 @@ const Installments = () => {
     return totalBill > 0 ? (totalPaid / totalBill) * 100 : 0;
   };
 
-  const getInstallmentStatus = (installment: Installment) => {
-    if (installment.ended) return "completed";
+  // One schedule rule for the list, the cards and the pay screen.
+  const getInstallmentStatus = (installment: Installment) =>
+    scheduleOf(installment).status;
 
-    const totalRemaining = getTotalRemaining(installment);
-    if (totalRemaining <= 0) return "completed";
+  const {
+    data: rawData = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["installments", storeId],
+    queryFn: () => getInstallments(storeId),
+  });
 
-    // Check if overdue
-    const lastPaymentDate =
-      installment.flow.length > 0
-        ? new Date(installment.flow[installment.flow.length - 1].time)
-        : new Date(installment.time);
-
-    const nextDueDate = new Date(
-      lastPaymentDate.getTime() +
-        installment.installment_interval * 24 * 60 * 60 * 1000,
-    );
-
-    if (new Date() > nextDueDate) return "overdue";
-    return "active";
+  // Schedules computed once per load, shared by filters, sort and cards.
+  const schedules = useMemo(() => {
+    const m = new Map<number, Schedule>();
+    rawData.forEach((i) => m.set(i.id, scheduleOf(i)));
+    return m;
+  }, [rawData]);
+  const sched = (i: Installment) => schedules.get(i.id) ?? scheduleOf(i);
+  const isDueThisWeek = (i: Installment) => {
+    const x = sched(i);
+    return x.status === "active" && x.nextDue !== null && x.daysUntil <= 7;
   };
 
-  const { data, isFetching, isPlaceholderData, refetch } = useQuery({
-    queryKey: ["installments"],
-    queryFn: () => getInstallments(storeId),
-    initialData: [],
-    select: (data: Installment[]) => {
-      let filteredData = data
-        .map((installment) => ({
-          ...installment,
-          flow: installment.flow.filter((flow) => flow.id),
-        }))
-        .filter((installment) => {
-          // Show ended filter
-          if (!showEnded && installment.ended) return false;
+  // Counts for the quick filter chips (ignore the status filter itself).
+  const chipCounts = useMemo(() => {
+    const visible = rawData.filter((i) => showEnded || !i.ended);
+    return {
+      all: visible.length,
+      overdue: visible.filter((i) => sched(i).status === "overdue").length,
+      week: visible.filter(isDueThisWeek).length,
+      active: visible.filter((i) => sched(i).status === "active").length,
+      completed: visible.filter((i) => sched(i).status === "completed").length,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawData, schedules, showEnded]);
 
-          // Search filter
-          if (searchTerm) {
-            const searchLower = searchTerm.toLowerCase();
-            const partyName = (installment.party_name || "").toLowerCase();
-            const installmentId = installment.id.toString();
+  const data = useMemo(() => {
+    let filteredData = rawData
+      .map((installment) => ({
+        ...installment,
+        flow: installment.flow.filter((flow) => flow.id),
+      }))
+      .filter((installment) => {
+        // Show ended filter
+        if (!showEnded && installment.ended) return false;
 
-            if (
-              !partyName.includes(searchLower) &&
-              !installmentId.includes(searchLower)
-            ) {
-              return false;
-            }
-          }
-
-          // Status filter
-          if (statusFilter !== "all") {
-            const status = getInstallmentStatus(installment);
-            if (statusFilter === "unknown" && installment.party_name)
-              return false;
-            if (statusFilter !== "unknown" && statusFilter !== status)
-              return false;
-          }
-
-          return true;
-        });
-
-      // Sorting
-      filteredData.sort((a, b) => {
-        let aVal, bVal;
-
-        switch (sortBy) {
-          case "time":
-            aVal = new Date(a.time).getTime();
-            bVal = new Date(b.time).getTime();
-            break;
-          case "total":
-            aVal = Math.abs(a.total);
-            bVal = Math.abs(b.total);
-            break;
-          case "remaining":
-            aVal = getTotalRemaining(a);
-            bVal = getTotalRemaining(b);
-            break;
-          case "party":
-            aVal = (a.party_name || "").toLowerCase();
-            bVal = (b.party_name || "").toLowerCase();
-            break;
-          case "progress":
-            aVal = getPaymentProgress(a);
-            bVal = getPaymentProgress(b);
-            break;
-          default:
-            return 0;
+        // Search: name (ignoring أ/إ/آ…), phone, plan or bill number
+        if (searchTerm) {
+          const q = normalizeArabic(searchTerm);
+          const hay = [
+            normalizeArabic(installment.party_name || ""),
+            installment.party_phone || "",
+            String(installment.id),
+            String(installment.bill_id),
+          ].join(" ");
+          if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
         }
 
-        const result = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sortOrder === "asc" ? result : -result;
+        // Status filter
+        if (statusFilter !== "all") {
+          const status = getInstallmentStatus(installment);
+          if (statusFilter === "unknown") {
+            if (installment.party_name) return false;
+          } else if (statusFilter === "week") {
+            if (!isDueThisWeek(installment)) return false;
+          } else if (statusFilter !== status) return false;
+        }
+
+        return true;
       });
 
-      return filteredData;
-    },
-  });
+    // Sorting
+    filteredData.sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortBy) {
+        case "due": {
+          // Most urgent first: late (longest first), then soonest due,
+          // finished plans last. Direction-independent on purpose.
+          const rank = (x: Schedule) =>
+            x.status === "overdue"
+              ? -1e12 - x.daysLate
+              : x.nextDue
+                ? x.nextDue.getTime()
+                : 1e15;
+          return rank(sched(a)) - rank(sched(b));
+        }
+        case "time":
+          aVal = new Date(a.time).getTime();
+          bVal = new Date(b.time).getTime();
+          break;
+        case "total":
+          aVal = Math.abs(a.total);
+          bVal = Math.abs(b.total);
+          break;
+        case "remaining":
+          aVal = getTotalRemaining(a);
+          bVal = getTotalRemaining(b);
+          break;
+        case "party":
+          aVal = (a.party_name || "").toLowerCase();
+          bVal = (b.party_name || "").toLowerCase();
+          break;
+        case "progress":
+          aVal = getPaymentProgress(a);
+          bVal = getPaymentProgress(b);
+          break;
+        default:
+          return 0;
+      }
+
+      const result = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sortOrder === "asc" ? result : -result;
+    });
+
+    return filteredData;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    rawData,
+    schedules,
+    showEnded,
+    searchTerm,
+    statusFilter,
+    sortBy,
+    sortOrder,
+  ]);
+
+  const selected =
+    selectedInstallment !== null
+      ? data.find((installment) => installment.id === selectedInstallment)
+      : undefined;
+
+  // The selected installment can disappear after a refetch (e.g. it became
+  // fully paid and completed ones are hidden): go back to the list.
+  useEffect(() => {
+    if (selectedInstallment !== null && !isLoading && !selected) {
+      setSelectedInstallment(null);
+    }
+  }, [selectedInstallment, selected, isLoading]);
+
+  // Opening the pay screen from deep in the list: start at its top.
+  useEffect(() => {
+    if (selectedInstallment !== null) {
+      topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedInstallment]);
 
   // Calculate summary statistics - now after helper functions are defined
   const summaryStats = {
@@ -254,37 +324,34 @@ const Installments = () => {
       (inst) => getInstallmentStatus(inst) === "completed",
     ).length,
     unknownParties: data.filter((inst) => !inst.party_name).length,
+    dueWeekCount: data.filter(isDueThisWeek).length,
+    dueWeekAmount: data
+      .filter(isDueThisWeek)
+      .reduce((sum, inst) => sum + sched(inst).nextAmount, 0),
   };
 
-  const getStatusChip = (status: string) => {
-    switch (status) {
-      case "completed":
-        return (
-          <Chip
-            icon={<CheckCircle />}
-            label="مكتمل"
-            color="success"
-            size="small"
-          />
-        );
-      case "overdue":
-        return (
-          <Chip icon={<Warning />} label="متأخر" color="error" size="small" />
-        );
-      case "active":
-        return (
-          <Chip icon={<Schedule />} label="نشط" color="primary" size="small" />
-        );
-      default:
-        return <Chip label="غير معروف" color="default" size="small" />;
-    }
-  };
-
-  const handleDeletePayment = async () => {
-    if (!deleteDialog.flowId) return;
+  const handleDeletePayment = async (
+    flowId: number,
+    amount: number,
+    partyName: string,
+  ) => {
+    const ok = await confirm({
+      title: "حذف الدفعة؟",
+      message: (
+        <Typography>
+          سيتم حذف دفعة بقيمة <b>{fmtMoney(amount)}</b> من أقساط{" "}
+          {partyName || "عميل غير معروف"} وخصمها من الخزينة.
+          <br />
+          <b>لا يمكن التراجع عن هذا الإجراء.</b>
+        </Typography>
+      ),
+      confirmText: "حذف",
+      danger: true,
+    });
+    if (!ok) return;
 
     try {
-      await axios.delete(`/installments/flow/${deleteDialog.flowId}`);
+      await axios.delete(`/installments/flow/${flowId}`);
       setMsg({
         type: "success",
         text: "تم حذف الدفعة بنجاح",
@@ -294,14 +361,7 @@ const Installments = () => {
       console.error("Error deleting payment:", error);
       setMsg({
         type: "error",
-        text: "فشل في حذف الدفعة",
-      });
-    } finally {
-      setDeleteDialog({
-        open: false,
-        flowId: null,
-        amount: 0,
-        installmentId: null,
+        text: apiError(error, "فشل في حذف الدفعة"),
       });
     }
   };
@@ -353,187 +413,142 @@ const Installments = () => {
 
   return (
     <>
-      <Dialog
-        open={deleteDialog.open}
-        onClose={() =>
-          setDeleteDialog({
-            open: false,
-            flowId: null,
-            amount: 0,
-            installmentId: null,
-          })
-        }
-        aria-labelledby="delete-dialog-title"
-      >
-        <DialogTitle id="delete-dialog-title">تأكيد حذف الدفعة</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            هل أنت متأكد من حذف هذه الدفعة؟
-            <br />
-            المبلغ: <FormatedNumber money>{deleteDialog.amount}</FormatedNumber>
-            <br />
-            <strong>لا يمكن التراجع عن هذا الإجراء.</strong>
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() =>
-              setDeleteDialog({
-                open: false,
-                flowId: null,
-                amount: 0,
-                installmentId: null,
-              })
-            }
-            color="primary"
-          >
-            إلغاء
-          </Button>
-          <Button
-            onClick={handleDeletePayment}
-            color="error"
-            variant="contained"
-            startIcon={<Delete />}
-          >
-            حذف
-          </Button>
-        </DialogActions>
-      </Dialog>
-
+      {confirmDialog}
       <Grid2 container spacing={3}>
         <Grid2 size={12}>
-          <Card elevation={3} sx={{ px: 4, py: 3, position: "relative" }}>
-            <LoadingScreen loading={isFetching && isPlaceholderData} />
+          <Card
+            elevation={3}
+            sx={{
+              px: { xs: 1.5, md: 4 },
+              py: { xs: 2, md: 3 },
+              position: "relative",
+              minHeight: 200,
+            }}
+          >
+            <LoadingScreen loading={isLoading} />
             <AlertMessage message={msg} setMessage={setMsg} />
 
             {/* Header Section */}
-            <Box sx={{ mb: 4 }}>
+            <Box sx={{ mb: { xs: 2, md: 4 } }}>
               <Stack
                 direction="row"
                 alignItems="center"
-                spacing={2}
+                useFlexGap
+                flexWrap="wrap"
+                gap={2}
                 sx={{ mb: 2 }}
               >
-                <Avatar sx={{ bgcolor: "primary.main" }}>
+                <Avatar
+                  sx={{
+                    bgcolor: "primary.main",
+                    display: { xs: "none", sm: "flex" },
+                  }}
+                >
                   <Payment />
                 </Avatar>
-                <Box>
-                  <Typography variant="h4" color="primary" gutterBottom>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    variant="h4"
+                    color="primary"
+                    sx={{ fontSize: { xs: "1.5rem", md: "2.125rem" } }}
+                  >
                     إدارة الأقساط
                   </Typography>
-                  <Typography variant="body1" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary">
                     متابعة وإدارة أقساط العملاء والمدفوعات
                   </Typography>
                 </Box>
-                <Box sx={{ ml: "auto" }}>
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    startIcon={<PictureAsPdf />}
-                    onClick={handleExportInstallmentsPdf}
-                  >
-                    تصدير PDF A4
-                  </Button>
-                </Box>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  startIcon={<PictureAsPdf />}
+                  onClick={handleExportInstallmentsPdf}
+                  sx={{ minHeight: 40 }}
+                >
+                  تصدير PDF
+                </Button>
               </Stack>
 
               {/* Summary Cards */}
-              <Grid2 container spacing={2} sx={{ mb: 3 }}>
-                <Grid2 size={{ xs: 6, md: 2 }}>
-                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
-                    <AccountBalance sx={{ color: "primary.main", mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      إجمالي الفواتير
-                    </Typography>
-                    <Typography variant="h6" color="primary.main">
-                      <FormatedNumber money>
-                        {summaryStats.totalBills}
-                      </FormatedNumber>
-                    </Typography>
-                  </Card>
+              <Grid2 container spacing={{ xs: 1, md: 2 }} sx={{ mb: 3 }}>
+                <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
+                  <StatCard
+                    color="primary"
+                    icon={<AccountBalance />}
+                    label="إجمالي الفواتير"
+                    value={fmtMoney(summaryStats.totalBills)}
+                  />
                 </Grid2>
-
-                <Grid2 size={{ xs: 6, md: 2 }}>
-                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
-                    <TrendingUp sx={{ color: "success.main", mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      إجمالي المدفوع
-                    </Typography>
-                    <Typography variant="h6" color="success.main">
-                      <FormatedNumber money>
-                        {summaryStats.totalPaid}
-                      </FormatedNumber>
-                    </Typography>
-                  </Card>
+                <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
+                  <StatCard
+                    color="success"
+                    icon={<TrendingUp />}
+                    label="إجمالي المدفوع"
+                    value={fmtMoney(summaryStats.totalPaid)}
+                  />
                 </Grid2>
-
-                <Grid2 size={{ xs: 6, md: 2 }}>
-                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
-                    <TrendingDown sx={{ color: "warning.main", mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      إجمالي المتبقي
-                    </Typography>
-                    <Typography variant="h6" color="warning.main">
-                      <FormatedNumber money>
-                        {summaryStats.totalRemaining}
-                      </FormatedNumber>
-                    </Typography>
-                  </Card>
+                <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
+                  <StatCard
+                    color="warning"
+                    icon={<TrendingDown />}
+                    label="إجمالي المتبقي"
+                    value={fmtMoney(summaryStats.totalRemaining)}
+                  />
                 </Grid2>
-
-                <Grid2 size={{ xs: 6, md: 2 }}>
-                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
-                    <Warning sx={{ color: "error.main", mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      متأخرة
-                    </Typography>
-                    <Typography variant="h6" color="error.main">
-                      {summaryStats.overdueCount}
-                    </Typography>
-                  </Card>
+                <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
+                  <StatCard
+                    color="error"
+                    icon={<Warning />}
+                    label="متأخرة"
+                    value={summaryStats.overdueCount}
+                  />
                 </Grid2>
-
-                <Grid2 size={{ xs: 6, md: 2 }}>
-                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
-                    <CheckCircle sx={{ color: "info.main", mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      مكتملة
-                    </Typography>
-                    <Typography variant="h6" color="info.main">
-                      {summaryStats.completedCount}
-                    </Typography>
-                  </Card>
+                <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
+                  <StatCard
+                    color="info"
+                    icon={<CheckCircle />}
+                    label="مكتملة"
+                    value={summaryStats.completedCount}
+                  />
                 </Grid2>
-
-                <Grid2 size={{ xs: 6, md: 2 }}>
-                  <Card sx={{ textAlign: "center", p: 2 }} elevation={2}>
-                    <Person sx={{ color: "text.secondary", mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      عملاء غير معروفين
-                    </Typography>
-                    <Typography variant="h6" color="text.secondary">
-                      {summaryStats.unknownParties}
-                    </Typography>
-                  </Card>
+                <Grid2 size={{ xs: 6, sm: 4, md: 2 }}>
+                  <StatCard
+                    color="secondary"
+                    icon={<EventAvailable />}
+                    label="مستحق خلال 7 أيام"
+                    value={
+                      summaryStats.dueWeekCount
+                        ? `${summaryStats.dueWeekCount} · ${fmtMoney(summaryStats.dueWeekAmount)}`
+                        : 0
+                    }
+                  />
                 </Grid2>
               </Grid2>
 
               {/* Search and Filter Controls */}
-              <Paper sx={{ p: 2, mb: 3 }} elevation={1}>
+              <Paper sx={{ p: { xs: 1.5, md: 2 }, mb: 3 }} elevation={1}>
                 <Stack spacing={2}>
-                  <Stack direction="row" spacing={2} alignItems="center">
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    useFlexGap
+                    flexWrap="wrap"
+                    gap={{ xs: 1, md: 2 }}
+                  >
                     <TextField
                       placeholder="البحث بالاسم أو رقم القسط..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       size="small"
-                      sx={{ minWidth: 250 }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <Search />
-                          </InputAdornment>
-                        ),
+                      sx={{ minWidth: { xs: "100%", sm: 250 } }}
+                      slotProps={{
+                        input: {
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Search />
+                            </InputAdornment>
+                          ),
+                        },
                       }}
                     />
 
@@ -541,7 +556,7 @@ const Installments = () => {
                       variant="outlined"
                       startIcon={showFilters ? <ExpandLess /> : <ExpandMore />}
                       onClick={() => setShowFilters(!showFilters)}
-                      size="small"
+                      sx={{ minHeight: 40 }}
                     >
                       فلاتر متقدمة
                     </Button>
@@ -549,9 +564,9 @@ const Installments = () => {
                     <Button
                       variant={showEnded ? "contained" : "outlined"}
                       color="primary"
-                      startIcon={showEnded ? <CheckCircle /> : <Schedule />}
+                      startIcon={showEnded ? <CheckCircle /> : <ScheduleIcon />}
                       onClick={() => setShowEnded((prev) => !prev)}
-                      size="small"
+                      sx={{ minHeight: 40 }}
                     >
                       {showEnded ? "إخفاء المكتملة" : "عرض المكتملة"}
                     </Button>
@@ -564,7 +579,19 @@ const Installments = () => {
                   </Stack>
 
                   <Collapse in={showFilters}>
-                    <Stack direction="row" spacing={2} alignItems="center">
+                    <Stack
+                      direction="row"
+                      useFlexGap
+                      flexWrap="wrap"
+                      gap={2}
+                      alignItems="center"
+                      sx={{
+                        pt: 1,
+                        "& .MuiFormControl-root": {
+                          flex: { xs: "1 1 140px", sm: "0 0 auto" },
+                        },
+                      }}
+                    >
                       <FormControl size="small" sx={{ minWidth: 150 }}>
                         <InputLabel>الحالة</InputLabel>
                         <Select
@@ -572,11 +599,11 @@ const Installments = () => {
                           label="الحالة"
                           onChange={(e) => setStatusFilter(e.target.value)}
                         >
-                          <MenuItem value="all">الكل</MenuItem>
-                          <MenuItem value="active">نشط</MenuItem>
-                          <MenuItem value="overdue">متأخر</MenuItem>
-                          <MenuItem value="completed">مكتمل</MenuItem>
-                          <MenuItem value="unknown">عملاء غير معروفين</MenuItem>
+                          {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                            <MenuItem key={k} value={k}>
+                              {v}
+                            </MenuItem>
+                          ))}
                         </Select>
                       </FormControl>
 
@@ -587,6 +614,8 @@ const Installments = () => {
                           label="ترتيب حسب"
                           onChange={(e) => setSortBy(e.target.value)}
                         >
+                          <MenuItem value="due">الأقرب استحقاقاً</MenuItem>
+                          <MenuItem value="due">الأقرب استحقاقاً</MenuItem>
                           <MenuItem value="time">التاريخ</MenuItem>
                           <MenuItem value="total">إجمالي الفاتورة</MenuItem>
                           <MenuItem value="remaining">المبلغ المتبقي</MenuItem>
@@ -611,13 +640,13 @@ const Installments = () => {
 
                       <Button
                         variant="outlined"
-                        size="small"
                         onClick={() => {
                           setSearchTerm("");
                           setStatusFilter("all");
-                          setSortBy("time");
+                          setSortBy("due");
                           setSortOrder("desc");
                         }}
+                        sx={{ minHeight: 40 }}
                       >
                         إعادة تعيين
                       </Button>
@@ -629,26 +658,102 @@ const Installments = () => {
 
             <Divider sx={{ mb: 3 }} />
 
+            {/* Quick filters + layout */}
+            {!selected && (
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    flex: 1,
+                    minWidth: 0,
+                    flexWrap: { xs: "nowrap", md: "wrap" },
+                    overflowX: { xs: "auto", md: "visible" },
+                    py: 0.5,
+                    scrollbarWidth: "none",
+                    "&::-webkit-scrollbar": { display: "none" },
+                  }}
+                >
+                  {(
+                    [
+                      ["all", "الكل", "default"],
+                      ["overdue", "متأخر", "error"],
+                      ["week", "خلال 7 أيام", "warning"],
+                      ["active", "نشط", "primary"],
+                      ...(showEnded ? [["completed", "مكتمل", "success"]] : []),
+                    ] as [
+                      keyof typeof chipCounts,
+                      string,
+                      "default" | "error" | "warning" | "primary" | "success",
+                    ][]
+                  ).map(([key, label, color]) => (
+                    <Chip
+                      key={key}
+                      label={`${label} ${chipCounts[key]}`}
+                      color={statusFilter === key ? color : "default"}
+                      variant={statusFilter === key ? "filled" : "outlined"}
+                      onClick={() => setStatusFilter(key)}
+                      sx={{ flexShrink: 0, height: 34, fontWeight: 600 }}
+                    />
+                  ))}
+                </Box>
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={view}
+                  onChange={(_, v) => v && setView(v)}
+                  sx={{ flexShrink: 0 }}
+                >
+                  <ToggleButton value="cards" aria-label="عرض البطاقات">
+                    <ViewAgenda fontSize="small" />
+                  </ToggleButton>
+                  <ToggleButton value="list" aria-label="قائمة مختصرة">
+                    <ViewList fontSize="small" />
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+            )}
+
             {/* Results Info */}
             {(searchTerm || statusFilter !== "all") && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 عرض {data.length} نتيجة من إجمالي الأقساط
                 {searchTerm && ` • البحث: "${searchTerm}"`}
-                {statusFilter !== "all" && ` • الحالة: ${statusFilter}`}
+                {statusFilter !== "all" &&
+                  ` • الحالة: ${STATUS_LABELS[statusFilter] ?? statusFilter}`}
               </Alert>
             )}
 
             {/* Content Section */}
+            <Box ref={topRef} sx={{ scrollMarginTop: 72 }} />
             <Grid2
               container
-              spacing={3}
-              sx={{
-                maxHeight: "75vh",
-                overflowY: "auto",
-                pr: 1,
-              }}
+              spacing={view === "list" && !selected ? 1 : { xs: 2, md: 3 }}
+              sx={
+                isMobile
+                  ? undefined
+                  : { maxHeight: "75vh", overflowY: "auto", pr: 1 }
+              }
             >
-              {data.length === 0 && (
+              {isError && (
+                <Grid2 size={12}>
+                  <Alert
+                    severity="error"
+                    action={
+                      <Button color="inherit" onClick={() => refetch()}>
+                        إعادة المحاولة
+                      </Button>
+                    }
+                  >
+                    تعذر تحميل الأقساط
+                  </Alert>
+                </Grid2>
+              )}
+
+              {!isLoading && !isError && data.length === 0 && (
                 <Grid2 size={12}>
                   <Box
                     sx={{
@@ -659,346 +764,54 @@ const Installments = () => {
                   >
                     <Payment sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
                     <Typography variant="h6">
-                      لا توجد أقساط {showEnded ? "مكتملة" : "نشطة"}
+                      {searchTerm || statusFilter !== "all"
+                        ? "لا توجد أقساط مطابقة"
+                        : showEnded
+                          ? "لا توجد أقساط"
+                          : "لا توجد أقساط نشطة"}
                     </Typography>
                     <Typography variant="body2">
-                      {showEnded
-                        ? "لم يتم العثور على أقساط مكتملة"
-                        : "يمكنك إنشاء أقساط جديدة من صفحة المبيعات"}
+                      {searchTerm || statusFilter !== "all"
+                        ? "جرّب تغيير البحث أو الفلاتر"
+                        : showEnded
+                          ? "لم يتم العثور على أقساط"
+                          : "يمكنك إنشاء أقساط جديدة من صفحة البيع"}
                     </Typography>
                   </Box>
                 </Grid2>
               )}
 
-              {selectedInstallment ? (
+              {selected ? (
                 <PayInstallment
-                  selectedInstallment={
-                    data.find(
-                      (installment) => installment.id === selectedInstallment,
-                    )!
-                  }
+                  selectedInstallment={selected}
                   setSelectedInstallment={setSelectedInstallment}
                   setMsg={setMsg}
                   refetchInstallments={refetch}
                 />
               ) : (
-                data.map((installment) => {
-                  const status = getInstallmentStatus(installment);
-                  const progress = getPaymentProgress(installment);
-                  const totalPaid = getTotalPaid(installment);
-                  const totalRemaining = getTotalRemaining(installment);
-
-                  return (
-                    <Grid2 size={12} key={installment.id}>
-                      <Card
-                        elevation={2}
-                        sx={{
-                          border:
-                            status === "overdue" ? "2px solid" : "1px solid",
-                          borderColor:
-                            status === "overdue" ? "error.main" : "divider",
-                        }}
-                      >
-                        <CardContent sx={{ pb: 1 }}>
-                          {/* Header with customer info and status */}
-                          <Stack
-                            direction="row"
-                            justifyContent="space-between"
-                            alignItems="flex-start"
-                            sx={{ mb: 3 }}
-                          >
-                            <Stack
-                              direction="row"
-                              alignItems="center"
-                              spacing={2}
-                            >
-                              <Avatar sx={{ bgcolor: "secondary.main" }}>
-                                <Person />
-                              </Avatar>
-                              <Box>
-                                <Typography
-                                  variant="h6"
-                                  sx={{ fontWeight: 600 }}
-                                >
-                                  {installment.party_name || "عميل غير معروف"}
-                                </Typography>
-                                <Stack direction="row" spacing={2}>
-                                  <Typography
-                                    variant="body2"
-                                    color="text.secondary"
-                                  >
-                                    رقم القسط: #{installment.id}
-                                  </Typography>
-                                  <Typography
-                                    variant="body2"
-                                    color="text.secondary"
-                                  >
-                                    رقم الفاتورة: #{installment.bill_id}
-                                  </Typography>
-                                </Stack>
-                              </Box>
-                            </Stack>
-                            {getStatusChip(status)}
-                          </Stack>{" "}
-                          {/* Financial Summary */}
-                          <Grid2 container spacing={3} sx={{ mb: 3 }}>
-                            <Grid2 size={{ xs: 6, md: 3 }}>
-                              <Card
-                                sx={{
-                                  textAlign: "center",
-                                  p: 2,
-                                  borderRadius: 2,
-                                }}
-                                elevation={9}
-                              >
-                                <AttachMoney
-                                  sx={{ color: "primary.main", mb: 1 }}
-                                />
-                                <Typography
-                                  variant="body2"
-                                  color="text.secondary"
-                                >
-                                  إجمالي الفاتورة
-                                </Typography>
-                                <Typography variant="h6" color="primary.main">
-                                  <FormatedNumber money>
-                                    {Math.abs(installment.total)}
-                                  </FormatedNumber>
-                                </Typography>
-                              </Card>
-                            </Grid2>
-
-                            <Grid2 size={{ xs: 6, md: 3 }}>
-                              <Card
-                                sx={{
-                                  textAlign: "center",
-                                  p: 2,
-                                  borderRadius: 2,
-                                }}
-                                elevation={9}
-                              >
-                                <Payment
-                                  sx={{ color: "success.main", mb: 1 }}
-                                />
-                                <Typography
-                                  variant="body2"
-                                  color="text.secondary"
-                                >
-                                  المقدم
-                                </Typography>
-                                <Typography variant="h6" color="success.main">
-                                  <FormatedNumber money>
-                                    {installment.paid}
-                                  </FormatedNumber>
-                                </Typography>
-                              </Card>
-                            </Grid2>
-
-                            <Grid2 size={{ xs: 6, md: 3 }}>
-                              <Card
-                                sx={{
-                                  textAlign: "center",
-                                  p: 2,
-                                  borderRadius: 2,
-                                }}
-                                elevation={9}
-                              >
-                                <CheckCircle
-                                  sx={{ color: "info.main", mb: 1 }}
-                                />
-                                <Typography
-                                  variant="body2"
-                                  color="text.secondary"
-                                >
-                                  إجمالي المدفوع
-                                </Typography>
-                                <Typography variant="h6" color="info.main">
-                                  <FormatedNumber money>
-                                    {totalPaid}
-                                  </FormatedNumber>
-                                </Typography>
-                              </Card>
-                            </Grid2>
-
-                            <Grid2 size={{ xs: 6, md: 3 }}>
-                              <Card
-                                sx={{
-                                  textAlign: "center",
-                                  p: 2,
-                                  borderRadius: 2,
-                                }}
-                                elevation={9}
-                              >
-                                <Warning
-                                  sx={{
-                                    color:
-                                      totalRemaining > 0
-                                        ? "warning.main"
-                                        : "success.main",
-                                    mb: 1,
-                                  }}
-                                />
-                                <Typography
-                                  variant="body2"
-                                  color="text.secondary"
-                                >
-                                  المتبقي
-                                </Typography>
-                                <Typography
-                                  variant="h6"
-                                  color={
-                                    totalRemaining > 0
-                                      ? "warning.main"
-                                      : "success.main"
-                                  }
-                                >
-                                  <FormatedNumber money>
-                                    {Math.max(0, totalRemaining)}
-                                  </FormatedNumber>
-                                </Typography>
-                              </Card>
-                            </Grid2>
-                          </Grid2>
-                          {/* Progress Bar */}
-                          <Box sx={{ mb: 3 }}>
-                            <Stack
-                              direction="row"
-                              justifyContent="space-between"
-                              alignItems="center"
-                              sx={{ mb: 1 }}
-                            >
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                تقدم السداد
-                              </Typography>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                {progress.toFixed(1)}%
-                              </Typography>
-                            </Stack>
-                            <LinearProgress
-                              variant="determinate"
-                              value={Math.min(progress, 100)}
-                              sx={{
-                                height: 8,
-                                borderRadius: 4,
-                                backgroundColor: "grey.200",
-                                "& .MuiLinearProgress-bar": {
-                                  backgroundColor:
-                                    progress >= 100
-                                      ? "success.main"
-                                      : progress >= 75
-                                        ? "info.main"
-                                        : progress >= 50
-                                          ? "warning.main"
-                                          : "error.main",
-                                },
-                              }}
-                            />
-                          </Box>
-                          {/* Payment History */}
-                          {installment.flow.length > 0 && (
-                            <Box>
-                              <Typography
-                                variant="subtitle2"
-                                sx={{ mb: 2, fontWeight: 600 }}
-                              >
-                                سجل المدفوعات ({installment.flow.length})
-                              </Typography>
-                              <TableContainer
-                                component={Paper}
-                                variant="outlined"
-                                sx={{ maxHeight: 200 }}
-                              >
-                                <Table size="small">
-                                  <TableHead>
-                                    <TableRow>
-                                      <TableCell sx={{ fontWeight: 600 }}>
-                                        المبلغ
-                                      </TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>
-                                        التاريخ
-                                      </TableCell>
-                                      <TableCell
-                                        sx={{ fontWeight: 600, width: 80 }}
-                                      >
-                                        إجراءات
-                                      </TableCell>
-                                    </TableRow>
-                                  </TableHead>
-                                  <TableBody>
-                                    {installment.flow.map((flow) => (
-                                      <TableRow key={flow.id} hover>
-                                        <TableCell>
-                                          <FormatedNumber money>
-                                            {flow.amount}
-                                          </FormatedNumber>
-                                        </TableCell>
-                                        <TableCell>
-                                          {new Date(flow.time).toLocaleString(
-                                            "ar-EG",
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          <IconButton
-                                            size="small"
-                                            color="error"
-                                            onClick={() =>
-                                              setDeleteDialog({
-                                                open: true,
-                                                flowId: flow.id,
-                                                amount: flow.amount,
-                                                installmentId: installment.id,
-                                              })
-                                            }
-                                            sx={{
-                                              opacity: 0.7,
-                                              "&:hover": { opacity: 1 },
-                                            }}
-                                          >
-                                            <Delete fontSize="small" />
-                                          </IconButton>
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </TableContainer>
-                            </Box>
-                          )}
-                        </CardContent>
-
-                        <CardActions sx={{ px: 3, pb: 2 }}>
-                          <Button
-                            variant="contained"
-                            color={status === "overdue" ? "error" : "primary"}
-                            startIcon={<Payment />}
-                            onClick={() =>
-                              setSelectedInstallment(installment.id)
-                            }
-                            disabled={installment.ended || totalRemaining <= 0}
-                            sx={{ minWidth: 120 }}
-                          >
-                            {status === "overdue" ? "دفع متأخر" : "دفع قسط"}
-                          </Button>
-
-                          {status === "completed" && (
-                            <Chip
-                              icon={<CheckCircle />}
-                              label="تم السداد بالكامل"
-                              color="success"
-                              variant="outlined"
-                            />
-                          )}
-                        </CardActions>
-                      </Card>
-                    </Grid2>
-                  );
-                })
+                data.map((installment) => (
+                  <Grid2 size={12} key={installment.id}>
+                    {view === "list" ? (
+                      <InstallmentRow
+                        inst={installment}
+                        s={sched(installment)}
+                        isMobile={isMobile}
+                        storeName={store?.name}
+                        onPay={setSelectedInstallment}
+                        onDeletePayment={handleDeletePayment}
+                      />
+                    ) : (
+                      <InstallmentCard
+                        inst={installment}
+                        s={sched(installment)}
+                        isMobile={isMobile}
+                        storeName={store?.name}
+                        onPay={setSelectedInstallment}
+                        onDeletePayment={handleDeletePayment}
+                      />
+                    )}
+                  </Grid2>
+                ))
               )}
             </Grid2>
           </Card>

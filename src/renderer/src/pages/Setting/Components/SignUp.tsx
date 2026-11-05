@@ -7,10 +7,11 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiError } from "../../utils/errors";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoadingButton } from "@mui/lab";
 import { Scope } from "../../utils/types";
 import {
@@ -57,19 +58,28 @@ const SignUp = () => {
   const [scope, setScope] = useState<number | null>(1);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
 
+  const queryClient = useQueryClient();
   const { mutate: addUser, isPending: isAddingUser } = useMutation({
     mutationFn: signup,
-    onSuccess: () => {
-      setMsg({ type: "success", text: "تم تسجيل المستخدم بنجاح" });
+    onSuccess: (_d, vars) => {
+      setMsg({
+        type: "success",
+        text: `تمت إضافة المستخدم «${vars.username}» بنجاح`,
+      });
       setUsername("");
       setPassword("");
       setEmail("");
       setPhone("");
-      setScope(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error) => {
-      setMsg({ type: "error", text: "حدث خطأ ما" });
-      console.error(error);
+      const raw = String((error as any)?.response?.data?.detail ?? "");
+      setMsg({
+        type: "error",
+        text: raw.includes("users_username_key")
+          ? "اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر"
+          : apiError(error, "تعذر إضافة المستخدم"),
+      });
     },
   });
 
@@ -78,6 +88,15 @@ const SignUp = () => {
     queryFn: getScopes,
     initialData: [],
   });
+
+  // Default to the first scope once they load (instead of an id that may not exist).
+  useEffect(() => {
+    if (
+      scopes.length &&
+      (scope === null || !scopes.some((s) => s.id === scope))
+    )
+      setScope(scopes[0].id);
+  }, [scopes, scope]);
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
@@ -115,6 +134,7 @@ const SignUp = () => {
             onChange={(e) => setPassword(e.target.value)}
             label="كلمة المرور"
             type="password"
+            autoComplete="new-password"
             fullWidth
             slotProps={{
               input: {
@@ -139,6 +159,7 @@ const SignUp = () => {
             type="email"
             fullWidth
             slotProps={{
+              htmlInput: { dir: "ltr", inputMode: "email" },
               input: {
                 startAdornment: (
                   <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
@@ -160,6 +181,7 @@ const SignUp = () => {
             label="رقم الهاتف"
             fullWidth
             slotProps={{
+              htmlInput: { dir: "ltr", inputMode: "tel" },
               input: {
                 startAdornment: (
                   <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
@@ -180,7 +202,7 @@ const SignUp = () => {
             <Select
               fullWidth
               label="الصلاحيات"
-              value={scope}
+              value={scope ?? ""}
               onChange={(e) => setScope(e.target.value as number)}
               disabled={isScopesLoading}
               startAdornment={
@@ -204,7 +226,7 @@ const SignUp = () => {
             variant="contained"
             onClick={() =>
               addUser({
-                username,
+                username: username.trim(),
                 password,
                 email,
                 phone,

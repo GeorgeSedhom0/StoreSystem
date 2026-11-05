@@ -46,11 +46,12 @@ const Settings = () => {
     >
       <Box
         sx={{
-          background:
-            "linear-gradient(45deg, primary.main 30%, primary.light 90%)",
+          // Theme tokens aren't resolved inside a gradient string.
+          background: (t) =>
+            `linear-gradient(45deg, ${t.palette.primary.main} 30%, ${t.palette.primary.light} 90%)`,
           color: "white",
-          px: 4,
-          py: 3,
+          px: { xs: 2, sm: 4 },
+          py: { xs: 2, sm: 3 },
           position: "relative",
           "&::before": {
             content: '""',
@@ -72,7 +73,8 @@ const Settings = () => {
             zIndex: 1,
             display: "flex",
             alignItems: "center",
-            gap: 2,
+            gap: { xs: 1, sm: 2 },
+            fontSize: { xs: "1.5rem", sm: "2.125rem" },
           }}
         >
           <SettingsIcon sx={{ fontSize: "2rem" }} />
@@ -94,13 +96,18 @@ const Settings = () => {
       <TabContext value={tab}>
         <TabList
           onChange={(_, value) => setTab(value)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           sx={{
-            px: 2,
+            px: { xs: 0, sm: 2 },
             py: 1,
+            "& .MuiTabs-scrollButtons.Mui-disabled": { opacity: 0.3 },
             "& .MuiTab-root": {
-              minHeight: 64,
+              minHeight: { xs: 48, sm: 64 },
+              px: { xs: 1.5, sm: 2 },
               textTransform: "none",
-              fontSize: "1rem",
+              fontSize: { xs: "0.9rem", sm: "1rem" },
               fontWeight: 500,
               borderRadius: 2,
               mx: 0.5,
@@ -114,7 +121,7 @@ const Settings = () => {
           <Tab
             icon={<SettingsIcon />}
             iconPosition="start"
-            label="الاساسيات"
+            label="الأساسيات"
             value="1"
           />
           <Tab
@@ -132,7 +139,7 @@ const Settings = () => {
           <Tab
             icon={<GroupsIcon />}
             iconPosition="start"
-            label="العملاء و الموردين"
+            label="العملاء والموردين"
             value="4"
           />
           <Tab
@@ -140,7 +147,7 @@ const Settings = () => {
             iconPosition="start"
             label="المظهر والواجهة"
             value="5"
-          />{" "}
+          />
           <Tab
             icon={<PrintIcon />}
             iconPosition="start"
@@ -163,7 +170,7 @@ const Settings = () => {
 
         <Divider sx={{ opacity: 0.3 }} />
 
-        <Box ref={parent} sx={{ p: 4 }}>
+        <Box ref={parent} sx={{ p: { xs: 1.5, sm: 4 } }}>
           <TabPanel value="1" sx={{ p: 0 }}>
             <Basics />
           </TabPanel>
@@ -183,7 +190,7 @@ const Settings = () => {
             <Themes />
             <Divider sx={{ my: 4 }} />
             <Interface />
-          </TabPanel>{" "}
+          </TabPanel>
           <TabPanel value="6" sx={{ p: 0 }}>
             <PrinterSettings />
           </TabPanel>

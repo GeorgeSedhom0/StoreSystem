@@ -21,7 +21,9 @@ import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 import LoadingScreen from "../../Shared/LoadingScreen";
-import { useEffect, useContext } from "react";
+import { useEffect, useContext, useState } from "react";
+import useConfirm from "../../Shared/useConfirm";
+import { apiError } from "../../utils/errors";
 import { useNavigate } from "react-router-dom";
 import { StoreContext } from "@renderer/StoreDataProvider";
 
@@ -108,7 +110,18 @@ const ShiftDialog = ({
     refetchShiftDetails();
   }, [dialogOpen]);
 
+  const [confirm, confirmDialog] = useConfirm();
+  const [closeError, setCloseError] = useState("");
+
   const closeShift = async () => {
+    const ok = await confirm({
+      title: "إغلاق الشيفت وتسجيل الخروج؟",
+      message:
+        "سيتم إغلاق الشيفت الحالي وتسجيل خروجك. لا يمكن إضافة فواتير لهذا الشيفت بعد إغلاقه.",
+      confirmText: "إغلاق الشيفت",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await axios.post(
         "/logout",
@@ -122,6 +135,7 @@ const ShiftDialog = ({
       navigate("/login");
     } catch (err) {
       console.log(err);
+      setCloseError(apiError(err, "تعذر إغلاق الشيفت"));
     }
   };
 
@@ -147,28 +161,81 @@ const ShiftDialog = ({
       ? grossRevenue / shiftTotal.transaction_count
       : 0;
 
-  const topMethod = shiftTotal.payment_breakdown.reduce<PaymentBreakdownItem | null>(
-    (best, m) => (best === null || m.total > best.total ? m : best),
-    null,
-  );
+  const topMethod =
+    shiftTotal.payment_breakdown.reduce<PaymentBreakdownItem | null>(
+      (best, m) => (best === null || m.total > best.total ? m : best),
+      null,
+    );
 
   const kpis: { label: string; value: string; color: string }[] = admin
     ? [
-        { label: "إجمالي البيع", value: formatCurrency(shiftTotal.sell_total), color: "success.main" },
-        { label: "المرتجعات", value: formatCurrency(Math.abs(shiftTotal.return_total)), color: "error.main" },
-        { label: "إجمالي الشراء", value: formatCurrency(Math.abs(shiftTotal.buy_total)), color: "warning.main" },
-        { label: "الدخول النقدي", value: formatCurrency(shiftTotal.cash_in), color: "success.main" },
-        { label: "الخروج النقدي", value: formatCurrency(shiftTotal.cash_out), color: "error.main" },
-        { label: "صافي الشيفت", value: formatCurrency(netCash), color: netCash >= 0 ? "success.main" : "error.main" },
-        { label: "عدد المعاملات", value: String(shiftTotal.transaction_count), color: "text.primary" },
-        { label: "متوسط الفاتورة", value: formatCurrency(avgTxn), color: "info.main" },
+        {
+          label: "إجمالي البيع",
+          value: formatCurrency(shiftTotal.sell_total),
+          color: "success.main",
+        },
+        {
+          label: "المرتجعات",
+          value: formatCurrency(Math.abs(shiftTotal.return_total)),
+          color: "error.main",
+        },
+        {
+          label: "إجمالي الشراء",
+          value: formatCurrency(Math.abs(shiftTotal.buy_total)),
+          color: "warning.main",
+        },
+        {
+          label: "الدخول النقدي",
+          value: formatCurrency(shiftTotal.cash_in),
+          color: "success.main",
+        },
+        {
+          label: "الخروج النقدي",
+          value: formatCurrency(shiftTotal.cash_out),
+          color: "error.main",
+        },
+        {
+          label: "صافي الشيفت",
+          value: formatCurrency(netCash),
+          color: netCash >= 0 ? "success.main" : "error.main",
+        },
+        {
+          label: "عدد المعاملات",
+          value: String(shiftTotal.transaction_count),
+          color: "text.primary",
+        },
+        {
+          label: "متوسط الفاتورة",
+          value: formatCurrency(avgTxn),
+          color: "info.main",
+        },
       ]
     : [
-        { label: "إجمالي البيع", value: formatCurrency(shiftTotal.sell_total), color: "success.main" },
-        { label: "المرتجعات", value: formatCurrency(Math.abs(shiftTotal.return_total)), color: "error.main" },
-        { label: "إجمالي الإيرادات", value: formatCurrency(grossRevenue), color: "primary.main" },
-        { label: "عدد المعاملات", value: String(shiftTotal.transaction_count), color: "text.primary" },
-        { label: "متوسط الفاتورة", value: formatCurrency(avgTxn), color: "info.main" },
+        {
+          label: "إجمالي البيع",
+          value: formatCurrency(shiftTotal.sell_total),
+          color: "success.main",
+        },
+        {
+          label: "المرتجعات",
+          value: formatCurrency(Math.abs(shiftTotal.return_total)),
+          color: "error.main",
+        },
+        {
+          label: "إجمالي الإيرادات",
+          value: formatCurrency(grossRevenue),
+          color: "primary.main",
+        },
+        {
+          label: "عدد المعاملات",
+          value: String(shiftTotal.transaction_count),
+          color: "text.primary",
+        },
+        {
+          label: "متوسط الفاتورة",
+          value: formatCurrency(avgTxn),
+          color: "info.main",
+        },
         {
           label: "أعلى طريقة دفع",
           value: topMethod ? topMethod.method : "—",
@@ -179,7 +246,8 @@ const ShiftDialog = ({
   // Merge the bills-only split with the all-transactions/balance breakdown so
   // every account shows: bills collected · all shift movement · current balance.
   const billsByMethod: Record<string, number> = {};
-  for (const p of shiftTotal.payment_breakdown) billsByMethod[p.method] = p.total;
+  for (const p of shiftTotal.payment_breakdown)
+    billsByMethod[p.method] = p.total;
   const accountRows = shiftTotal.account_breakdown.map((a) => ({
     method: a.method,
     bills: billsByMethod[a.method] || 0,
@@ -235,12 +303,7 @@ const ShiftDialog = ({
               >
                 {k.label}
               </Typography>
-              <Typography
-                variant="h6"
-                fontWeight={700}
-                color={k.color}
-                noWrap
-              >
+              <Typography variant="h6" fontWeight={700} color={k.color} noWrap>
                 {k.value}
               </Typography>
             </Paper>
@@ -353,7 +416,9 @@ const ShiftDialog = ({
                       </TableCell>
                       <TableCell
                         align="right"
-                        sx={{ color: r.all >= 0 ? "success.main" : "error.main" }}
+                        sx={{
+                          color: r.all >= 0 ? "success.main" : "error.main",
+                        }}
                       >
                         {r.all >= 0 ? "+" : ""}
                         {formatCurrency(r.all)}
@@ -376,7 +441,13 @@ const ShiftDialog = ({
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 3 }}>
+      {confirmDialog}
+      {closeError && (
+        <Typography color="error" sx={{ px: 3 }}>
+          {closeError}
+        </Typography>
+      )}
+      <DialogActions sx={{ px: 3, pb: 3, flexWrap: "wrap", gap: 1 }}>
         <Button
           onClick={handleClose}
           disabled={!shift}
@@ -392,7 +463,7 @@ const ShiftDialog = ({
           color="error"
           sx={{ ml: 2 }}
         >
-          إغلاق شيفت و تسجيل الخروج
+          إغلاق الشيفت وتسجيل الخروج
         </Button>
       </DialogActions>
     </Dialog>

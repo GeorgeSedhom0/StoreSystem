@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useCallback, useContext, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AdminProduct } from "../utils/types";
 import {
   Button,
@@ -24,6 +24,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { Search, Download } from "@mui/icons-material";
 import AdminProductCard from "./Components/AdminProductCard";
@@ -31,8 +33,11 @@ import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { Link } from "react-router-dom";
 import useAdminProducts from "../Shared/hooks/useAdminProducts";
+import PackagesDialog from "../Shared/PackagesDialog";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { exportToExcel } from "../Analytics/utils";
+import { normalizeArabic } from "../Shared/ProductAutocomplete";
+import { apiError } from "../utils/errors";
 
 const ProductsAdmin = () => {
   const [editedProducts, setEditedProducts] = useState<AdminProduct[]>([]);
@@ -51,6 +56,9 @@ const ProductsAdmin = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [stockFilter, setStockFilter] = useState<"all" | "low" | "out">("all");
+  const muiTheme = useTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
+  const [packagesFor, setPackagesFor] = useState<AdminProduct | null>(null);
 
   const { storeId } = useContext(StoreContext);
 
@@ -75,16 +83,18 @@ const ProductsAdmin = () => {
   }, [products]);
 
   const filteredAndSortedProducts = useMemo(() => {
-    let filtered = products;
-
-    // Text search
-    if (query) {
-      filtered = filtered.filter(
-        (product) =>
-          product.name.toLowerCase().includes(query.toLowerCase()) ||
-          product.bar_code.toLowerCase().includes(query.toLowerCase()),
-      );
-    }
+    // Same matching as the POS search: every word must appear in the name or
+    // barcode, ignoring Arabic letter variants (أ/ا, ة/ه, ى/ي).
+    const words = normalizeArabic(query).split(/\s+/).filter(Boolean);
+    let filtered = words.length
+      ? products.filter((product) => {
+          const hay =
+            normalizeArabic(product.name) +
+            " " +
+            (product.bar_code || "").toLowerCase();
+          return words.every((w) => hay.includes(w));
+        })
+      : [...products];
 
     // Category filtering
     if (selectedCategories.length > 0) {
@@ -188,7 +198,7 @@ const ProductsAdmin = () => {
       "البار كود",
       "السعر",
       "سعر الشراء",
-      ...availableStores.map((store) => `الكمية فى ${store}`),
+      ...availableStores.map((store) => `الكمية في ${store}`),
       ...availableStores.map((store) => `المحجوز في ${store}`),
       "المجموعة",
     ];
@@ -196,34 +206,38 @@ const ProductsAdmin = () => {
     const dataRows = filteredAndSortedProducts.map((product) => [
       product.name,
       product.bar_code,
-      product.price?.toString() || "",
-      product.wholesale_price?.toString() || "",
-      ...availableStores.map((store) =>
-        (product.stock_by_store?.[store] || 0).toString(),
+      Number(product.price) || 0,
+      Number(product.wholesale_price) || 0,
+      ...availableStores.map(
+        (store) => Number(product.stock_by_store?.[store]) || 0,
       ),
-      ...availableStores.map((store) =>
-        (reservedProducts[product.id!]?.[store] || 0).toString(),
+      ...availableStores.map(
+        (store) => Number(reservedProducts[product.id!]?.[store]) || 0,
       ),
       product.category || "",
     ]);
 
     const exportData = [headerRow, ...dataRows];
-    exportToExcel(exportData);
+    exportToExcel(exportData, "المنتجات - كل المخازن");
   };
 
+  useEffect(() => {
+    if (editedProducts.length === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [editedProducts.length]);
+
+  const money = (n: number) =>
+    n.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
   const statCardsData = useMemo(() => {
-    // logging each store wholesale total value
-    const storeWholesaleValues = availableStores.reduce(
-      (acc, store) => {
-        acc[store] = filteredAndSortedProducts.reduce((sum, product) => {
-          const stock = product.stock_by_store?.[store] || 0;
-          return sum + product.wholesale_price * stock;
-        }, 0);
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
-    console.log("Store Wholesale Values:", storeWholesaleValues);
     return {
       totalProducts: filteredAndSortedProducts.length,
       lowStock: filteredAndSortedProducts.filter((p) => {
@@ -258,6 +272,7 @@ const ProductsAdmin = () => {
   }, [filteredAndSortedProducts]);
 
   const submitProducts = useCallback(async () => {
+    if (editedProducts.length === 0) return;
     setLoading(true);
     try {
       await axios.put("/products", editedProducts, {
@@ -265,36 +280,49 @@ const ProductsAdmin = () => {
           store_id: storeId,
         },
       });
-      setMsg({ type: "success", text: "تم تعديل المنتجات بنجاح" });
+      setMsg({
+        type: "success",
+        text: `تم حفظ تعديلات ${editedProducts.length} منتج بنجاح`,
+      });
+      // Only drop the edits once they are actually saved.
+      setQuery("");
+      setChangedOnly(false);
+      setEditedProducts([]);
+      await getProds();
     } catch (error) {
-      console.log(error);
-      setMsg({ type: "error", text: "حدث خطأ أثناء تعديل المنتجات" });
+      // Keep the edits so nothing typed is lost; show why it failed.
+      setMsg({
+        type: "error",
+        text: apiError(error, "حدث خطأ أثناء حفظ تعديلات المنتجات"),
+      });
+    } finally {
+      setLoading(false);
     }
-    await getProds();
-    setLoading(false);
-    setQuery("");
-    setChangedOnly(false);
-    setEditedProducts([]);
-  }, [editedProducts, storeId]);
+  }, [editedProducts, storeId, getProds]);
 
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 container spacing={3}>
         <Grid2 size={12}>
-          <Card elevation={3} sx={{ p: 2 }}>
-            <Grid2 container spacing={3}>
+          <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 } }}>
+            <Grid2 container spacing={{ xs: 2, sm: 3 }}>
               <Grid2 container size={12}>
-                <Typography variant="h4">المنتجات</Typography>
+                <Typography
+                  variant="h4"
+                  sx={{ fontSize: { xs: "1.6rem", sm: "2.125rem" } }}
+                >
+                  المنتجات
+                </Typography>
               </Grid2>
               <Grid2 size={12}>
-                <Typography variant="subtitle1">
-                  عند الانتهاء من التعديل يرجى الضغط على "عرض المعدلة فقط"
-                  للتأكد من الحفظ بشكل صحيح
+                <Typography variant="body1">
+                  عند الانتهاء من التعديل اضغط "عرض المعدلة فقط" للتأكد من
+                  التعديلات ثم اضغط "حفظ التعديلات"
                 </Typography>
-                <Typography variant="subtitle2">
-                  لا يمكن تعديل سعر الشراء او البيع للمنتج من هذة الصفحة للتعديل
-                  يجب الذهاب الى{" "}
+                <Typography variant="body2" color="text.secondary">
+                  لا يمكن تعديل سعر الشراء أو البيع من هذه الصفحة، للتعديل اذهب
+                  إلى{" "}
                   <Link
                     to="/buy"
                     style={{
@@ -307,22 +335,33 @@ const ProductsAdmin = () => {
                   </Link>
                 </Typography>
               </Grid2>
-              <Grid2 container size={12} gap={3}>
-                <Button onClick={submitProducts} variant="contained">
+              <Grid2 container size={12} gap={{ xs: 1.5, sm: 3 }}>
+                <Button
+                  onClick={submitProducts}
+                  variant="contained"
+                  disabled={loading || editedProducts.length === 0}
+                  sx={{ minHeight: 40, flex: { xs: 1, sm: "none" } }}
+                >
                   حفظ التعديلات
+                  {editedProducts.length > 0 && ` (${editedProducts.length})`}
                 </Button>
                 <Button
                   onClick={() => setChangedOnly((prev) => !prev)}
-                  variant="contained"
+                  variant="outlined"
+                  disabled={!changedOnly && editedProducts.length === 0}
+                  sx={{ minHeight: 40, flex: { xs: 1, sm: "none" } }}
                 >
                   {changedOnly ? "عرض الكل" : "عرض المعدلة فقط"}
                 </Button>
-              </Grid2>{" "}
+              </Grid2>
               <Grid2 size={12}>
                 <TextField
-                  label="بحث"
+                  label="بحث بالاسم أو الباركود"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(0);
+                  }}
                   fullWidth
                   slotProps={{
                     input: {
@@ -335,7 +374,7 @@ const ProductsAdmin = () => {
                   }}
                 />
               </Grid2>
-              <Grid2 size={6}>
+              <Grid2 size={{ xs: 12, sm: 6 }}>
                 <Autocomplete
                   multiple
                   options={availableCategories}
@@ -356,15 +395,16 @@ const ProductsAdmin = () => {
                   }
                 />
               </Grid2>
-              <Grid2 size={3}>
+              <Grid2 size={{ xs: 6, sm: 3 }}>
                 <FormControl fullWidth>
                   <InputLabel>تصفية المخزون</InputLabel>
                   <Select
                     value={stockFilter}
                     label="تصفية المخزون"
-                    onChange={(e) =>
-                      setStockFilter(e.target.value as "all" | "low" | "out")
-                    }
+                    onChange={(e) => {
+                      setStockFilter(e.target.value as "all" | "low" | "out");
+                      setPage(0);
+                    }}
                   >
                     <MenuItem value="all">جميع المنتجات</MenuItem>
                     <MenuItem value="low">مخزون منخفض (≤10)</MenuItem>
@@ -372,25 +412,34 @@ const ProductsAdmin = () => {
                   </Select>
                 </FormControl>
               </Grid2>
-              <Grid2 size={3}>
+              <Grid2 size={{ xs: 6, sm: 3 }}>
                 <Button
                   onClick={handleExportToExcel}
                   variant="outlined"
                   startIcon={<Download />}
                   fullWidth
+                  sx={{ height: "100%" }}
+                  disabled={filteredAndSortedProducts.length === 0}
                 >
-                  تصدير إلى Excel
+                  تصدير Excel
                 </Button>
               </Grid2>
             </Grid2>
           </Card>
-        </Grid2>{" "}
+        </Grid2>
         <Grid2 size={12}>
           <Card elevation={3} sx={{ position: "relative" }}>
             <LoadingScreen loading={loading} />
 
             {/* Statistics Cards */}
-            <Box sx={{ p: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
+            <Box
+              sx={{
+                p: { xs: 1.5, sm: 2 },
+                display: "flex",
+                gap: { xs: 1, sm: 2 },
+                flexWrap: "wrap",
+              }}
+            >
               <Chip
                 label={`إجمالي المنتجات: ${statCardsData.totalProducts}`}
                 color="primary"
@@ -407,95 +456,126 @@ const ProductsAdmin = () => {
                 variant="outlined"
               />
               <Chip
-                label={`إجمالي قيمة المخزون: ${statCardsData.totalValue.toFixed(
-                  2,
-                )}`}
+                label={`إجمالي قيمة المخزون: ${money(statCardsData.totalValue)}`}
                 color="success"
                 variant="outlined"
               />
               <Chip
-                label={`إجمالي قيمة الشراء: ${statCardsData.totalWholesaleValue.toFixed(
-                  2,
+                label={`إجمالي قيمة الشراء: ${money(
+                  statCardsData.totalWholesaleValue,
                 )}`}
                 color="info"
                 variant="outlined"
               />
             </Box>
 
-            <TableContainer component={Paper}>
-              <Table stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "name"}
-                        direction={orderBy === "name" ? order : "asc"}
-                        onClick={() => handleSort("name")}
-                      >
-                        اسم المنتج
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "bar_code"}
-                        direction={orderBy === "bar_code" ? order : "asc"}
-                        onClick={() => handleSort("bar_code")}
-                      >
-                        البار كود
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "price"}
-                        direction={orderBy === "price" ? order : "asc"}
-                        onClick={() => handleSort("price")}
-                      >
-                        السعر
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "wholesale_price"}
-                        direction={
-                          orderBy === "wholesale_price" ? order : "asc"
-                        }
-                        onClick={() => handleSort("wholesale_price")}
-                      >
-                        سعر الشراء
-                      </TableSortLabel>
-                    </TableCell>
-                    {availableStores.map((store) => (
-                      <TableCell key={store}>الكمية فى {store}</TableCell>
+            {isMobile ? (
+              <Box sx={{ p: 1.25 }}>
+                {paginatedProducts.map((product) => (
+                  <AdminProductCard
+                    isMobile
+                    key={product.id || product.bar_code}
+                    product={product}
+                    reserved={reservedProducts[product.id!]}
+                    setEditedProducts={setEditedProducts}
+                    editedProducts={editedProducts}
+                    onOpenPackages={setPackagesFor}
+                  />
+                ))}
+                {paginatedProducts.length === 0 && (
+                  <Typography
+                    align="center"
+                    color="text.secondary"
+                    sx={{ py: 4 }}
+                  >
+                    لا توجد منتجات
+                  </Typography>
+                )}
+              </Box>
+            ) : (
+              <TableContainer component={Paper}>
+                <Table stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>
+                        <TableSortLabel
+                          active={orderBy === "name"}
+                          direction={orderBy === "name" ? order : "asc"}
+                          onClick={() => handleSort("name")}
+                        >
+                          اسم المنتج
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={orderBy === "bar_code"}
+                          direction={orderBy === "bar_code" ? order : "asc"}
+                          onClick={() => handleSort("bar_code")}
+                        >
+                          البار كود
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={orderBy === "price"}
+                          direction={orderBy === "price" ? order : "asc"}
+                          onClick={() => handleSort("price")}
+                        >
+                          السعر
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>
+                        <TableSortLabel
+                          active={orderBy === "wholesale_price"}
+                          direction={
+                            orderBy === "wholesale_price" ? order : "asc"
+                          }
+                          onClick={() => handleSort("wholesale_price")}
+                        >
+                          سعر الشراء
+                        </TableSortLabel>
+                      </TableCell>
+                      {availableStores.map((store) => (
+                        <TableCell key={store}>الكمية في {store}</TableCell>
+                      ))}
+                      {availableStores.map((store) => (
+                        <TableCell key={store}>المحجوز في {store}</TableCell>
+                      ))}
+                      <TableCell>
+                        <TableSortLabel
+                          active={orderBy === "category"}
+                          direction={orderBy === "category" ? order : "asc"}
+                          onClick={() => handleSort("category")}
+                        >
+                          المجموعة
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>العبوات</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {paginatedProducts.map((product) => (
+                      <AdminProductCard
+                        key={product.id || product.bar_code}
+                        product={product}
+                        reserved={reservedProducts[product.id!]}
+                        setEditedProducts={setEditedProducts}
+                        editedProducts={editedProducts}
+                        onOpenPackages={setPackagesFor}
+                      />
                     ))}
-                    {availableStores.map((store) => (
-                      <TableCell key={store}>المحجوز في {store}</TableCell>
-                    ))}
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "category"}
-                        direction={orderBy === "category" ? order : "asc"}
-                        onClick={() => handleSort("category")}
-                      >
-                        المجموعة
-                      </TableSortLabel>
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {paginatedProducts.map((product) => (
-                    <AdminProductCard
-                      key={product.id || product.bar_code}
-                      product={product}
-                      reserved={reservedProducts[product.id!]}
-                      setEditedProducts={setEditedProducts}
-                      editedProducts={editedProducts}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
 
             <TablePagination
+              sx={{
+                "& .MuiTablePagination-toolbar": {
+                  flexWrap: "wrap",
+                  px: { xs: 1, md: 2 },
+                },
+              }}
               rowsPerPageOptions={[10, 25, 50, 100]}
               component="div"
               count={filteredAndSortedProducts.length}
@@ -511,6 +591,19 @@ const ProductsAdmin = () => {
           </Card>
         </Grid2>
       </Grid2>
+      {packagesFor && (
+        <PackagesDialog
+          open={!!packagesFor}
+          onClose={() => setPackagesFor(null)}
+          onSaved={() => getProds()}
+          product={{
+            id: packagesFor.id,
+            name: packagesFor.name,
+            price: packagesFor.price,
+            wholesale_price: packagesFor.wholesale_price,
+          }}
+        />
+      )}
     </>
   );
 };

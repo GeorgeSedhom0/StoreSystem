@@ -28,12 +28,16 @@ services:
       - ALGORITHM=HS256
       - TZ=Africa/Cairo
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      # Automatic backups (backup_scheduler.py) go to the dataset below.
+      - BACKUP_DIR=/backups
     ports:
       - '8000:8000'
     restart: unless-stopped
     volumes:
       - /mnt/MainPool/StoreSystem/server:/app
       - ssl_certs:/app/ssl
+      # Kept outside the repo checkout so updates/redeploys never delete it.
+      - ${BACKUP_HOST_DIR:-/mnt/MainPool/StoreSystem-backups}:/backups
     networks:
       - app-network
 

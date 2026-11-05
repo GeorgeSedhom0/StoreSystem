@@ -25,6 +25,8 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import {
@@ -34,19 +36,38 @@ import {
   SwapHoriz as SwapIcon,
   FactCheck as ReconcileIcon,
 } from "@mui/icons-material";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import LoadingScreen from "../Shared/LoadingScreen";
-import useAccounts, { getAccountTransactions } from "../Shared/hooks/useAccounts";
+import NumberField from "../Shared/NumberField";
+import useAccounts, {
+  getAccountTransactions,
+} from "../Shared/hooks/useAccounts";
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("ar-EG", {
-    style: "currency",
-    currency: "EGP",
+// Same digits/grouping as the rest of the money screens (Cash, Bills).
+// Negatives are wrapped in an LTR isolate so RTL text shows "-75.50", not "75.50-".
+const formatCurrency = (value: number) => {
+  const s = (value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
-  }).format(value || 0);
+    maximumFractionDigits: 2,
+  });
+  return `${value < 0 ? `⁦${s}⁩` : s} ج.م`;
+};
+
+const formatTime = (time: string) => {
+  const d = new Date(time.replace(" ", "T"));
+  return Number.isNaN(d.getTime())
+    ? time
+    : d.toLocaleString("ar-EG", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+};
 
 const SOURCE_LABELS: Record<string, string> = {
   bill: "فاتورة",
@@ -59,6 +80,10 @@ type DialogMode = "deposit" | "payout" | "reconcile" | "transfer" | null;
 const Accounts = () => {
   const { storeId } = useContext(StoreContext);
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const fullScreenDialog = useMediaQuery(theme.breakpoints.down("sm"));
+  const ledgerRef = useRef<HTMLDivElement>(null);
 
   const {
     accounts,
@@ -167,12 +192,20 @@ const Accounts = () => {
     setLedgerPage(0);
   };
 
+  // On a phone the ledger opens far below the tapped card; bring it into view.
+  useEffect(() => {
+    if (selectedId !== null && isMobile) {
+      ledgerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedId, isMobile]);
+
   const openDialog = (m: DialogMode, presetMethod?: number) => {
     setMode(m);
     setMethodId(presetMethod ?? activeAccounts[0]?.id ?? "");
     setToMethodId(
-      activeAccounts.find((a) => a.id !== (presetMethod ?? activeAccounts[0]?.id))
-        ?.id ?? "",
+      activeAccounts.find(
+        (a) => a.id !== (presetMethod ?? activeAccounts[0]?.id),
+      )?.id ?? "",
     );
     setAmount(0);
     setDescription("");
@@ -190,10 +223,7 @@ const Accounts = () => {
     if (methodId === "") return;
     const opts = { onSuccess: closeDialog };
     if (mode === "deposit") {
-      deposit.mutate(
-        { paymentMethodId: methodId, amount, description },
-        opts,
-      );
+      deposit.mutate({ paymentMethodId: methodId, amount, description }, opts);
     } else if (mode === "payout") {
       payout.mutate({ paymentMethodId: methodId, amount, description }, opts);
     } else if (mode === "reconcile") {
@@ -235,8 +265,8 @@ const Accounts = () => {
       <Paper
         elevation={2}
         sx={{
-          p: 3,
-          mb: 3,
+          p: { xs: 2, md: 3 },
+          mb: { xs: 2, md: 3 },
           borderRadius: 3,
           background:
             "linear-gradient(135deg, rgba(25, 118, 210, 0.1) 0%, rgba(25, 118, 210, 0.05) 100%)",
@@ -258,7 +288,11 @@ const Accounts = () => {
             <Box>
               <Typography
                 variant="h4"
-                sx={{ fontWeight: 600, color: "primary.main" }}
+                sx={{
+                  fontWeight: 600,
+                  color: "primary.main",
+                  fontSize: { xs: "1.6rem", md: "2.125rem" },
+                }}
               >
                 الحسابات
               </Typography>
@@ -267,20 +301,33 @@ const Accounts = () => {
               </Typography>
             </Box>
           </Box>
-          <Box sx={{ textAlign: "center" }}>
+          <Box sx={{ textAlign: { xs: "start", sm: "center" } }}>
             <Typography variant="body2" color="text.secondary">
               إجمالي الأرصدة
             </Typography>
             <Typography
               variant="h4"
-              sx={{ fontWeight: 700, color: "success.main" }}
+              sx={{
+                fontWeight: 700,
+                color: total >= 0 ? "success.main" : "error.main",
+                fontSize: { xs: "1.6rem", md: "2.125rem" },
+              }}
             >
               {formatCurrency(total)}
             </Typography>
           </Box>
         </Box>
 
-        <Box sx={{ display: "flex", gap: 1.5, mt: 3, flexWrap: "wrap" }}>
+        <Box
+          sx={{
+            display: { xs: "grid", sm: "flex" },
+            gridTemplateColumns: "1fr 1fr",
+            gap: 1.5,
+            mt: { xs: 2, md: 3 },
+            flexWrap: "wrap",
+            "& .MuiButton-root": { minHeight: 44 },
+          }}
+        >
           <Button
             variant="contained"
             color="success"
@@ -316,9 +363,13 @@ const Accounts = () => {
       </Paper>
 
       {/* Account balance cards */}
-      <Grid2 container spacing={2} sx={{ mb: 3 }}>
+      <Grid2
+        container
+        spacing={{ xs: 1.5, md: 2 }}
+        sx={{ mb: { xs: 2, md: 3 } }}
+      >
         {accounts.map((account) => (
-          <Grid2 size={{ xs: 12, sm: 6, md: 4 }} key={account.id}>
+          <Grid2 size={{ xs: 6, md: 4 }} key={account.id}>
             <Card
               elevation={3}
               sx={{
@@ -329,16 +380,20 @@ const Accounts = () => {
               }}
             >
               <CardActionArea onClick={() => selectAccount(account.id)}>
-                <CardContent>
+                <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
                   <Box
                     sx={{
                       display: "flex",
                       alignItems: "center",
                       gap: 1,
                       mb: 1,
+                      minWidth: 0,
                     }}
                   >
-                    <WalletIcon color="primary" />
+                    <WalletIcon
+                      color="primary"
+                      sx={{ display: { xs: "none", sm: "block" } }}
+                    />
                     <Typography variant="subtitle1" fontWeight={600} noWrap>
                       {account.name}
                     </Typography>
@@ -352,14 +407,15 @@ const Accounts = () => {
                   <Typography
                     variant="h5"
                     fontWeight={700}
-                    color={
-                      account.balance >= 0 ? "success.main" : "error.main"
-                    }
+                    color={account.balance >= 0 ? "success.main" : "error.main"}
+                    sx={{ fontSize: { xs: "1.05rem", md: "1.5rem" } }}
                   >
                     {formatCurrency(account.balance)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    اضغط لعرض الحركات
+                    {selectedId === account.id
+                      ? "اضغط لإخفاء الحركات"
+                      : "اضغط لعرض الحركات"}
                   </Typography>
                 </CardContent>
               </CardActionArea>
@@ -373,8 +429,8 @@ const Accounts = () => {
         <Paper
           elevation={1}
           sx={{
-            p: 3,
-            mb: 3,
+            p: { xs: 2, md: 3 },
+            mb: { xs: 2, md: 3 },
             borderRadius: 3,
             border: "1px solid",
             borderColor: "divider",
@@ -422,9 +478,9 @@ const Accounts = () => {
                           : "لا يوجد رصيد مستحق"}
                     </Typography>
                     <Button
-                      size="small"
                       variant="outlined"
                       onClick={() => openSettle(sb)}
+                      sx={{ minHeight: 40 }}
                     >
                       تسوية / تحويل
                     </Button>
@@ -439,21 +495,40 @@ const Accounts = () => {
       {/* Selected account ledger */}
       {selectedAccount && (
         <Paper
+          ref={ledgerRef}
           elevation={1}
-          sx={{ p: 3, borderRadius: 3, border: "1px solid", borderColor: "divider" }}
+          sx={{
+            p: { xs: 1.5, md: 3 },
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: "divider",
+            scrollMarginTop: 72,
+          }}
         >
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 1,
               mb: 2,
             }}
           >
             <Typography variant="h6" fontWeight={600}>
               حركات حساب: {selectedAccount.name}
             </Typography>
-            <Box sx={{ display: "flex", gap: 1 }}>
+            <Box
+              sx={{
+                display: "flex",
+                gap: 1,
+                width: { xs: "100%", sm: "auto" },
+                "& .MuiButton-root": {
+                  flex: { xs: 1, sm: "0 0 auto" },
+                  minHeight: { xs: 40, md: "auto" },
+                },
+              }}
+            >
               <Button
                 size="small"
                 variant="outlined"
@@ -480,57 +555,140 @@ const Accounts = () => {
             </Box>
           </Box>
 
-          <TableContainer sx={{ maxHeight: 480 }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow>
-                  <TableCell>التاريخ</TableCell>
-                  <TableCell>البيان</TableCell>
-                  <TableCell>النوع</TableCell>
-                  <TableCell align="right">المبلغ</TableCell>
-                  <TableCell align="right">الرصيد بعد الحركة</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {ledger.map((row) => (
-                  <TableRow key={row.id} hover>
-                    <TableCell sx={{ whiteSpace: "nowrap" }}>
-                      {row.time}
-                    </TableCell>
-                    <TableCell>
-                      {row.description ||
-                        (row.party_name ? row.party_name : "-")}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={SOURCE_LABELS[row.source] || row.source}
-                      />
-                    </TableCell>
-                    <TableCell
-                      align="right"
+          {isMobile ? (
+            <Box sx={{ position: "relative", minHeight: 80 }}>
+              <LoadingScreen loading={isLedgerLoading} />
+              {ledger.map((row) => (
+                <Box
+                  key={row.id}
+                  sx={{
+                    py: 1.25,
+                    px: 0.5,
+                    borderBottom: 1,
+                    borderColor: "divider",
+                  }}
+                >
+                  <Box
+                    sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 600, wordBreak: "break-word" }}
+                      >
+                        {row.description || row.party_name || "-"}
+                      </Typography>
+                      {row.description && row.party_name && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          component="div"
+                          noWrap
+                        >
+                          {row.party_name}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Typography
                       sx={{
+                        fontWeight: 700,
+                        flexShrink: 0,
                         color: row.amount >= 0 ? "success.main" : "error.main",
-                        fontWeight: 600,
                       }}
                     >
                       {formatCurrency(row.amount)}
-                    </TableCell>
-                    <TableCell align="right">
-                      {formatCurrency(row.balance_after)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!isLedgerLoading && ledger.length === 0 && (
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: 1,
+                      mt: 0.5,
+                    }}
+                  >
+                    <Chip
+                      size="small"
+                      label={SOURCE_LABELS[row.source] || row.source}
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      {formatTime(row.time)}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{ marginInlineStart: "auto" }}
+                    >
+                      الرصيد: {formatCurrency(row.balance_after)}
+                    </Typography>
+                  </Box>
+                </Box>
+              ))}
+              {!isLedgerLoading && ledger.length === 0 && (
+                <Typography
+                  align="center"
+                  color="text.secondary"
+                  sx={{ py: 3 }}
+                >
+                  لا توجد حركات على هذا الحساب
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            <TableContainer sx={{ maxHeight: 480 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      لا توجد حركات على هذا الحساب
-                    </TableCell>
+                    <TableCell>التاريخ</TableCell>
+                    <TableCell>البيان</TableCell>
+                    <TableCell>النوع</TableCell>
+                    <TableCell align="right">المبلغ</TableCell>
+                    <TableCell align="right">الرصيد بعد الحركة</TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {ledger.map((row) => (
+                    <TableRow key={row.id} hover>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {formatTime(row.time)}
+                      </TableCell>
+                      <TableCell>
+                        {row.description ||
+                          (row.party_name ? row.party_name : "-")}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={SOURCE_LABELS[row.source] || row.source}
+                        />
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          color:
+                            row.amount >= 0 ? "success.main" : "error.main",
+                          fontWeight: 600,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {formatCurrency(row.amount)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                        {formatCurrency(row.balance_after)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!isLedgerLoading && ledger.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center">
+                        لا توجد حركات على هذا الحساب
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
           <TablePagination
             rowsPerPageOptions={[25, 50, 100]}
             component="div"
@@ -551,7 +709,13 @@ const Accounts = () => {
       )}
 
       {/* Action dialog */}
-      <Dialog open={mode !== null} onClose={closeDialog} fullWidth maxWidth="xs">
+      <Dialog
+        open={mode !== null}
+        onClose={closeDialog}
+        fullWidth
+        maxWidth="xs"
+        fullScreen={fullScreenDialog}
+      >
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
@@ -591,14 +755,14 @@ const Accounts = () => {
               </FormControl>
             )}
 
-            <TextField
+            <NumberField
               fullWidth
               size="small"
-              type="number"
               label={mode === "reconcile" ? "الرصيد الفعلي" : "المبلغ"}
               value={amount}
-              onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-              inputMode="decimal"
+              onValueChange={setAmount}
+              allowNegative={mode === "reconcile"}
+              autoFocus
               slotProps={{
                 input: {
                   endAdornment: (
@@ -615,7 +779,13 @@ const Accounts = () => {
                   accounts.find((a) => a.id === methodId)?.balance ?? 0,
                 )}
                 {" — "}
-                الفرق سيُسجّل كتسوية
+                الفرق الذي سيُسجّل كتسوية:{" "}
+                <b>
+                  {formatCurrency(
+                    amount -
+                      (accounts.find((a) => a.id === methodId)?.balance ?? 0),
+                  )}
+                </b>
               </Typography>
             )}
 
@@ -652,6 +822,7 @@ const Accounts = () => {
         onClose={() => setSettleStore(null)}
         fullWidth
         maxWidth="xs"
+        fullScreen={fullScreenDialog}
       >
         <DialogTitle>تسوية / تحويل مع {settleStore?.name}</DialogTitle>
         <DialogContent>
@@ -670,14 +841,12 @@ const Accounts = () => {
               </Select>
             </FormControl>
 
-            <TextField
+            <NumberField
               fullWidth
               size="small"
-              type="number"
               label="المبلغ"
               value={settleAmount}
-              onChange={(e) => setSettleAmount(parseFloat(e.target.value) || 0)}
-              inputMode="decimal"
+              onValueChange={setSettleAmount}
               slotProps={{
                 input: {
                   endAdornment: (

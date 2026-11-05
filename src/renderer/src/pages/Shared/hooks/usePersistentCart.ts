@@ -1,5 +1,6 @@
 import { DBProducts, SCProduct } from "../../utils/types";
 import { useState, useEffect, useRef } from "react";
+import { refreshCartLine, sameLine } from "../packages";
 
 export function usePersistentCart(
   page: string,
@@ -60,20 +61,26 @@ export function usePersistentCart(
         );
         console.log(`[Cart: ${page}] Loaded cart data:`, saved);
         if (saved != null && products.length > 0) {
-          const updatedCart = saved
+          const byId = new Map(products.map((p) => [p.id, p]));
+          const mode =
+            page === "Buy" || page === "MoveProducts" ? "buy" : "sell";
+          const refreshed = saved
             .map((item) => {
-              const product = products.find((p) => p.id === item.id);
-              if (product) {
-                return {
-                  id: item.id,
-                  quantity: item.quantity,
-                  barCode: product.bar_code,
-                  ...product,
-                };
-              }
-              return null;
+              const product = byId.get(item.id);
+              return product ? refreshCartLine(item, product, mode) : null;
             })
-            .filter((item) => item !== null);
+            .filter((item): item is SCProduct => item !== null);
+          // A line whose package was deleted turns into a unit line; merge it
+          // with an existing unit line of that product (one line per key).
+          const updatedCart: SCProduct[] = [];
+          for (const line of refreshed) {
+            const twin = updatedCart.find((l) => sameLine(l, line));
+            if (twin) {
+              twin.quantity += line.quantity;
+              twin.batches = undefined;
+              twin.batch_id = undefined;
+            } else updatedCart.push(line);
+          }
           setState(updatedCart);
           isCartLoaded.current = true;
           console.log(

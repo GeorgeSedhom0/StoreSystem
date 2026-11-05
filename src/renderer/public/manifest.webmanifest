@@ -1,0 +1,16 @@
+{
+  "name": "OpenStore",
+  "short_name": "OpenStore",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./#/sell",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8faff",
+  "theme_color": "#1976d2",
+  "icons": [
+    { "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
+  ]
+}

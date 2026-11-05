@@ -3,37 +3,35 @@ import {
   Button,
   Card,
   Grid2,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
-  Table,
-  TableBody,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Checkbox,
   Box,
-  IconButton,
   Switch,
   FormControlLabel,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import AddIcon from "@mui/icons-material/Add";
-import RemoveIcon from "@mui/icons-material/Remove";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
-import ExpirationModal from "../Shared/ExpirationModal";
 import { useCallback, useState, useContext, useRef, useEffect } from "react";
-import { Party, Product, SCProduct, BatchInfo } from "../utils/types";
+import { Party, Product, ProductPackage, SCProduct } from "../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
-import ProductInCart from "../Shared/ProductInCart";
+import NumberField from "../Shared/NumberField";
+import { apiError } from "../utils/errors";
+import CartView from "../Shared/CartView";
+import MobileCheckoutBar, {
+  MobileBarSpacer,
+} from "../Shared/MobileCheckoutBar";
+import {
+  addToCartLines,
+  cartLineToFlow,
+  lineKey,
+  printableLine,
+} from "../Shared/packages";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { localTimestamp } from "../utils/functions";
 import useBarcodeDetection from "../Shared/hooks/useBarcodeDetection";
@@ -60,135 +58,15 @@ import {
   splitField,
 } from "../Shared/PosLayout";
 
-// Mobile-friendly buy-cart row: a stacked card instead of the 9-column table.
-const MobileBuyCartItem = ({
-  product,
-  setShoppingCart,
-  isSelected,
-  onSelectionChange,
-}: {
-  product: SCProduct;
-  setShoppingCart: React.Dispatch<React.SetStateAction<SCProduct[]>>;
-  isSelected: boolean;
-  onSelectionChange: (selected: boolean) => void;
-}) => {
-  const [expOpen, setExpOpen] = useState(false);
-  const update = (patch: Partial<SCProduct>) =>
-    setShoppingCart((prev) =>
-      prev.map((i) => (i.id === product.id ? { ...i, ...patch } : i)),
-    );
-  const remove = () =>
-    setShoppingCart((prev) => prev.filter((i) => i.id !== product.id));
-  const hasBatches = !!product.batches && product.batches.length > 0;
-
-  return (
-    <Card variant="outlined" sx={{ p: 1.5, mb: 1.5 }}>
-      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-        <Checkbox
-          sx={{ p: 0.5 }}
-          checked={isSelected}
-          onChange={(e) => onSelectionChange(e.target.checked)}
-        />
-        <Typography sx={{ fontWeight: 600, flex: 1, wordBreak: "break-word" }}>
-          {product.name}
-        </Typography>
-        <IconButton color="error" size="small" onClick={remove} aria-label="حذف">
-          <DeleteOutlineIcon />
-        </IconButton>
-      </Box>
-
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
-        <IconButton
-          size="small"
-          onClick={() => update({ quantity: Math.max(0, product.quantity - 1) })}
-        >
-          <RemoveIcon fontSize="small" />
-        </IconButton>
-        <TextField
-          type="number"
-          size="small"
-          label="الكمية"
-          value={product.quantity}
-          onChange={(e) => update({ quantity: parseInt(e.target.value) || 0 })}
-          sx={{ width: 90 }}
-          slotProps={{ htmlInput: { inputMode: "numeric" } }}
-        />
-        <IconButton
-          size="small"
-          onClick={() => update({ quantity: product.quantity + 1 })}
-        >
-          <AddIcon fontSize="small" />
-        </IconButton>
-      </Box>
-
-      <Box sx={{ display: "flex", gap: 1, mt: 1.5 }}>
-        <TextField
-          fullWidth
-          size="small"
-          type="number"
-          label="سعر الشراء"
-          value={product.wholesale_price}
-          onChange={(e) =>
-            update({ wholesale_price: parseFloat(e.target.value) || 0 })
-          }
-          slotProps={{ htmlInput: { inputMode: "decimal" } }}
-        />
-        <TextField
-          fullWidth
-          size="small"
-          type="number"
-          label="سعر البيع"
-          value={product.price}
-          onChange={(e) => update({ price: parseFloat(e.target.value) || 0 })}
-          slotProps={{ htmlInput: { inputMode: "decimal" } }}
-        />
-      </Box>
-
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          mt: 1.5,
-        }}
-      >
-        <Button
-          size="small"
-          variant={hasBatches ? "contained" : "outlined"}
-          color={hasBatches ? "success" : "primary"}
-          startIcon={<CalendarMonthIcon />}
-          onClick={() => setExpOpen(true)}
-        >
-          صلاحية
-        </Button>
-        <Typography sx={{ fontWeight: 600 }}>
-          الإجمالي: {product.wholesale_price * product.quantity}
-        </Typography>
-      </Box>
-
-      {expOpen && (
-        <ExpirationModal
-          open={expOpen}
-          onClose={() => setExpOpen(false)}
-          product={product}
-          onSave={(batches: BatchInfo[]) =>
-            update({ batches: batches.length > 0 ? batches : undefined })
-          }
-        />
-      )}
-    </Card>
-  );
-};
-
 const Buy = () => {
   const {
     products,
     updateProducts,
     isLoading: isProductsLoading,
   } = useProducts();
+
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-
   const [shoppingCart, setShoppingCart] = usePersistentCart(
     "Buy",
     [],
@@ -220,7 +98,7 @@ const Buy = () => {
   const prevCartLengthRef = useRef<number>(0);
 
   // Selection state for bulk operations
-  const [selectedProductIds, setSelectedProductIds] = useState<Set<number>>(
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(
     new Set(),
   );
   // Modal states for quick actions
@@ -244,9 +122,8 @@ const Buy = () => {
   const { data: storesData = [] } = useQuery({
     queryKey: ["stores-data"],
     queryFn: async () => {
-      const { data } = await axios.get<{ id: number; name: string }[]>(
-        "/admin/stores-data",
-      );
+      const { data } =
+        await axios.get<{ id: number; name: string }[]>("/admin/stores-data");
       return data;
     },
     initialData: [],
@@ -266,39 +143,24 @@ const Buy = () => {
     (m) => m.home_store_id == null || m.home_store_id === payByStoreId,
   );
 
-  const addToCart = useCallback((product: Product | null) => {
-    if (!product) return;
-    setShoppingCart((prev) => {
-      if (!product.id) return prev;
-      const productExists = prev.find((item) => item.id === product.id);
-      if (productExists) {
-        return prev.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        );
-      } else {
-        return [
-          ...prev,
-          {
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            wholesale_price: product.wholesale_price,
-            quantity: 1,
-            stock: product.stock,
-            barCode: product.bar_code,
-          },
-        ];
-      }
-    });
-  }, []);
+  const addToCart = useCallback(
+    (product: Product | null, pkg?: ProductPackage | null) => {
+      if (!product) return;
+      setShoppingCart((prev) =>
+        addToCartLines(prev, product, pkg ?? null, "buy"),
+      );
+    },
+    [],
+  );
   useBarcodeDetection(products, addToCart, setMsg);
   useQuickHandle(shoppingCart, setShoppingCart);
 
   // Auto-scroll cart to bottom only when a NEW product is added (not on quantity changes)
   useEffect(() => {
-    if (cartTableRef.current && shoppingCart.length > prevCartLengthRef.current) {
+    if (
+      cartTableRef.current &&
+      shoppingCart.length > prevCartLengthRef.current
+    ) {
       cartTableRef.current.scrollTop = cartTableRef.current.scrollHeight;
     }
     prevCartLengthRef.current = shoppingCart.length;
@@ -306,7 +168,7 @@ const Buy = () => {
 
   // Cleanup selection when products are removed from cart
   useEffect(() => {
-    const currentIds = new Set(shoppingCart.map((p) => p.id));
+    const currentIds = new Set(shoppingCart.map((p) => lineKey(p)));
     setSelectedProductIds((prev) => {
       const next = new Set([...prev].filter((id) => currentIds.has(id)));
       return next.size === prev.size ? prev : next;
@@ -316,18 +178,16 @@ const Buy = () => {
   // Selection handlers
   const allSelected =
     shoppingCart.length > 0 && selectedProductIds.size === shoppingCart.length;
-  const someSelected =
-    selectedProductIds.size > 0 && selectedProductIds.size < shoppingCart.length;
 
   const handleSelectAll = () => {
     if (allSelected) {
       setSelectedProductIds(new Set());
     } else {
-      setSelectedProductIds(new Set(shoppingCart.map((p) => p.id)));
+      setSelectedProductIds(new Set(shoppingCart.map((p) => lineKey(p))));
     }
   };
 
-  const handleSelectProduct = (productId: number, selected: boolean) => {
+  const handleSelectProduct = (productId: string, selected: boolean) => {
     setSelectedProductIds((prev) => {
       const next = new Set(prev);
       if (selected) {
@@ -383,7 +243,8 @@ const Buy = () => {
             ? [
                 {
                   method_id: payByMyMethod,
-                  name: paymentMethods.find((m) => m.id === payByMyMethod)?.name,
+                  name: paymentMethods.find((m) => m.id === payByMyMethod)
+                    ?.name,
                   amount: billTotal,
                 },
               ]
@@ -393,7 +254,9 @@ const Buy = () => {
           time: localTimestamp(),
           discount,
           total: billTotal,
-          products_flow: shoppingCart,
+          products_flow: shoppingCart.map((item) =>
+            cartLineToFlow(item, "buy"),
+          ),
           payments: buyPayments,
         };
 
@@ -454,14 +317,11 @@ const Buy = () => {
         setPayByAmount(0);
         setMsg({
           type: "success",
-          text: "تم اضافة الفاتورة بنجاح",
+          text: "تم حفظ الفاتورة بنجاح",
         });
       } catch (error) {
         console.log(error);
-        setMsg({
-          type: "error",
-          text: "حدث خطأ ما",
-        });
+        setMsg({ type: "error", text: apiError(error, "تعذر حفظ الفاتورة") });
       } finally {
         // Always ensure we reset the submission state, even in case of errors
         setIsSubmitting(false);
@@ -494,7 +354,17 @@ const Buy = () => {
     <Grid2 container spacing={density.spacing} alignItems="flex-start">
       <AlertMessage message={msg} setMessage={setMsg} />
       <LoadingScreen loading={isProductsLoading || isSubmitting} />
-      <Grid2 size={cardSizes.actions}>
+      {isMobile && (
+        <Grid2 size={12} sx={{ order: 1 }}>
+          <ProductAutocomplete
+            label="ابحث عن منتج أو امسح الباركود"
+            withPackages
+            onProductSelect={addToCart}
+            products={products}
+          />
+        </Grid2>
+      )}
+      <Grid2 size={cardSizes.actions} sx={{ order: { xs: 3, md: 0 } }}>
         <Card elevation={3} sx={posActionsCardSx(density)}>
           <Grid2 container spacing={density.spacing} alignItems="center">
             <Grid2 size={12}>
@@ -522,37 +392,48 @@ const Buy = () => {
                 </FormControl>
               </Grid2>
               <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 6)}>
-                <TextField
+                <NumberField
                   size="small"
                   label="الخصم"
-                  type="number"
                   value={discount}
-                  onChange={(e) => setDiscount(+e.target.value)}
+                  onValueChange={setDiscount}
+                  min={0}
                   fullWidth
                 />
               </Grid2>{" "}
-              <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 12)}>
-                <Button
-                  variant="contained"
-                  onClick={() => submitBill(shoppingCart, discount)}
-                  disabled={isSubmitDisabled}
-                  fullWidth
-                  sx={{ height: 40 }}
-                >
-                  {isSubmitting ? "جاري الحفظ..." : "اضافة فاتورة"}
-                </Button>
-              </Grid2>
-              <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 12)}>
-                <Typography variant="h6" align="center">
-                  الاجمالي:{" "}
-                  {shoppingCart.reduce(
-                    (acc, item) => acc + item.wholesale_price * item.quantity,
-                    0,
-                  ) - discount}{" "}
-                  جنيه
-                </Typography>
-                <Typography variant="body1" align="center"></Typography>
-              </Grid2>
+              {!isMobile && (
+                <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 12)}>
+                  <Button
+                    variant="contained"
+                    onClick={() => submitBill(shoppingCart, discount)}
+                    disabled={isSubmitDisabled}
+                    fullWidth
+                    sx={{ height: 40 }}
+                  >
+                    {isSubmitting ? "جاري الحفظ..." : "إضافة فاتورة"}
+                  </Button>
+                </Grid2>
+              )}
+              {!isMobile && (
+                <Grid2 size={splitField(density.isSplit, { xs: 6, sm: 3 }, 12)}>
+                  <Typography variant="h6" align="center">
+                    الإجمالي:{" "}
+                    {(
+                      Math.round(
+                        (shoppingCart.reduce(
+                          (a, i) => a + i.wholesale_price * i.quantity,
+                          0,
+                        ) -
+                          discount) *
+                          100,
+                      ) / 100
+                    ).toLocaleString("en-US", {
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    جنيه
+                  </Typography>
+                </Grid2>
+              )}
             </Grid2>
 
             {showPay && paymentMethods.length > 0 && !payByEnabled && (
@@ -560,8 +441,7 @@ const Buy = () => {
                 <PaymentSplit
                   total={
                     shoppingCart.reduce(
-                      (acc, item) =>
-                        acc + item.wholesale_price * item.quantity,
+                      (acc, item) => acc + item.wholesale_price * item.quantity,
                       0,
                     ) - discount
                   }
@@ -645,14 +525,12 @@ const Buy = () => {
                         </FormControl>
                       </Grid2>
                       <Grid2 size={{ xs: 12, sm: 3 }}>
-                        <TextField
+                        <NumberField
                           fullWidth
                           size="small"
-                          type="number"
                           label="المبلغ المدفوع"
                           value={payByAmount}
-                          onChange={(e) => {
-                            const v = parseFloat(e.target.value) || 0;
+                          onValueChange={(v) => {
                             const max =
                               shoppingCart.reduce(
                                 (acc, item) =>
@@ -661,7 +539,6 @@ const Buy = () => {
                               ) - discount;
                             setPayByAmount(Math.min(Math.max(v, 0), max));
                           }}
-                          inputMode="decimal"
                           helperText="بحد أقصى قيمة الفاتورة"
                         />
                       </Grid2>
@@ -707,55 +584,60 @@ const Buy = () => {
               </Grid2>
             )}
 
-            <Grid2 size={pairInputs && showSupplier ? { xs: 12, sm: 6 } : 12}>
-              <ProductAutocomplete
-                onProductSelect={addToCart}
-                products={products}
-              />
-            </Grid2>
+            {!isMobile && (
+              <Grid2 size={pairInputs && showSupplier ? { xs: 12, sm: 6 } : 12}>
+                <ProductAutocomplete
+                  withPackages
+                  onProductSelect={addToCart}
+                  products={products}
+                />
+              </Grid2>
+            )}
             {showSupplier && (
-            <Grid2 size={pairInputs ? { xs: 12, sm: 6 } : 12}>
-              <Autocomplete
-                options={
-                  [
-                    { id: null, name: "بدون مورد", phone: "", address: "" },
-                    { id: null, name: "مورد جديد", phone: "", address: "" },
-                    ...parties,
-                  ] as Party[]
-                }
-                getOptionLabel={(option) =>
-                  option.name + " - " + (option.phone || "")
-                }
-                isOptionEqualToValue={(option, value) =>
-                  option.id === value.id && option.name === value.name
-                }
-                value={parties.find((party) => party.id === partyId) || null}
-                onChange={(_, value) => {
-                  if (value && value.id) {
-                    setPartyId(value.id);
-                    setAddingParty(false);
-                  } else {
-                    setPartyId(null);
-                    if (value && value.name === "مورد جديد") {
-                      setAddingParty(true);
-                    } else {
-                      setAddingParty(false);
-                    }
+              <Grid2 size={pairInputs ? { xs: 12, sm: 6 } : 12}>
+                <Autocomplete
+                  options={
+                    [
+                      { id: null, name: "بدون مورد", phone: "", address: "" },
+                      { id: null, name: "مورد جديد", phone: "", address: "" },
+                      ...parties,
+                    ] as Party[]
                   }
-                }}
-                filterOptions={(options, params) => {
-                  const filtered = options.filter(
-                    (option) =>
-                      option.name?.toLowerCase().includes(params.inputValue) ||
-                      option.phone?.includes(params.inputValue),
-                  );
-                  return filtered;
-                }}
-                renderInput={(params) => (
-                  <TextField {...params} label="اسم المورد" />
-                )}
-              />
-            </Grid2>
+                  getOptionLabel={(option) =>
+                    option.name + " - " + (option.phone || "")
+                  }
+                  isOptionEqualToValue={(option, value) =>
+                    option.id === value.id && option.name === value.name
+                  }
+                  value={parties.find((party) => party.id === partyId) || null}
+                  onChange={(_, value) => {
+                    if (value && value.id) {
+                      setPartyId(value.id);
+                      setAddingParty(false);
+                    } else {
+                      setPartyId(null);
+                      if (value && value.name === "مورد جديد") {
+                        setAddingParty(true);
+                      } else {
+                        setAddingParty(false);
+                      }
+                    }
+                  }}
+                  filterOptions={(options, params) => {
+                    const filtered = options.filter(
+                      (option) =>
+                        option.name
+                          ?.toLowerCase()
+                          .includes(params.inputValue) ||
+                        option.phone?.includes(params.inputValue),
+                    );
+                    return filtered;
+                  }}
+                  renderInput={(params) => (
+                    <TextField {...params} label="اسم المورد" />
+                  )}
+                />
+              </Grid2>
             )}
             {showSupplier && addingParty && (
               <Grid2 container size={12} spacing={2}>
@@ -794,7 +676,7 @@ const Buy = () => {
           </Grid2>
         </Card>
       </Grid2>{" "}
-      <Grid2 size={cardSizes.cart}>
+      <Grid2 size={cardSizes.cart} sx={{ order: { xs: 2, md: 0 } }}>
         <Card elevation={3} sx={posCartCardSx(density)}>
           {/* Quick Actions Toolbar */}
           <Box
@@ -831,96 +713,24 @@ const Buy = () => {
             )}
           </Box>
 
-          {isMobile ? (
-            <Box
-              ref={cartTableRef}
-              sx={{ ...posCartScrollSx(density), overflowY: "auto", p: 1.5 }}
-            >
-              {shoppingCart.length === 0 ? (
-                <Typography
-                  align="center"
-                  color="text.secondary"
-                  sx={{ py: 4 }}
-                >
-                  لا توجد منتجات في السلة
-                </Typography>
-              ) : (
-                shoppingCart.map((product) => (
-                  <MobileBuyCartItem
-                    key={product.id}
-                    product={product}
-                    setShoppingCart={setShoppingCart}
-                    isSelected={selectedProductIds.has(product.id)}
-                    onSelectionChange={(selected) =>
-                      handleSelectProduct(product.id, selected)
-                    }
-                  />
-                ))
-              )}
-            </Box>
-          ) : (
-            <TableContainer
-              ref={cartTableRef}
-              sx={{
-                ...posCartScrollSx(density),
-                overflowY: "auto",
-              }}
-            >
-              <Table
-                stickyHeader
-                sx={{
-                  "& .MuiTableCell-head": {
-                    bgcolor: "background.paper",
-                  },
-                }}
-              >
-                <TableHead>
-                <TableRow>
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      checked={allSelected}
-                      indeterminate={someSelected}
-                      onChange={handleSelectAll}
-                      disabled={shoppingCart.length === 0}
-                    />
-                  </TableCell>
-                  <TableCell>المنتج</TableCell>
-                  <TableCell>الكمية</TableCell>
-                  <TableCell>سعر الشراء</TableCell>
-                  <TableCell>السعر</TableCell>
-                  <TableCell>الاجمالي</TableCell>
-                  <TableCell>الصلاحية</TableCell>
-                  <TableCell></TableCell>
-                  <TableCell></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {shoppingCart.map((product) => (
-                  <ProductInCart
-                    key={product.id}
-                    product={product}
-                    setShoppingCart={setShoppingCart}
-                    type="buy"
-                    isSelected={selectedProductIds.has(product.id)}
-                    onSelectionChange={(selected) =>
-                      handleSelectProduct(product.id, selected)
-                    }
-                  />
-                ))}
-              </TableBody>
-            </Table>
-            </TableContainer>
-          )}
+          <CartView
+            ref={cartTableRef}
+            cart={shoppingCart}
+            setCart={setShoppingCart}
+            type="buy"
+            scrollSx={posCartScrollSx(density)}
+            selected={selectedProductIds}
+            onToggle={handleSelectProduct}
+            onToggleAll={handleSelectAll}
+          />
         </Card>
       </Grid2>
-
       {/* Batch Print Dialog */}
       <BatchPrintDialog
         open={batchPrintOpen}
         onClose={() => setBatchPrintOpen(false)}
-        products={shoppingCart}
+        products={shoppingCart.map(printableLine)}
       />
-
       {/* Bulk Edit Dialog */}
       <BulkEditDialog
         open={bulkEditOpen}
@@ -929,6 +739,29 @@ const Buy = () => {
         selectedProductIds={selectedProductIds}
         onApply={handleBulkEditApply}
       />
+      {isMobile && (
+        <>
+          <Grid2 size={12} sx={{ order: 4 }}>
+            <MobileBarSpacer />
+          </Grid2>
+          <MobileCheckoutBar
+            total={
+              Math.round(
+                (shoppingCart.reduce(
+                  (a, i) => a + i.wholesale_price * i.quantity,
+                  0,
+                ) -
+                  discount) *
+                  100,
+              ) / 100
+            }
+            count={shoppingCart.length}
+            onSave={() => submitBill(shoppingCart, discount)}
+            disabled={isSubmitDisabled}
+            saveLabel={isSubmitting ? "جاري الحفظ..." : "حفظ الفاتورة"}
+          />
+        </>
+      )}
     </Grid2>
   );
 };

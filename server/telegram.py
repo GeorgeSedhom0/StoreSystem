@@ -12,7 +12,7 @@ from telegram_utils import (
     save_telegram_bot_token,
 )
 from auth_middleware import get_current_user
-from telegram_commands import get_telegram_command_worker_health
+from telegram_commands import get_telegram_command_worker_health, command_catalog
 
 # Load environment variables
 load_dotenv()
@@ -55,15 +55,16 @@ async def configure_telegram(
 ):
     """Validate and configure a Telegram bot token"""
     try:
-        # Validate the provided token
-        result = validate_bot_token(request.bot_token)
+        token = (request.bot_token or "").strip()
+        result = validate_bot_token(token)
 
         if result.get("success"):
-            # Token is valid - update the module-level token
+            # Token is valid - update the module-level token; the command
+            # worker notices the new bot on its next poll (offset per bot).
             import telegram_utils
 
-            telegram_utils.TELEGRAM_BOT_TOKEN = request.bot_token
-            save_telegram_bot_token(request.bot_token)
+            telegram_utils.TELEGRAM_BOT_TOKEN = token
+            save_telegram_bot_token(token)
 
             return {
                 "success": True,
@@ -176,6 +177,20 @@ async def get_service_health(current_user: dict = Depends(get_current_user)):
             "service_healthy": status.get("connected", False),
             "bot_username": status.get("bot_username"),
             "command_worker": worker_health,
+        }
+    except Exception as e:
+        logger.error(f"Error checking service health: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/telegram/commands")
+async def get_bot_commands(current_user: dict = Depends(get_current_user)):
+    """What the bot understands (for the Settings page) + worker state."""
+    try:
+        return {
+            "success": True,
+            "commands": command_catalog(),
+            "command_worker": get_telegram_command_worker_health(),
         }
     except Exception as e:
         logger.error(f"Error checking service health: {e}")

@@ -6,7 +6,6 @@ import {
   Select,
   TextField,
   Typography,
-  Paper,
   Box,
   Divider,
   Avatar,
@@ -15,11 +14,11 @@ import {
 import { useEffect, useState } from "react";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
+import { apiError } from "../../utils/errors";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LoadingButton } from "@mui/lab";
 import { Scope } from "../../utils/types";
 import {
-  Edit as EditIcon,
   Person as PersonIcon,
   Lock as LockIcon,
   Email as EmailIcon,
@@ -37,12 +36,14 @@ interface DBUser {
 }
 
 const editUser = async ({
+  id,
   username,
   password,
   email,
   phone,
   scope,
 }: {
+  id: number;
   username: string;
   password: string;
   email: string;
@@ -50,8 +51,10 @@ const editUser = async ({
   scope: number;
 }) => {
   const formdata = new FormData();
-  formdata.append("username", username);
-  formdata.append("password", password);
+  formdata.append("id", id.toString());
+  formdata.append("username", username.trim());
+  // Empty = keep the current password.
+  if (password) formdata.append("password", password);
   formdata.append("email", email);
   formdata.append("phone", phone);
   formdata.append("scope_id", scope.toString());
@@ -81,17 +84,15 @@ const UpdateUser = () => {
   const { mutate: updateUser, isPending: isUpdatingUser } = useMutation({
     mutationFn: editUser,
     onSuccess: () => {
-      setMsg({ type: "success", text: "تم تسجيل المستخدم بنجاح" });
-      setUsername("");
+      setMsg({ type: "success", text: "تم حفظ بيانات المستخدم بنجاح" });
       setPassword("");
-      setEmail("");
-      setPhone("");
-      setScope(null);
       refetch();
     },
     onError: (error) => {
-      setMsg({ type: "error", text: "حدث خطأ ما" });
-      console.error(error);
+      setMsg({
+        type: "error",
+        text: apiError(error, "تعذر حفظ بيانات المستخدم"),
+      });
     },
   });
 
@@ -111,61 +112,39 @@ const UpdateUser = () => {
     initialData: [],
   });
 
+  // After a save, re-point the selection at the fresh row (same id), so the
+  // form shows the saved values (e.g. a new username).
+  useEffect(() => {
+    if (!selectedUser) return;
+    const fresh = users.find((u) => u.id === selectedUser.id);
+    if (
+      fresh &&
+      fresh !== selectedUser &&
+      fresh.username !== selectedUser.username
+    ) {
+      setSelectedUser(fresh);
+    }
+  }, [users, selectedUser]);
+
   useEffect(() => {
     if (selectedUser) {
       setUsername(selectedUser.username);
-      setEmail(selectedUser.email);
-      setPhone(selectedUser.phone);
+      setEmail(selectedUser.email || "");
+      setPhone(selectedUser.phone || "");
       setScope(selectedUser.scope_id);
+      setPassword("");
     }
   }, [selectedUser]);
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       <AlertMessage message={msg} setMessage={setMsg} />
 
-      {/* Header */}
-      <Paper
-        elevation={2}
-        sx={{
-          p: 3,
-          mb: 3,
-          borderRadius: 3,
-          background:
-            "linear-gradient(135deg, rgba(25, 118, 210, 0.1) 0%, rgba(25, 118, 210, 0.05) 100%)",
-          border: "1px solid",
-          borderColor: "primary.light",
-        }}
-      >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-          <EditIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
-          <Typography
-            variant="h4"
-            sx={{ fontWeight: 600, color: "primary.main" }}
-          >
-            تعديل بيانات المستخدم
-          </Typography>
-        </Box>
-        <Typography variant="body1" color="text.secondary">
-          {selectedUser
-            ? `تعديل بيانات المستخدم: ${selectedUser.username}`
-            : "اختر مستخدم لتعديل بياناته"}
-        </Typography>
-      </Paper>
-
       <Grid2 container spacing={3}>
         {/* User Selection Section */}
         <Grid2 size={12}>
-          <Paper
-            elevation={1}
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              border: "1px solid",
-              borderColor: "divider",
-            }}
-          >
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-              اختيار المستخدم
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              اختر مستخدمًا لتعديل بياناته
             </Typography>
             <FormControl fullWidth>
               <InputLabel>المستخدم</InputLabel>
@@ -210,23 +189,15 @@ const UpdateUser = () => {
                 ))}
               </Select>
             </FormControl>
-          </Paper>
+          </Box>
         </Grid2>
 
         {/* Edit Form Section */}
         {selectedUser && (
           <Grid2 size={12}>
-            <Paper
-              elevation={1}
-              sx={{
-                p: 3,
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-                تعديل البيانات
+            <Box>
+              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
+                بيانات {selectedUser.username}
               </Typography>
 
               <Grid2 container spacing={3}>
@@ -236,6 +207,12 @@ const UpdateUser = () => {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     label="اسم المستخدم"
+                    autoComplete="off"
+                    helperText={
+                      selectedUser && username.trim() !== selectedUser.username
+                        ? "سيتم تغيير اسم الدخول؛ يدخل المستخدم بالاسم الجديد من الآن"
+                        : undefined
+                    }
                     slotProps={{
                       input: {
                         startAdornment: (
@@ -251,9 +228,10 @@ const UpdateUser = () => {
                     fullWidth
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    label="كلمة المرور"
+                    label="كلمة مرور جديدة (اختياري)"
                     type="password"
-                    placeholder="اتركه فارغاً إذا كنت لا تريد تغيير كلمة المرور"
+                    autoComplete="new-password"
+                    helperText="اتركها فارغة للإبقاء على كلمة المرور الحالية"
                     slotProps={{
                       input: {
                         startAdornment: (
@@ -272,6 +250,7 @@ const UpdateUser = () => {
                     label="البريد الإلكتروني"
                     type="email"
                     slotProps={{
+                      htmlInput: { dir: "ltr", inputMode: "email" },
                       input: {
                         startAdornment: (
                           <EmailIcon sx={{ mr: 1, color: "text.secondary" }} />
@@ -288,6 +267,7 @@ const UpdateUser = () => {
                     onChange={(e) => setPhone(e.target.value)}
                     label="رقم الهاتف"
                     slotProps={{
+                      htmlInput: { dir: "ltr", inputMode: "tel" },
                       input: {
                         startAdornment: (
                           <PhoneIcon sx={{ mr: 1, color: "text.secondary" }} />
@@ -302,7 +282,7 @@ const UpdateUser = () => {
                     <InputLabel>الصلاحيات</InputLabel>
                     <Select
                       label="الصلاحيات"
-                      value={scope}
+                      value={scope ?? ""}
                       onChange={(e) => setScope(e.target.value as number)}
                       disabled={isScopesLoading}
                       startAdornment={
@@ -342,6 +322,7 @@ const UpdateUser = () => {
                     startIcon={<SaveIcon />}
                     onClick={() =>
                       updateUser({
+                        id: selectedUser!.id,
                         username,
                         password,
                         email,
@@ -350,7 +331,7 @@ const UpdateUser = () => {
                       })
                     }
                     loading={isScopesLoading || isUpdatingUser}
-                    disabled={!username || !email || !phone || !scope}
+                    disabled={!selectedUser || !username.trim() || !scope}
                     sx={{
                       py: 1.5,
                       borderRadius: 2,
@@ -361,7 +342,7 @@ const UpdateUser = () => {
                   </LoadingButton>
                 </Grid2>
               </Grid2>
-            </Paper>
+            </Box>
           </Grid2>
         )}
       </Grid2>

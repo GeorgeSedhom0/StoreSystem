@@ -1,6 +1,8 @@
 import {
+  Alert,
   Box,
   Card,
+  CardActionArea,
   CardContent,
   CircularProgress,
   Typography,
@@ -60,9 +62,9 @@ const Setup = ({ onComplete }: SetupProps) => {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        minHeight: "100vh",
-        gap: 4,
-        p: 4,
+        minHeight: "100dvh",
+        gap: { xs: 2, sm: 4 },
+        p: { xs: 2, sm: 4 },
       }}
     >
       <Typography variant="h4" fontWeight="bold">
@@ -73,87 +75,93 @@ const Setup = ({ onComplete }: SetupProps) => {
       </Typography>
 
       {error && (
-        <Typography color="error" sx={{ maxWidth: 400, textAlign: "center" }}>
+        <Alert severity="error" sx={{ maxWidth: 480, width: "100%" }}>
           {error}
-        </Typography>
+        </Alert>
       )}
 
       <Box
         sx={{
           display: "flex",
-          gap: 4,
+          gap: { xs: 2, sm: 4 },
           flexWrap: "wrap",
           justifyContent: "center",
+          width: "100%",
         }}
       >
         <Card
           sx={{
-            width: 280,
-            cursor: "pointer",
+            width: "100%",
+            maxWidth: 280,
             transition: "transform 0.2s, box-shadow 0.2s",
             "&:hover": {
               transform: "translateY(-4px)",
               boxShadow: 6,
             },
           }}
-          onClick={() => handleModeSelect("standalone")}
         >
-          <CardContent
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 2,
-              py: 4,
-            }}
-          >
-            <StorefrontIcon sx={{ fontSize: 64 }} color="primary" />
-            <Typography variant="h6" fontWeight="bold">
-              متجر واحد
-            </Typography>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              textAlign="center"
+          <CardActionArea onClick={() => handleModeSelect("standalone")}>
+            <CardContent
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+                py: { xs: 3, sm: 4 },
+              }}
             >
-              كل شيء يعمل على هذا الجهاز. لا يحتاج لإعداد إضافي.
-            </Typography>
-          </CardContent>
+              <StorefrontIcon
+                sx={{ fontSize: { xs: 48, sm: 64 } }}
+                color="primary"
+              />
+              <Typography variant="h6" fontWeight="bold">
+                متجر واحد
+              </Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                textAlign="center"
+              >
+                كل شيء يعمل على هذا الجهاز. لا يحتاج لإعداد إضافي.
+              </Typography>
+            </CardContent>
+          </CardActionArea>
         </Card>
 
         <Card
           sx={{
-            width: 280,
-            cursor: "pointer",
+            width: "100%",
+            maxWidth: 280,
             transition: "transform 0.2s, box-shadow 0.2s",
             "&:hover": {
               transform: "translateY(-4px)",
               boxShadow: 6,
             },
           }}
-          onClick={() => handleModeSelect("remote")}
         >
-          <CardContent
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 2,
-              py: 4,
-            }}
-          >
-            <DnsIcon sx={{ fontSize: 64 }} color="primary" />
-            <Typography variant="h6" fontWeight="bold">
-              عدة متاجر
-            </Typography>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              textAlign="center"
+          <CardActionArea onClick={() => handleModeSelect("remote")}>
+            <CardContent
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+                py: { xs: 3, sm: 4 },
+              }}
             >
-              الاتصال بسيرفر خارجي. يحتاج لرابط السيرفر.
-            </Typography>
-          </CardContent>
+              <DnsIcon sx={{ fontSize: { xs: 48, sm: 64 } }} color="primary" />
+              <Typography variant="h6" fontWeight="bold">
+                عدة متاجر
+              </Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                textAlign="center"
+              >
+                الاتصال بسيرفر خارجي. يحتاج لرابط السيرفر.
+              </Typography>
+            </CardContent>
+          </CardActionArea>
         </Card>
       </Box>
     </Box>
@@ -192,8 +200,10 @@ const SplashLoading = ({ mode }: { mode: "standalone" | "remote" }) => {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        minHeight: "100vh",
+        minHeight: "100dvh",
         gap: 3,
+        p: 2,
+        textAlign: "center",
       }}
     >
       <CircularProgress size={48} />

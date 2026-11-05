@@ -26,6 +26,7 @@ import {
   Chat as ChatIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
+  Terminal as CommandsIcon,
 } from "@mui/icons-material";
 import useTelegram from "../hooks/useTelegram";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
@@ -56,10 +57,39 @@ const Telegram = () => {
     updatesLoading,
     updates,
     refetchStatus,
+    commands,
+    worker,
   } = useTelegram(setMsg, storeId);
 
   const isConnected = status?.connected || false;
   const botUsername = status?.bot_username;
+
+  const workerAlert = (() => {
+    if (!worker || !isConnected) return null;
+    switch (worker.state) {
+      case "polling":
+        return {
+          severity: "success" as const,
+          text: "البوت يستقبل الأوامر الآن. أرسل «مساعدة» أو /start للبوت لعرض القائمة.",
+        };
+      case "conflict":
+      case "rate_limited":
+      case "error":
+        return {
+          severity: "warning" as const,
+          text: `البوت لا يستقبل الأوامر حاليًا: ${worker.last_error || "خطأ في الاتصال"}`,
+        };
+      case "invalid_token":
+        return { severity: "error" as const, text: "رمز البوت غير صالح." };
+      case "stopped":
+        return {
+          severity: "warning" as const,
+          text: "خدمة أوامر البوت متوقفة، أعد تشغيل البرنامج.",
+        };
+      default:
+        return null;
+    }
+  })();
 
   useEffect(() => {
     if (storeChatId) {
@@ -81,12 +111,17 @@ const Telegram = () => {
   };
 
   const handleSendTestMessage = () => {
-    if (!testMessage.trim() || !chatIdInput.trim()) return;
-    sendTestMessage({
-      chat_id: chatIdInput,
-      message: testMessage,
-    });
-    setTestMessage("");
+    if (!chatIdInput.trim()) return;
+    sendTestMessage(
+      {
+        chat_id: chatIdInput.trim(),
+        message:
+          testMessage.trim() ||
+          "✅ رسالة تجريبية من برنامج المتجر — الإشعارات تعمل. أرسل «مساعدة» لعرض الأوامر.",
+      },
+      // Keep the text if sending failed so it can be retried.
+      { onSuccess: (data) => data.success && setTestMessage("") },
+    );
   };
 
   const handleAutoDetect = () => {
@@ -123,7 +158,7 @@ const Telegram = () => {
     return (
       <Chip
         icon={<CancelIcon />}
-        label="غير مكوّن"
+        label="غير متصل"
         color="error"
         variant="outlined"
       />
@@ -138,7 +173,7 @@ const Telegram = () => {
       <Paper
         elevation={2}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
           background:
@@ -147,21 +182,38 @@ const Telegram = () => {
           borderColor: "primary.light",
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            mb: 2,
+            flexWrap: "wrap",
+          }}
+        >
           <TelegramIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
           <Typography
             variant="h4"
-            sx={{ fontWeight: 600, color: "primary.main" }}
+            sx={{
+              fontWeight: 600,
+              color: "primary.main",
+              fontSize: { xs: "1.4rem", sm: "2.125rem" },
+            }}
           >
             إعدادات تليجرام
           </Typography>
-          <Box sx={{ ml: "auto" }}>
+          <Box sx={{ ml: { sm: "auto" } }}>
             <ConnectionStatusChip />
           </Box>
         </Box>
         <Typography variant="body1" color="text.secondary">
           إعداد وإدارة إشعارات تليجرام للمتجر
         </Typography>
+        {workerAlert && (
+          <Alert severity={workerAlert.severity} sx={{ mt: 2 }}>
+            {workerAlert.text}
+          </Alert>
+        )}
       </Paper>
 
       <Grid container spacing={3}>
@@ -175,25 +227,22 @@ const Telegram = () => {
               borderColor: "divider",
             }}
           >
-            <CardContent>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
               <Box
                 sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}
               >
                 <SettingsIcon color="primary" />
                 <Typography variant="h6" fontWeight={600}>
-                  تكوين البوت
+                  إعداد البوت
                 </Typography>
                 <IconButton
-                  size="small"
                   onClick={() => refetchStatus()}
                   disabled={statusLoading}
+                  aria-label="تحديث حالة الاتصال"
+                  sx={{ ml: "auto" }}
                 >
                   <RefreshIcon />
                 </IconButton>
-              </Box>
-
-              <Box sx={{ mb: 3 }}>
-                <ConnectionStatusChip />
               </Box>
 
               <Alert severity="info" sx={{ mb: 2 }}>
@@ -214,16 +263,24 @@ const Telegram = () => {
                 placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
                 type={showToken ? "text" : "password"}
                 sx={{ mb: 2 }}
-                dir="ltr"
-                InputProps={{
-                  endAdornment: (
-                    <Button
-                      size="small"
-                      onClick={() => setShowToken(!showToken)}
-                    >
-                      {showToken ? "إخفاء" : "إظهار"}
-                    </Button>
-                  ),
+                slotProps={{
+                  htmlInput: {
+                    dir: "ltr",
+                    autoComplete: "off",
+                    autoCapitalize: "none",
+                    spellCheck: false,
+                  },
+                  input: {
+                    endAdornment: (
+                      <Button
+                        size="small"
+                        onClick={() => setShowToken(!showToken)}
+                        sx={{ minWidth: 56, flexShrink: 0 }}
+                      >
+                        {showToken ? "إخفاء" : "إظهار"}
+                      </Button>
+                    ),
+                  },
                 }}
               />
 
@@ -251,7 +308,7 @@ const Telegram = () => {
               borderColor: "divider",
             }}
           >
-            <CardContent>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
               <Box
                 sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}
               >
@@ -278,16 +335,16 @@ const Telegram = () => {
                 onChange={(e) => setChatIdInput(e.target.value)}
                 placeholder="123456789"
                 sx={{ mb: 2 }}
-                dir="ltr"
+                slotProps={{ htmlInput: { dir: "ltr", inputMode: "numeric" } }}
               />
 
-              <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+              <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
                 <Button
                   variant="outlined"
                   startIcon={<SearchIcon />}
                   onClick={handleAutoDetect}
                   disabled={updatesLoading || !isConnected}
-                  sx={{ flex: 1 }}
+                  sx={{ flex: "1 1 140px", minHeight: 40 }}
                 >
                   {updatesLoading ? "جاري البحث..." : "كشف تلقائي"}
                 </Button>
@@ -295,7 +352,7 @@ const Telegram = () => {
                   variant="contained"
                   onClick={handleSetChatId}
                   disabled={setStoreChatIdLoading || !chatIdInput.trim()}
-                  sx={{ flex: 1 }}
+                  sx={{ flex: "1 1 140px", minHeight: 40 }}
                 >
                   {setStoreChatIdLoading ? "جاري الحفظ..." : "حفظ"}
                 </Button>
@@ -342,7 +399,7 @@ const Telegram = () => {
 
               {!isConnected && (
                 <Alert severity="warning" sx={{ mt: 2 }}>
-                  يجب تكوين البوت أولاً قبل الكشف التلقائي
+                  يجب إعداد البوت أولاً قبل الكشف التلقائي
                 </Alert>
               )}
             </CardContent>
@@ -359,7 +416,7 @@ const Telegram = () => {
               borderColor: "divider",
             }}
           >
-            <CardContent>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
               <Box
                 sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}
               >
@@ -373,10 +430,10 @@ const Telegram = () => {
                 <Grid item xs={12} md={10}>
                   <TextField
                     fullWidth
-                    label="الرسالة"
+                    label="الرسالة (اختياري)"
                     value={testMessage}
                     onChange={(e) => setTestMessage(e.target.value)}
-                    placeholder="رسالة تجريبية..."
+                    placeholder="اتركها فارغة لإرسال رسالة اختبار جاهزة"
                     disabled={!isConnected || !chatIdInput.trim()}
                   />
                 </Grid>
@@ -386,13 +443,10 @@ const Telegram = () => {
                     startIcon={<SendIcon />}
                     onClick={handleSendTestMessage}
                     disabled={
-                      !isConnected ||
-                      testMessageLoading ||
-                      !testMessage.trim() ||
-                      !chatIdInput.trim()
+                      !isConnected || testMessageLoading || !chatIdInput.trim()
                     }
                     fullWidth
-                    sx={{ height: "56px" }}
+                    sx={{ height: { xs: 48, md: 56 } }}
                   >
                     إرسال
                   </Button>
@@ -401,7 +455,7 @@ const Telegram = () => {
 
               {!isConnected && (
                 <Alert severity="warning" sx={{ mt: 2 }}>
-                  يجب تكوين البوت وحفظ معرف المحادثة أولاً لإرسال الرسائل
+                  يجب إعداد البوت وحفظ معرف المحادثة أولاً لإرسال الرسائل
                   التجريبية
                 </Alert>
               )}
@@ -410,6 +464,104 @@ const Telegram = () => {
                 <Alert severity="info" sx={{ mt: 2 }}>
                   يجب حفظ معرف المحادثة (Chat ID) أولاً لإرسال الرسائل
                 </Alert>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* What the bot understands */}
+        <Grid item xs={12}>
+          <Card
+            elevation={1}
+            sx={{
+              borderRadius: 3,
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}
+              >
+                <CommandsIcon color="primary" />
+                <Typography variant="h6" fontWeight={600}>
+                  أوامر البوت
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                اكتب الأمر بالعربي أو الإنجليزي، بشرطة / أو بدونها، والبوت يفهم
+                الأخطاء الإملائية البسيطة ويعرض أزرارًا للأوامر الشائعة. الأوامر
+                تعمل فقط في المحادثة المحفوظة للمتجر، ولأكثر من متجر أضف «متجر
+                رقم» للأمر. الحركات النقدية لا تُسجل إلا بعد الضغط على زر
+                التأكيد.
+              </Typography>
+              {commands.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  ...
+                </Typography>
+              ) : (
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      sm: "1fr 1fr",
+                      lg: "1fr 1fr 1fr",
+                    },
+                    gap: 1,
+                  }}
+                >
+                  {commands.map((c) => (
+                    <Box
+                      key={c.key}
+                      sx={{
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: 2,
+                        p: 1.25,
+                        minWidth: 0,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <Typography variant="body2" fontWeight={700}>
+                          {c.title}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={c.slash}
+                          dir="ltr"
+                          sx={{ fontFamily: "monospace" }}
+                        />
+                      </Box>
+                      {c.aliases.length > 0 && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          component="div"
+                          sx={{ mt: 0.5, wordBreak: "break-word" }}
+                        >
+                          أو: {c.aliases.join("، ")}
+                        </Typography>
+                      )}
+                      {c.example && (
+                        <Typography
+                          variant="caption"
+                          component="div"
+                          sx={{ mt: 0.25 }}
+                        >
+                          مثال: <b>{c.example}</b>
+                        </Typography>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
               )}
             </CardContent>
           </Card>

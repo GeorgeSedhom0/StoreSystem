@@ -37,11 +37,12 @@ const Analytics = () => {
     >
       <Box
         sx={{
-          background:
-            "linear-gradient(45deg, secondary.main 30%, secondary.light 90%)",
+          // Theme tokens aren't resolved inside a gradient string.
+          background: (t) =>
+            `linear-gradient(45deg, ${t.palette.secondary.main} 30%, ${t.palette.secondary.light} 90%)`,
           color: "white",
-          px: 4,
-          py: 3,
+          px: { xs: 2, sm: 4 },
+          py: { xs: 2, sm: 3 },
           position: "relative",
           "&::before": {
             content: '""',
@@ -63,7 +64,8 @@ const Analytics = () => {
             zIndex: 1,
             display: "flex",
             alignItems: "center",
-            gap: 2,
+            gap: { xs: 1, sm: 2 },
+            fontSize: { xs: "1.5rem", sm: "2.125rem" },
           }}
         >
           <AnalyticsIcon sx={{ fontSize: "2rem" }} />
@@ -85,13 +87,18 @@ const Analytics = () => {
       <TabContext value={tab}>
         <TabList
           onChange={(_, value) => setTab(value)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           sx={{
-            px: 2,
+            px: { xs: 0, sm: 2 },
             py: 1,
+            "& .MuiTabs-scrollButtons.Mui-disabled": { opacity: 0.3 },
             "& .MuiTab-root": {
-              minHeight: 64,
+              minHeight: { xs: 48, sm: 64 },
+              px: { xs: 1.5, sm: 2 },
               textTransform: "none",
-              fontSize: "1rem",
+              fontSize: { xs: "0.9rem", sm: "1rem" },
               fontWeight: 500,
               borderRadius: 2,
               mx: 0.5,
@@ -117,20 +124,20 @@ const Analytics = () => {
           <Tab
             icon={<AccountBalanceIcon />}
             iconPosition="start"
-            label="التقرير المالى"
+            label="التقرير المالي"
             value="3"
           />
           <Tab
             icon={<AnalyticsIcon />}
             iconPosition="start"
-            label="تفصيلى"
+            label="تفصيلي"
             value="4"
           />
         </TabList>
 
         <Divider sx={{ opacity: 0.3 }} />
 
-        <Box ref={parent} sx={{ p: 4 }}>
+        <Box ref={parent} sx={{ p: { xs: 1.5, sm: 4 } }}>
           <TabPanel value="1" sx={{ p: 0 }}>
             <GeneralAnalyticsTab />
           </TabPanel>

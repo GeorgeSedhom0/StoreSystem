@@ -8,12 +8,16 @@ import {
   Slider,
   Stack,
 } from "@mui/material";
-import { useCallback, useEffect, useState, useContext } from "react";
+import { useCallback, useEffect, useRef, useState, useContext } from "react";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
+import NumberField from "../../Shared/NumberField";
+import useConfirm from "../../Shared/useConfirm";
+import { apiError } from "../../utils/errors";
 import axios from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Profile } from "../../Shared/Utils";
 import { StoreContext } from "@renderer/StoreDataProvider";
+import AutoBackup from "./AutoBackup";
 import {
   Backup as BackupIcon,
   Restore as RestoreIcon,
@@ -95,8 +99,20 @@ const getDbVersion = async () => {
   return data;
 };
 
+// The browser build has no per-device zoom (the browser's own zoom does that).
+const IS_WEB = Boolean((window as any).__IS_WEB__);
+
+const today = () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 const Basics = () => {
-  const [loading, setLoading] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [confirm, confirmDialog] = useConfirm();
   const [zoomLoading, setZoomLoading] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -110,41 +126,96 @@ const Basics = () => {
   const { storeId } = useContext(StoreContext);
 
   const backUp = useCallback(async () => {
-    setLoading(true);
+    setBackingUp(true);
     try {
-      const { data } = await axios.get("/backup");
+      const { data } = await axios.get("/backup", { responseType: "blob" });
       // download the backup file
       const url = window.URL.createObjectURL(new Blob([data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", "backup.sql");
+      link.setAttribute("download", `backup-${today()}.sql`);
       document.body.appendChild(link);
       link.click();
+      link.remove();
       window.URL.revokeObjectURL(url);
+      setMsg({ type: "success", text: "تم تنزيل النسخة الاحتياطية" });
     } catch (e) {
-      console.log(e);
-      setMsg({ type: "error", text: "حدث خطا ما" });
+      setMsg({
+        type: "error",
+        text: apiError(e, "تعذر إنشاء النسخة الاحتياطية"),
+      });
     }
-    setLoading(false);
+    setBackingUp(false);
   }, []);
 
-  const restore = useCallback(async () => {
-    const userConsent = window.confirm(
-      "هل انت متاكد من استعادة النسخة الاحطياتية",
-    );
-    if (!userConsent) return;
-    setLoading(true);
-    try {
-      // let use pick the file .sql
-      const fileInput = document.createElement("input");
-      fileInput.type = "file";
-      fileInput.accept = ".sql";
-      fileInput.click();
-      fileInput.onchange = async (e: any) => {
-        const file = e.target.files[0];
-        if (!file) {
-          setMsg({ type: "error", text: "حدث خطا ما" });
+  // Step 1: pick the file. Step 2 (onChange): confirm, then upload.
+  const pickRestoreFile = useCallback(() => {
+    if (fileInput.current) {
+      fileInput.current.value = "";
+      fileInput.current.click();
+    }
+  }, []);
+
+  const restore = useCallback(
+    async (picked: File | undefined) => {
+      if (!picked) return;
+      const lower = picked.name.toLowerCase();
+      if (!lower.endsWith(".sql") && !lower.endsWith(".sql.gz")) {
+        setMsg({
+          type: "error",
+          text: "الملف غير صالح، اختر ملف نسخة احتياطية بامتداد .sql أو .sql.gz",
+        });
+        return;
+      }
+      let file = picked;
+      // Automatic backups are gzip-compressed; the server restores plain SQL.
+      if (lower.endsWith(".gz")) {
+        if (typeof DecompressionStream === "undefined") {
+          setMsg({
+            type: "error",
+            text: "هذا المتصفح لا يدعم فك ضغط الملف؛ فك الضغط أولًا ثم اختر ملف .sql",
+          });
+          return;
         }
+        try {
+          const blob = await new Response(
+            picked.stream().pipeThrough(new DecompressionStream("gzip")),
+          ).blob();
+          file = new File([blob], picked.name.replace(/\.gz$/i, ""), {
+            type: "application/sql",
+          });
+        } catch {
+          setMsg({ type: "error", text: "تعذر فك ضغط الملف، قد يكون تالفًا" });
+          return;
+        }
+      }
+      const ok = await confirm({
+        title: "استعادة النسخة الاحتياطية؟",
+        message: (
+          <Typography component="div" variant="body2">
+            سيتم <b>حذف جميع البيانات الحالية</b> (المنتجات، الفواتير، الحسابات،
+            المستخدمين، ...) واستبدالها بمحتوى الملف:
+            <Box
+              component="span"
+              sx={{ display: "block", my: 1, fontWeight: 700 }}
+              dir="ltr"
+            >
+              {picked.name} (
+              {file.size >= 1024 * 1024
+                ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
+                : `${Math.max(1, Math.round(file.size / 1024))} KB`}
+              )
+            </Box>
+            لا يمكن التراجع عن هذه العملية. يُنصح بإنشاء نسخة احتياطية من
+            البيانات الحالية أولًا.
+          </Typography>
+        ),
+        confirmText: "استعادة واستبدال البيانات",
+        danger: true,
+      });
+      if (!ok) return;
+      setRestoring(true);
+      try {
         const formData = new FormData();
         formData.append("file", file);
         await axios.post("/restore", formData, {
@@ -152,20 +223,27 @@ const Basics = () => {
             "Content-Type": "multipart/form-data",
           },
         });
-        setMsg({ type: "success", text: "تم استعادة النسخة الاحطياتية" });
-      };
-    } catch (e) {
-      console.log(e);
-      setMsg({ type: "error", text: "حدث خطا ما" });
-    }
-    setLoading(false);
-  }, []);
+        setMsg({
+          type: "success",
+          text: "تمت استعادة النسخة الاحتياطية بنجاح",
+        });
+        queryClient.invalidateQueries();
+      } catch (e) {
+        setMsg({
+          type: "error",
+          text: apiError(e, "فشلت استعادة النسخة الاحتياطية"),
+        });
+      } finally {
+        setRestoring(false);
+      }
+    },
+    [confirm, queryClient],
+  );
 
-  const { mutate: setStoreData } = useMutation({
+  const { mutate: setStoreData, isPending: savingStoreData } = useMutation({
     mutationFn: saveStoreData,
     onError: (e) => {
-      console.log(e);
-      setMsg({ type: "error", text: "حدث خطا ما" });
+      setMsg({ type: "error", text: apiError(e, "تعذر حفظ البيانات") });
     },
     onSuccess: () => {
       setMsg({ type: "success", text: "تم الحفظ" });
@@ -176,7 +254,7 @@ const Basics = () => {
   });
 
   const { data: storeInfo } = useQuery({
-    queryKey: ["store-data"],
+    queryKey: ["store-data", storeId],
     queryFn: () => getStoreData(storeId),
   });
 
@@ -237,6 +315,7 @@ const Basics = () => {
   }, [storeInfo]);
 
   useEffect(() => {
+    if (IS_WEB) return;
     const loadAppZoom = async () => {
       try {
         const storedZoom = await window.electron.ipcRenderer.invoke(
@@ -255,12 +334,20 @@ const Basics = () => {
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       <AlertMessage message={msg} setMessage={setMsg} />
+      {confirmDialog}
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".sql,.gz"
+        hidden
+        onChange={(e) => restore(e.target.files?.[0])}
+      />
 
       {/* Header Section */}
       <Paper
         elevation={2}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
           background:
@@ -273,7 +360,11 @@ const Basics = () => {
           <BusinessIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
           <Typography
             variant="h4"
-            sx={{ fontWeight: 600, color: "primary.main" }}
+            sx={{
+              fontWeight: 600,
+              color: "primary.main",
+              fontSize: { xs: "1.4rem", sm: "2.125rem" },
+            }}
           >
             الإعدادات الأساسية
           </Typography>
@@ -289,7 +380,7 @@ const Basics = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
@@ -304,9 +395,16 @@ const Basics = () => {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               قم بإنشاء نسخة احتياطية من بياناتك أو استعادة نسخة سابقة
             </Typography>
-            <Box sx={{ display: "flex", gap: 2 }}>
+            <Box
+              sx={{
+                display: "flex",
+                gap: 2,
+                flexDirection: { xs: "column", sm: "row" },
+              }}
+            >
               <LoadingButton
-                loading={loading}
+                loading={backingUp}
+                disabled={restoring}
                 onClick={backUp}
                 startIcon={<BackupIcon />}
                 color="success"
@@ -318,14 +416,15 @@ const Basics = () => {
                   py: 1.5,
                   textTransform: "none",
                   fontWeight: 600,
-                  fontSize: "1.1rem",
+                  fontSize: { xs: "1rem", sm: "1.1rem" },
                 }}
               >
                 إنشاء نسخة احتياطية
               </LoadingButton>
               <LoadingButton
-                loading={loading}
-                onClick={restore}
+                loading={restoring}
+                disabled={backingUp}
+                onClick={pickRestoreFile}
                 startIcon={<RestoreIcon />}
                 color="error"
                 variant="contained"
@@ -336,13 +435,26 @@ const Basics = () => {
                   py: 1.5,
                   textTransform: "none",
                   fontWeight: 600,
-                  fontSize: "1.1rem",
+                  fontSize: { xs: "1rem", sm: "1.1rem" },
                 }}
               >
-                استعادة النسخة الاحتياطية
+                استعادة نسخة احتياطية
               </LoadingButton>
             </Box>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: "block", mt: 1.5 }}
+            >
+              الاستعادة تستبدل كل البيانات الحالية بمحتوى الملف المختار (‎.sql
+              أو نسخة تلقائية ‎.sql.gz).
+            </Typography>
           </Paper>
+        </Grid2>
+
+        {/* Automatic backups */}
+        <Grid2 size={12}>
+          <AutoBackup setMsg={setMsg} />
         </Grid2>
 
         {/* Store Information Section */}
@@ -350,7 +462,7 @@ const Basics = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
@@ -363,7 +475,8 @@ const Basics = () => {
               </Typography>
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              هذه المعلومات ستظهر في الفواتير المطبوعة
+              هذه المعلومات ستظهر في الفواتير المطبوعة (تُحفظ بزر الحفظ أسفل
+              إعدادات التنبيهات)
             </Typography>
 
             <Grid2 container spacing={3}>
@@ -390,6 +503,7 @@ const Basics = () => {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   variant="outlined"
+                  slotProps={{ htmlInput: { inputMode: "tel", dir: "ltr" } }}
                   sx={{
                     "& .MuiOutlinedInput-root": {
                       borderRadius: 2,
@@ -416,124 +530,128 @@ const Basics = () => {
           </Paper>
         </Grid2>
 
-        {/* Display Zoom Section */}
-        <Grid2 size={12}>
-          <Paper
-            elevation={1}
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              border: "1px solid",
-              borderColor: "divider",
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-              <ZoomIcon sx={{ color: "secondary.main" }} />
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                حجم الواجهة
-              </Typography>
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              يكبر أو يصغر واجهة البرنامج على هذا الجهاز فقط لتسهيل القراءة، ولن
-              يؤثر على الطباعة أو بيانات المتجر.
-            </Typography>
-
-            <Grid2 container spacing={3} alignItems="center">
-              <Grid2 size={{ xs: 12, md: 8 }}>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 1.5 }}
-                >
-                  اختر الحجم المناسب ثم اضغط تطبيق.
+        {/* Display Zoom Section (desktop app only) */}
+        {!IS_WEB && (
+          <Grid2 size={12}>
+            <Paper
+              elevation={1}
+              sx={{
+                p: { xs: 2, sm: 3 },
+                borderRadius: 3,
+                border: "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}
+              >
+                <ZoomIcon sx={{ color: "secondary.main" }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  حجم الواجهة
                 </Typography>
-                <Slider
-                  value={zoomPercent}
-                  min={MIN_APP_ZOOM_PERCENT}
-                  max={MAX_APP_ZOOM_PERCENT}
-                  step={5}
-                  marks={APP_ZOOM_MARKS}
-                  valueLabelDisplay="auto"
-                  onChange={(_event, value) =>
-                    setZoomPercent(
-                      clampAppZoomPercent(
-                        Array.isArray(value) ? value[0] : value,
-                      ),
-                    )
-                  }
-                />
-              </Grid2>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                يكبر أو يصغر واجهة البرنامج على هذا الجهاز فقط لتسهيل القراءة،
+                ولن يؤثر على الطباعة أو بيانات المتجر.
+              </Typography>
 
-              <Grid2 size={{ xs: 12, md: 4 }}>
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    textAlign: "center",
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary">
-                    الحجم الحالي
-                  </Typography>
+              <Grid2 container spacing={3} alignItems="center">
+                <Grid2 size={{ xs: 12, md: 8 }}>
                   <Typography
-                    variant="h4"
-                    sx={{ fontWeight: 700, color: "primary.main" }}
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 1.5 }}
                   >
-                    {zoomPercent}%
+                    اختر الحجم المناسب ثم اضغط تطبيق.
                   </Typography>
-                </Paper>
-              </Grid2>
+                  <Slider
+                    value={zoomPercent}
+                    min={MIN_APP_ZOOM_PERCENT}
+                    max={MAX_APP_ZOOM_PERCENT}
+                    step={5}
+                    marks={APP_ZOOM_MARKS}
+                    valueLabelDisplay="auto"
+                    onChange={(_event, value) =>
+                      setZoomPercent(
+                        clampAppZoomPercent(
+                          Array.isArray(value) ? value[0] : value,
+                        ),
+                      )
+                    }
+                  />
+                </Grid2>
 
-              <Grid2 size={12}>
-                <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  spacing={2}
-                  justifyContent="flex-end"
-                >
-                  <LoadingButton
+                <Grid2 size={{ xs: 12, md: 4 }}>
+                  <Paper
                     variant="outlined"
-                    startIcon={<ResetIcon />}
-                    loading={zoomLoading}
-                    disabled={zoomLoading || zoomPercent === 100}
-                    onClick={resetAppZoom}
                     sx={{
+                      p: 2,
                       borderRadius: 2,
-                      px: 3,
-                      py: 1.25,
-                      textTransform: "none",
-                      fontWeight: 600,
+                      textAlign: "center",
                     }}
                   >
-                    إعادة الحجم الافتراضي
-                  </LoadingButton>
-                  <LoadingButton
-                    variant="contained"
-                    startIcon={<ZoomIcon />}
-                    loading={zoomLoading}
-                    onClick={() => void saveAppZoom()}
-                    sx={{
-                      borderRadius: 2,
-                      px: 3,
-                      py: 1.25,
-                      textTransform: "none",
-                      fontWeight: 600,
-                    }}
+                    <Typography variant="body2" color="text.secondary">
+                      الحجم الحالي
+                    </Typography>
+                    <Typography
+                      variant="h4"
+                      sx={{ fontWeight: 700, color: "primary.main" }}
+                    >
+                      {zoomPercent}%
+                    </Typography>
+                  </Paper>
+                </Grid2>
+
+                <Grid2 size={12}>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={2}
+                    justifyContent="flex-end"
                   >
-                    تطبيق الحجم
-                  </LoadingButton>
-                </Stack>
+                    <LoadingButton
+                      variant="outlined"
+                      startIcon={<ResetIcon />}
+                      loading={zoomLoading}
+                      disabled={zoomLoading || zoomPercent === 100}
+                      onClick={resetAppZoom}
+                      sx={{
+                        borderRadius: 2,
+                        px: 3,
+                        py: 1.25,
+                        textTransform: "none",
+                        fontWeight: 600,
+                      }}
+                    >
+                      إعادة الحجم الافتراضي
+                    </LoadingButton>
+                    <LoadingButton
+                      variant="contained"
+                      startIcon={<ZoomIcon />}
+                      loading={zoomLoading}
+                      onClick={() => void saveAppZoom()}
+                      sx={{
+                        borderRadius: 2,
+                        px: 3,
+                        py: 1.25,
+                        textTransform: "none",
+                        fontWeight: 600,
+                      }}
+                    >
+                      تطبيق الحجم
+                    </LoadingButton>
+                  </Stack>
+                </Grid2>
               </Grid2>
-            </Grid2>
-          </Paper>
-        </Grid2>
+            </Paper>
+          </Grid2>
+        )}
 
         {/* Expiration Settings Section */}
         <Grid2 size={12}>
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
@@ -551,18 +669,17 @@ const Basics = () => {
 
             <Grid2 container spacing={3}>
               <Grid2 size={{ xs: 12, md: 6 }}>
-                <TextField
+                <NumberField
                   fullWidth
                   size="medium"
                   label="عدد أيام التنبيه قبل انتهاء الصلاحية"
-                  type="number"
+                  integer
+                  min={1}
+                  max={365}
                   value={expirationAlertDays}
-                  onChange={(e) =>
-                    setExpirationAlertDays(parseInt(e.target.value) || 14)
-                  }
+                  onValueChange={setExpirationAlertDays}
                   variant="outlined"
                   helperText="سيتم إرسال تنبيه للمنتجات التي ستنتهي صلاحيتها خلال هذه الفترة"
-                  inputProps={{ min: 1, max: 365 }}
                   sx={{
                     "& .MuiOutlinedInput-root": {
                       borderRadius: 2,
@@ -580,7 +697,7 @@ const Basics = () => {
                   onChange={(e) => setExpirationCheckTime(e.target.value)}
                   variant="outlined"
                   helperText="الوقت الذي سيتم فيه فحص المنتجات يومياً"
-                  InputLabelProps={{ shrink: true }}
+                  slotProps={{ inputLabel: { shrink: true } }}
                   sx={{
                     "& .MuiOutlinedInput-root": {
                       borderRadius: 2,
@@ -594,14 +711,17 @@ const Basics = () => {
                 >
                   <LoadingButton
                     variant="contained"
-                    loading={loading}
+                    loading={savingStoreData}
                     onClick={() =>
                       setStoreData({
                         name,
                         phone,
                         address,
                         extra_info: {
-                          expiration_alert_days: expirationAlertDays,
+                          expiration_alert_days: Math.min(
+                            365,
+                            Math.max(1, expirationAlertDays || 14),
+                          ),
                           expiration_check_time: expirationCheckTime,
                         },
                         storeId,
@@ -631,7 +751,7 @@ const Basics = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",

@@ -8,12 +8,16 @@ import {
 import { AdminProduct } from "../../utils/types";
 import { useMemo, useState } from "react";
 import PrintBarCode from "@renderer/pages/Shared/PrintBarCode";
+import { PackageChips } from "@renderer/pages/Shared/PackagesDialog";
+import ProductMobileCard from "@renderer/pages/Shared/ProductMobileCard";
 
 interface ProductCardProps {
   product: AdminProduct;
   reserved: { [key: string | number]: number };
   setEditedProducts: React.Dispatch<React.SetStateAction<AdminProduct[]>>;
   editedProducts: AdminProduct[];
+  onOpenPackages?: (product: AdminProduct) => void;
+  isMobile?: boolean;
 }
 
 const AdminProductCard = ({
@@ -21,6 +25,8 @@ const AdminProductCard = ({
   reserved,
   setEditedProducts,
   editedProducts,
+  onOpenPackages,
+  isMobile,
 }: ProductCardProps) => {
   const [isPrintingCode, setIsPrintingCode] = useState(false);
 
@@ -33,6 +39,54 @@ const AdminProductCard = ({
     () => (productInCart ? productInCart : product),
     [productInCart, product],
   );
+
+  if (isMobile) {
+    const setField = (field: string, value: string) =>
+      setEditedProducts((prev) => {
+        const i = prev.findIndex((p) => p.id === product.id);
+        if (i === -1) return [...prev, { ...product, [field]: value }];
+        const next = [...prev];
+        next[i] = { ...next[i], [field]: value };
+        return next;
+      });
+    return (
+      <>
+        {isPrintingCode && (
+          <PrintBarCode
+            code={product.bar_code}
+            name={product.name}
+            price={product.price}
+            setOpen={setIsPrintingCode}
+          />
+        )}
+        <ProductMobileCard
+          name={productToMap.name}
+          barCode={productToMap.bar_code}
+          category={productToMap.category}
+          price={productToMap.price}
+          wholesalePrice={productToMap.wholesale_price}
+          stocks={Object.entries(product.stock_by_store).map(
+            ([store, stock]) => ({
+              store,
+              stock,
+              reserved: reserved ? (reserved[store] ?? 0) : 0,
+            }),
+          )}
+          packages={product.packages}
+          changed={!!productInCart}
+          onChange={setField}
+          onOpenPackages={
+            onOpenPackages ? () => onOpenPackages(product) : undefined
+          }
+          actions={
+            <Button size="small" onClick={() => setIsPrintingCode(true)}>
+              باركود
+            </Button>
+          }
+        />
+      </>
+    );
+  }
 
   return (
     <TableRow key={`${product.id}-${product.bar_code}-${product.name}`}>
@@ -183,6 +237,14 @@ const AdminProductCard = ({
               return newProducts;
             })
           }
+        />
+      </TableCell>
+
+      <TableCell sx={{ minWidth: 120 }}>
+        <PackageChips
+          packages={product.packages}
+          onClick={onOpenPackages ? () => onOpenPackages(product) : undefined}
+          emptyLabel="إضافة"
         />
       </TableCell>
     </TableRow>

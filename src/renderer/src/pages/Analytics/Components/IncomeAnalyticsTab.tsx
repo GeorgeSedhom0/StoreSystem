@@ -11,8 +11,6 @@ import {
   Button,
 } from "@mui/material";
 import { PictureAsPdf as PictureAsPdfIcon } from "@mui/icons-material";
-import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
 import { useState, useContext, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -30,9 +28,20 @@ import ShowChartIcon from "@mui/icons-material/ShowChart";
 import PaymentsIcon from "@mui/icons-material/Payments";
 import CreditCardIcon from "@mui/icons-material/CreditCard";
 import PercentIcon from "@mui/icons-material/Percent";
-import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
-import { buildIncomeReportHtml, exportPdfDocument } from "../../utils/a4Reports";
+import {
+  ChartHeader,
+  DateRangeFilter,
+  ExportExcelButton,
+  chartGrid,
+  chartToolbox,
+  useChartHeight,
+  useIsPhone,
+} from "./ChartTools";
+import {
+  buildIncomeReportHtml,
+  exportPdfDocument,
+} from "../../utils/a4Reports";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
 
 interface PaymentMethodStat {
@@ -94,7 +103,9 @@ const IncomeAnalyticsTab = () => {
         startDate: startDate.format("YYYY/MM/DD"),
         endDate: endDate.format("YYYY/MM/DD"),
         methodLabel:
-          method === "fifo" ? "FIFO (الوارد أولاً يصرف أولاً)" : "السعر الثابت (البسيط)",
+          method === "fifo"
+            ? "FIFO (الوارد أولاً يصرف أولاً)"
+            : "السعر الثابت (البسيط)",
         cashIn: data.cash_in,
         cashOut: data.cash_out,
         netCash: data.net_cash,
@@ -119,6 +130,8 @@ const IncomeAnalyticsTab = () => {
   const {
     palette: { mode },
   } = useTheme();
+  const isPhone = useIsPhone();
+  const chartHeight = useChartHeight(400, 300);
 
   const { data, isFetching } = useQuery({
     queryKey: ["analytics", "income", startDate, endDate, storeId, method],
@@ -151,35 +164,13 @@ const IncomeAnalyticsTab = () => {
       },
       legend: {
         data: ["النقد الوارد", "النقد الصادر", "صافي"],
+        top: isPhone ? 28 : 0,
       },
-      toolbox: {
-        feature: {
-          magicType: {
-            type: ["line", "bar", "stack"],
-          },
-          saveAsImage: {},
-          myTool: {
-            show: true,
-            title: "تصدير إلى إكسل",
-            icon: `image://${tableIcon}`,
-            onclick: () => {
-              const exportData = [
-                ["التاريخ", "النقد الوارد", "النقد الصادر", "صافي"],
-                ...data.daily_cashflow.map(([date, cashIn, cashOut, net]) => [
-                  date,
-                  cashIn,
-                  cashOut,
-                  net,
-                ]),
-              ];
-              exportToExcel(exportData);
-            },
-          },
-        },
-        show: true,
-      },
+      toolbox: chartToolbox(["line", "bar", "stack"]),
+      grid: chartGrid(isPhone, { top: isPhone ? 64 : 56 }),
       xAxis: {
         type: "time",
+        axisLabel: { hideOverlap: true },
       },
       yAxis: {
         type: "value",
@@ -206,34 +197,20 @@ const IncomeAnalyticsTab = () => {
         },
       ],
     }),
-    [data.daily_cashflow],
+    [data.daily_cashflow, isPhone],
   );
 
   const profitOptions: echarts.EChartsOption = useMemo(
     () => ({
       tooltip: {
         trigger: "axis",
+        confine: true,
       },
-      toolbox: {
-        feature: {
-          magicType: {
-            type: ["line", "bar"],
-          },
-          saveAsImage: {},
-          myTool: {
-            show: true,
-            title: "تصدير إلى إكسل",
-            icon: `image://${tableIcon}`,
-            onclick: () => {
-              const exportData = [["التاريخ", "الربح"], ...data.daily_profit];
-              exportToExcel(exportData);
-            },
-          },
-        },
-        show: true,
-      },
+      toolbox: chartToolbox(),
+      grid: chartGrid(isPhone),
       xAxis: {
         type: "time",
+        axisLabel: { hideOverlap: true },
       },
       yAxis: {
         type: "value",
@@ -247,7 +224,7 @@ const IncomeAnalyticsTab = () => {
         },
       ],
     }),
-    [data.daily_profit],
+    [data.daily_profit, isPhone],
   );
 
   // --- Payment method composition (cash vs digital, share, trend) ---
@@ -263,38 +240,38 @@ const IncomeAnalyticsTab = () => {
 
   const paymentDonut: echarts.EChartsOption = useMemo(
     () => ({
-      tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
-      legend: { bottom: 0 },
-      toolbox: { feature: { saveAsImage: {} }, show: true },
+      tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)", confine: true },
+      legend: { bottom: 0, type: "scroll" as const },
+      toolbox: chartToolbox(false),
       series: [
         {
           name: "حسب طريقة الدفع",
           type: "pie",
           radius: ["45%", "70%"],
           avoidLabelOverlap: true,
-          label: { formatter: "{b}\n{d}%" },
+          label: { show: !isPhone, formatter: "{b}\n{d}%" },
           data: (data.payment_method_breakdown ?? [])
             .filter((m) => m.total > 0)
-            .map((m) => ({ value: Number(m.total.toFixed(2)), name: m.method })),
+            .map((m) => ({
+              value: Number(m.total.toFixed(2)),
+              name: m.method,
+            })),
         },
       ],
     }),
-    [data.payment_method_breakdown],
+    [data.payment_method_breakdown, isPhone],
   );
 
   const paymentTrendOptions: echarts.EChartsOption = useMemo(
     () => ({
-      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-      legend: { bottom: 0 },
-      toolbox: {
-        feature: {
-          // Toggle absolute stack vs. 100% view via tiling/stack
-          magicType: { type: ["bar", "line"] },
-          saveAsImage: {},
-        },
-        show: true,
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        confine: true,
       },
-      grid: { bottom: 60 },
+      legend: { bottom: 0, type: "scroll" as const },
+      toolbox: chartToolbox(["bar", "line"]),
+      grid: chartGrid(isPhone, { bottom: 40 }),
       xAxis: {
         type: "category",
         data: (data.payment_method_trend ?? { dates: [] }).dates,
@@ -308,71 +285,64 @@ const IncomeAnalyticsTab = () => {
         data: s.data,
       })),
     }),
-    [data.payment_method_trend],
+    [data.payment_method_trend, isPhone],
   );
 
   const hasPaymentData = paymentBreakdown.length > 0;
 
   return (
-    <Grid2 container spacing={2}>
+    <Grid2
+      container
+      spacing={{ xs: 1.5, sm: 2 }}
+      sx={{
+        // Phones: two stat cards per row — drop the big icon and let the
+        // amount wrap instead of being clipped.
+        "& .MuiCard-root .MuiSvgIcon-fontSizeLarge": {
+          display: { xs: "none", sm: "inline-block" },
+        },
+        "& .MuiCard-root .MuiTypography-h6": {
+          fontSize: { xs: "1.05rem", sm: "1.25rem" },
+          overflowWrap: "anywhere",
+        },
+      }}
+    >
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 size={12}>
-        <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
+        <Paper elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
           <Box
             sx={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              gap: 2,
-              mb: 1,
+              gap: 1.5,
+              mb: 2,
               flexWrap: "wrap",
             }}
           >
-            <Typography variant="h6">
-              تحليل الدخل والمصروفات فى المدة المحددة
+            <Typography
+              variant="h6"
+              sx={{ fontSize: { xs: "1.1rem", sm: "1.25rem" } }}
+            >
+              تحليل الدخل والمصروفات في المدة المحددة
             </Typography>
             <Button
               variant="outlined"
               startIcon={<PictureAsPdfIcon />}
               onClick={handleExportToPdf}
               disabled={isFetching}
+              sx={{ minHeight: 40 }}
             >
               تصدير PDF
             </Button>
           </Box>
 
-          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-            <LocalizationProvider
-              dateAdapter={AdapterDayjs}
-              adapterLocale="ar-sa"
-            >
-              <DatePicker
-                label="من"
-                value={startDate}
-                onChange={(newValue) => {
-                  if (newValue) setStartDate(newValue);
-                }}
-                slotProps={{ textField: { fullWidth: true } }}
-                disableFuture
-                disabled={isFetching}
-              />
-            </LocalizationProvider>
-
-            <LocalizationProvider
-              dateAdapter={AdapterDayjs}
-              adapterLocale="ar-sa"
-            >
-              <DatePicker
-                label="إلى"
-                value={endDate}
-                onChange={(newValue) => {
-                  if (newValue) setEndDate(newValue);
-                }}
-                slotProps={{ textField: { fullWidth: true } }}
-                disabled={isFetching}
-              />
-            </LocalizationProvider>
-
+          <DateRangeFilter
+            startDate={startDate}
+            endDate={endDate}
+            setStartDate={setStartDate}
+            setEndDate={setEndDate}
+            disabled={isFetching}
+          >
             <FormControl fullWidth disabled={isFetching}>
               <InputLabel>طريقة حساب الأرباح</InputLabel>
               <Select
@@ -384,12 +354,12 @@ const IncomeAnalyticsTab = () => {
                 <MenuItem value="fifo">FIFO (الوارد أولاً يصرف أولاً)</MenuItem>
               </Select>
             </FormControl>
-          </Box>
+          </DateRangeFilter>
         </Paper>
       </Grid2>
 
       <Grid2 container size={12} spacing={2}>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="إجمالي النقد الوارد"
             value={formatCurrency(data.cash_in)}
@@ -399,7 +369,7 @@ const IncomeAnalyticsTab = () => {
             info="كل النقد الداخل خلال الفترة من جميع المصادر: مبيعات الفواتير ومقدمات وأقساط التقسيط والإيداعات اليدوية خارج الفواتير. ليس صافي المبيعات."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="إجمالي النقد الصادر"
             value={formatCurrency(data.cash_out)}
@@ -409,7 +379,7 @@ const IncomeAnalyticsTab = () => {
             info="كل النقد الخارج خلال الفترة من جميع المصادر: فواتير الشراء والمرتجعات والرواتب والسحوبات والمصاريف اليدوية خارج الفواتير."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="صافي النقد"
             value={formatCurrency(data.net_cash)}
@@ -419,7 +389,7 @@ const IncomeAnalyticsTab = () => {
             info="النقد الوارد − النقد الصادر خلال الفترة (صافي حركة النقد). ليس الربح، فهو يشمل تحركات نقدية غير مرتبطة بالربح كالإيداعات والسحوبات."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="إجمالي الأرباح"
             value={formatCurrency(data.profit)}
@@ -432,13 +402,34 @@ const IncomeAnalyticsTab = () => {
       </Grid2>
 
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            التدفق النقدي اليومي
-          </Typography>
+        <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
+          <ChartHeader
+            title="التدفق النقدي اليومي"
+            actions={
+              <ExportExcelButton
+                disabled={data.daily_cashflow.length === 0}
+                onClick={() =>
+                  exportToExcel(
+                    [
+                      ["التاريخ", "النقد الوارد", "النقد الصادر", "صافي"],
+                      ...data.daily_cashflow.map(
+                        ([date, cashIn, cashOut, net]) => [
+                          date,
+                          cashIn,
+                          cashOut,
+                          net,
+                        ],
+                      ),
+                    ],
+                    "التدفق النقدي اليومي",
+                  )
+                }
+              />
+            }
+          />
           <EChartsReact
             option={cashflowOptions}
-            style={{ height: 400 }}
+            style={{ height: chartHeight }}
             theme={mode}
             notMerge={true}
           />
@@ -446,13 +437,24 @@ const IncomeAnalyticsTab = () => {
       </Grid2>
 
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            الأرباح اليومية
-          </Typography>
+        <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
+          <ChartHeader
+            title="الأرباح اليومية"
+            actions={
+              <ExportExcelButton
+                disabled={data.daily_profit.length === 0}
+                onClick={() =>
+                  exportToExcel(
+                    [["التاريخ", "الربح"], ...data.daily_profit],
+                    "الأرباح اليومية",
+                  )
+                }
+              />
+            }
+          />
           <EChartsReact
             option={profitOptions}
-            style={{ height: 400 }}
+            style={{ height: chartHeight }}
             theme={mode}
             notMerge={true}
           />
@@ -469,7 +471,7 @@ const IncomeAnalyticsTab = () => {
           </Grid2>
 
           <Grid2 container size={12} spacing={2}>
-            <Grid2 size={4}>
+            <Grid2 size={{ xs: 12, sm: 4 }}>
               <AnalyticsCard
                 title={`مدفوعات نقدية${cashName ? ` (${cashName})` : ""}`}
                 value={formatCurrency(cashTotal)}
@@ -479,7 +481,7 @@ const IncomeAnalyticsTab = () => {
                 info="ما حُصِّل نقداً على فواتير البيع والمرتجع (صافي المرتجعات) عبر طريقة الدفع النقدية، خلال الفترة."
               />
             </Grid2>
-            <Grid2 size={4}>
+            <Grid2 size={{ xs: 12, sm: 4 }}>
               <AnalyticsCard
                 title="مدفوعات غير نقدية"
                 value={formatCurrency(digitalTotal)}
@@ -489,7 +491,7 @@ const IncomeAnalyticsTab = () => {
                 info="ما حُصِّل على فواتير البيع والمرتجع عبر طرق الدفع غير النقدية (بطاقات/تحويلات)، خلال الفترة."
               />
             </Grid2>
-            <Grid2 size={4}>
+            <Grid2 size={{ xs: 12, sm: 4 }}>
               <AnalyticsCard
                 title="نسبة المدفوعات غير النقدية"
                 value={`${digitalShare}%`}
@@ -501,27 +503,27 @@ const IncomeAnalyticsTab = () => {
             </Grid2>
           </Grid2>
 
-          <Grid2 size={5}>
-            <Card elevation={3} sx={{ p: 2, height: 420 }}>
+          <Grid2 size={{ xs: 12, md: 5 }}>
+            <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, height: "100%" }}>
               <Typography variant="h6" gutterBottom>
                 توزيع التحصيل حسب طريقة الدفع
               </Typography>
               <EChartsReact
                 option={paymentDonut}
-                style={{ height: 360 }}
+                style={{ height: isPhone ? 300 : 360 }}
                 theme={mode}
                 notMerge
               />
             </Card>
           </Grid2>
-          <Grid2 size={7}>
-            <Card elevation={3} sx={{ p: 2, height: 420 }}>
+          <Grid2 size={{ xs: 12, md: 7 }}>
+            <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, height: "100%" }}>
               <Typography variant="h6" gutterBottom>
                 تطور طرق الدفع عبر الوقت
               </Typography>
               <EChartsReact
                 option={paymentTrendOptions}
-                style={{ height: 360 }}
+                style={{ height: isPhone ? 300 : 360 }}
                 theme={mode}
                 notMerge
               />

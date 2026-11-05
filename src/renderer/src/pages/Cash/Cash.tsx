@@ -27,7 +27,10 @@ import {
   InputAdornment,
   TablePagination,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
+import { Virtuoso } from "react-virtuoso";
 import {
   Search as SearchIcon,
   Download as DownloadIcon,
@@ -43,7 +46,8 @@ import { useQuery } from "@tanstack/react-query";
 import { DateTimePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { useParams } from "react-router-dom";
-import FormatedNumber from "../Shared/FormatedNumber";
+import NumberField from "../Shared/NumberField";
+import { apiError } from "../utils/errors";
 import useParties from "../Shared/hooks/useParties";
 import usePaymentMethods from "../Shared/hooks/usePaymentMethods";
 import useAccounts from "../Shared/hooks/useAccounts";
@@ -70,9 +74,114 @@ const getCashFlow = async (
   return data;
 };
 
+// Negative numbers are wrapped in an LTR isolate so RTL text shows "-75.5",
+// not "75.5-".
+const fmt = (n: number) =>
+  Number.isFinite(n)
+    ? n < 0
+      ? `⁦${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}⁩`
+      : n.toLocaleString("en-US", { maximumFractionDigits: 2 })
+    : "-";
+
+const formatTime = (time: string) =>
+  new Date(time).toLocaleString("ar-EG", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
+const accountLabel = (
+  accounts: NonNullable<CashFlow["accounts"]>,
+  acc: { name: string; amount: number },
+) =>
+  accounts.length > 1 ? `${acc.name}: ${fmt(Math.abs(acc.amount))}` : acc.name;
+
+const NO_PARTY = "بدون طرف ثانٍ";
+const NEW_PARTY = "طرف ثانٍ جديد";
+
+/** One cash-flow row as a phone card. */
+const CashFlowCard = ({ row }: { row: CashFlow }) => {
+  const isIn = row.type === "in";
+  const accounts = row.accounts || [];
+  return (
+    <Card
+      variant="outlined"
+      sx={{
+        mb: 1.25,
+        borderRadius: 3,
+        p: 1.5,
+        borderInlineStart: 4,
+        borderInlineStartColor: isIn ? "success.main" : "error.main",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 600, wordBreak: "break-word" }}>
+            {row.description || "-"}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {row.party_name || NO_PARTY}
+          </Typography>
+        </Box>
+        <Box sx={{ textAlign: "left", flexShrink: 0 }}>
+          <Typography
+            sx={{
+              fontWeight: 800,
+              fontSize: 18,
+              color: isIn ? "success.main" : "error.main",
+            }}
+          >
+            {fmt(row.amount)}
+          </Typography>
+          <Chip
+            label={isIn ? "دخول" : "خروج"}
+            color={isIn ? "success" : "error"}
+            size="small"
+          />
+        </Box>
+      </Box>
+      {accounts.length > 0 && (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 1 }}>
+          {accounts.map((acc, i) => (
+            <Chip
+              key={i}
+              size="small"
+              variant="outlined"
+              label={accountLabel(accounts, acc)}
+            />
+          ))}
+        </Box>
+      )}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 1,
+          mt: 1,
+          pt: 1,
+          borderTop: 1,
+          borderColor: "divider",
+        }}
+      >
+        <Typography variant="caption" color="text.secondary">
+          {formatTime(row.time)}
+        </Typography>
+        <Typography variant="caption" sx={{ fontWeight: 600 }}>
+          الرصيد: {fmt(row.total)}
+        </Typography>
+      </Box>
+    </Card>
+  );
+};
+
 const Cash = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
   const [amount, setAmount] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
   const [moveType, setMoveType] = useState<"in" | "out">("in");
   const [description, setDescription] = useState("");
   const [accountId, setAccountId] = useState<number | "">("");
@@ -269,7 +378,7 @@ const Cash = () => {
         item.type === "in" ? "دخول" : "خروج",
         item.description,
         item.total,
-        item.party_name || "بدون طرف ثاني",
+        item.party_name || NO_PARTY,
         (item.accounts || [])
           .map((acc) =>
             (item.accounts || []).length > 1
@@ -279,7 +388,7 @@ const Cash = () => {
           .join("، "),
       ]),
     ];
-    exportToExcel(exportData);
+    exportToExcel(exportData, "الحركات المالية");
   };
 
   const handleExportToPdf = async () => {
@@ -357,6 +466,10 @@ const Cash = () => {
   );
 
   const addCashFlow = async () => {
+    if (amount <= 0) {
+      setMsg({ type: "error", text: "أدخل مبلغًا أكبر من صفر" });
+      return;
+    }
     if (isInstallmentReservedDescription) {
       setMsg({
         type: "error",
@@ -365,6 +478,8 @@ const Cash = () => {
       return;
     }
 
+    if (submitting) return;
+    setSubmitting(true);
     try {
       let newPartyId = selectedPartyId;
 
@@ -407,37 +522,64 @@ const Cash = () => {
       setSelectedPartyId(null);
       setAccountId("");
       setCounterpartAccountId("");
-      setMsg({ type: "success", text: "تمت إضافة سجل التدفق النقدي بنجاح" });
+      setMsg({ type: "success", text: "تمت إضافة الحركة النقدية بنجاح" });
     } catch (error) {
-      setMsg({ type: "error", text: "لم تتم الإضافة بنجاح" });
+      setMsg({ type: "error", text: apiError(error, "لم تتم الإضافة بنجاح") });
+    } finally {
+      setSubmitting(false);
     }
   };
+  const pageRows = filteredAndSortedCashFlow.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage,
+  );
+
+  const sortHeader = (key: keyof CashFlow, label: string) => (
+    <TableCell>
+      <TableSortLabel
+        active={orderBy === key}
+        direction={orderBy === key ? order : "asc"}
+        onClick={() => handleSort(key)}
+      >
+        {label}
+      </TableSortLabel>
+    </TableCell>
+  );
+
+  const emptyText =
+    searchTerm.trim() !== ""
+      ? "لا توجد حركات مطابقة للبحث"
+      : "لا توجد حركات نقدية في هذه الفترة";
+
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
       <LoadingScreen loading={loading} />
-      <Grid2 container spacing={3}>
+      <Grid2 container spacing={{ xs: 2, md: 3 }}>
         {/* Statistics Cards */}
-        <Grid2 container size={12} spacing={2} sx={{ mt: 0 }}>
-          <Grid2 size={{ xs: 12, sm: 4 }}>
+        <Grid2 container size={12} spacing={{ xs: 1, sm: 2 }} sx={{ mt: 0 }}>
+          <Grid2 size={{ xs: 6, sm: 4 }}>
             <StatCard
               color="success"
               icon={<TrendingUpIcon />}
               label="إجمالي النقد الوارد"
-              value={<FormatedNumber>{statistics.totalIn}</FormatedNumber>}
+              value={fmt(statistics.totalIn)}
               info="مجموع الحركات النقدية الواردة ضمن الفلتر الحالي (الفترة/الطرف/البحث). يشمل نقد الفواتير ومقدمات وأقساط التقسيط والإيداعات اليدوية."
             />
           </Grid2>
-          <Grid2 size={{ xs: 12, sm: 4 }}>
+          <Grid2 size={{ xs: 6, sm: 4 }}>
             <StatCard
               color="error"
               icon={<TrendingDownIcon />}
               label="إجمالي النقد الصادر"
-              value={<FormatedNumber>{statistics.totalOut}</FormatedNumber>}
+              value={fmt(statistics.totalOut)}
               info="مجموع الحركات النقدية الصادرة ضمن الفلتر الحالي (الفترة/الطرف/البحث). يشمل فواتير الشراء والمرتجعات والرواتب والسحوبات والمصاريف اليدوية."
             />
           </Grid2>
-          <Grid2 size={{ xs: 12, sm: 4 }}>
+          <Grid2
+            size={{ xs: 12, sm: 4 }}
+            sx={{ display: { xs: "none", sm: "block" } }}
+          >
             <StatCard
               color="primary"
               icon={<AccountBalanceIcon />}
@@ -450,12 +592,14 @@ const Cash = () => {
         {/* Account balances strip */}
         {accountBalances.length > 0 && (
           <Grid2 size={12}>
-            <Card elevation={3} sx={{ p: 3 }}>
+            <Card elevation={3} sx={{ p: { xs: 2, md: 3 } }}>
               <Box
                 sx={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 1,
                   mb: 2,
                 }}
               >
@@ -466,7 +610,7 @@ const Cash = () => {
                   أرصدة الحسابات
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  الإجمالي: <FormatedNumber>{accountsTotal}</FormatedNumber> جنيه
+                  الإجمالي: {fmt(accountsTotal)} جنيه
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
@@ -478,7 +622,7 @@ const Cash = () => {
                     sx={{ fontWeight: 600, fontSize: "0.95rem", py: 2 }}
                     label={
                       <span>
-                        {account.name}: <FormatedNumber>{account.balance}</FormatedNumber> جنيه
+                        {account.name}: {fmt(account.balance)} جنيه
                       </span>
                     }
                   />
@@ -490,7 +634,7 @@ const Cash = () => {
 
         {/* Add Cash Flow Form */}
         <Grid2 size={12}>
-          <Card elevation={3} sx={{ p: 3 }}>
+          <Card elevation={3} sx={{ p: { xs: 2, md: 3 } }}>
             <Typography
               variant="h6"
               sx={{
@@ -502,18 +646,28 @@ const Cash = () => {
             >
               إضافة حركة نقدية جديدة
             </Typography>
-            <Grid2 container spacing={3}>
-              <Grid2 container size={12} justifyContent="space-between">
-                <Box display="flex" alignItems="center" gap={3}>
-                  <TextField
+            <Grid2 container spacing={{ xs: 2, md: 3 }}>
+              <Grid2
+                container
+                size={12}
+                justifyContent="space-between"
+                rowGap={2}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: { xs: 1.5, md: 3 },
+                    flexWrap: "wrap",
+                    width: { xs: "100%", md: "auto" },
+                    "& > *": { flex: { xs: "1 1 140px", md: "0 0 auto" } },
+                  }}
+                >
+                  <NumberField
                     label="المبلغ"
                     value={amount}
-                    onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                    slotProps={{
-                      input: {
-                        inputMode: "decimal",
-                      },
-                    }}
+                    onValueChange={setAmount}
+                    min={0}
                   />
                   <FormControl>
                     <InputLabel>نوع الحركة</InputLabel>
@@ -559,9 +713,7 @@ const Cash = () => {
                         value={counterpartAccountId}
                         onChange={(e) =>
                           setCounterpartAccountId(
-                            e.target.value === ""
-                              ? ""
-                              : Number(e.target.value),
+                            e.target.value === "" ? "" : Number(e.target.value),
                           )
                         }
                         sx={{ minWidth: 160 }}
@@ -590,11 +742,16 @@ const Cash = () => {
                   />
                   <Button
                     onClick={addCashFlow}
-                    disabled={loading || isInstallmentReservedDescription}
+                    disabled={
+                      loading ||
+                      submitting ||
+                      amount <= 0 ||
+                      isInstallmentReservedDescription
+                    }
                     variant="contained"
-                    sx={{ minWidth: 120 }}
+                    sx={{ minWidth: 120, minHeight: 44 }}
                   >
-                    إضافة تدفق نقدي
+                    إضافة حركة نقدية
                   </Button>
                 </Box>
                 <FormControlLabel
@@ -607,57 +764,20 @@ const Cash = () => {
                   label="إظهار الإجمالي العام"
                 />
               </Grid2>
-              <Grid2 container gap={3} size={12}>
-                <LocalizationProvider
-                  dateAdapter={AdapterDayjs}
-                  adapterLocale="ar-sa"
-                >
-                  <DateTimePicker
-                    label="من"
-                    value={startDate}
-                    onChange={(newValue) => {
-                      if (!newValue) return;
-                      setStartDate(newValue);
-                    }}
-                    disableFuture
-                  />
-                </LocalizationProvider>
-                <LocalizationProvider
-                  dateAdapter={AdapterDayjs}
-                  adapterLocale="ar-sa"
-                >
-                  <DateTimePicker
-                    label="الى"
-                    value={endDate}
-                    onChange={(newValue) => {
-                      if (!newValue) return;
-                      setEndDate(newValue);
-                    }}
-                  />
-                </LocalizationProvider>
-              </Grid2>
-              <Grid2 size={12}>
-                <ButtonGroup>
-                  <Button onClick={() => setRange("shift")}>اخر شيفت</Button>
-                  <Button onClick={() => setRange("day")}>اليوم</Button>
-                  <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
-                  <Button onClick={() => setRange("month")}>هذا الشهر</Button>
-                </ButtonGroup>
-              </Grid2>
               <Grid2 size={12}>
                 <Autocomplete
                   options={
                     [
                       {
                         id: null,
-                        name: "بدون طرف ثانى",
+                        name: NO_PARTY,
                         phone: "01xxx",
                         address: "****",
                         type: "****",
                       },
                       {
                         id: null,
-                        name: "طرف ثانى جديد",
+                        name: NEW_PARTY,
                         phone: "01xxx",
                         address: "****",
                         type: "****",
@@ -681,7 +801,7 @@ const Cash = () => {
                       setAddingParty(false);
                     } else {
                       setSelectedPartyId(null);
-                      if (value && value.name === "طرف ثانى جديد") {
+                      if (value && value.name === NEW_PARTY) {
                         setAddingParty(true);
                       } else {
                         setAddingParty(false);
@@ -697,7 +817,11 @@ const Cash = () => {
                     return filtered;
                   }}
                   renderInput={(params) => (
-                    <TextField {...params} label="اسم الطرف الثانى" />
+                    <TextField
+                      {...params}
+                      label="الطرف الثاني"
+                      helperText="اختيار طرف يعرض حركاته فقط في القائمة بالأسفل"
+                    />
                   )}
                 />
               </Grid2>
@@ -706,7 +830,7 @@ const Cash = () => {
                   <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
                     <TextField
                       fullWidth
-                      label="اسم الطرف الثانى"
+                      label="اسم الطرف الثاني"
                       value={newParty.name}
                       onChange={(e) =>
                         setNewParty({ ...newParty, name: e.target.value })
@@ -721,6 +845,7 @@ const Cash = () => {
                       onChange={(e) =>
                         setNewParty({ ...newParty, phone: e.target.value })
                       }
+                      slotProps={{ htmlInput: { inputMode: "tel" } }}
                     />
                   </Grid2>
                   <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
@@ -753,7 +878,8 @@ const Cash = () => {
             </Grid2>
           </Card>
         </Grid2>
-        {/* Search and Table Section */}
+
+        {/* Period, search and export */}
         <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 2 }}>
             <Typography
@@ -765,13 +891,58 @@ const Cash = () => {
                 fontSize: "1.2rem",
               }}
             >
-              البحث في جدول التدفقات النقدية
+              البحث في الحركات النقدية
             </Typography>
             <Grid2 container spacing={2} alignItems="center">
-              <Grid2 size={{ xs: 12, md: 4 }}>
+              <LocalizationProvider
+                dateAdapter={AdapterDayjs}
+                adapterLocale="ar-sa"
+              >
+                <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+                  <DateTimePicker
+                    label="من"
+                    value={startDate}
+                    onChange={(newValue) => {
+                      if (!newValue) return;
+                      setStartDate(newValue);
+                    }}
+                    disableFuture
+                    slotProps={{ textField: { fullWidth: true } }}
+                  />
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
+                  <DateTimePicker
+                    label="إلى"
+                    value={endDate}
+                    onChange={(newValue) => {
+                      if (!newValue) return;
+                      setEndDate(newValue);
+                    }}
+                    slotProps={{ textField: { fullWidth: true } }}
+                  />
+                </Grid2>
+              </LocalizationProvider>
+              <Grid2 size={{ xs: 12, md: 6 }}>
+                <ButtonGroup
+                  fullWidth={isMobile}
+                  sx={{
+                    "& .MuiButton-root": {
+                      minHeight: 40,
+                      whiteSpace: "nowrap",
+                      px: { xs: 0.5, sm: 2 },
+                    },
+                  }}
+                >
+                  <Button onClick={() => setRange("shift")}>آخر شيفت</Button>
+                  <Button onClick={() => setRange("day")}>اليوم</Button>
+                  <Button onClick={() => setRange("week")}>هذا الأسبوع</Button>
+                  <Button onClick={() => setRange("month")}>هذا الشهر</Button>
+                </ButtonGroup>
+              </Grid2>
+              <Grid2 size={{ xs: 12, md: 6 }}>
                 <TextField
                   fullWidth
-                  placeholder="ابحث في الوصف أو الطرف الثاني. استخدم فاصلة للمطابقة مع كل الكلمات"
+                  placeholder="ابحث في الوصف أو الطرف الثاني (افصل بفاصلة لمطابقة كل الكلمات)"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   slotProps={{
@@ -786,111 +957,124 @@ const Cash = () => {
                   size="small"
                 />
               </Grid2>
-              <Grid2 size={{ xs: 12, md: 2 }}>
+              <Grid2 size={{ xs: 6, md: 3 }}>
                 <Button
                   variant="outlined"
                   startIcon={<DownloadIcon />}
                   onClick={handleExportToExcel}
                   fullWidth
+                  sx={{ minHeight: 40 }}
                 >
                   تصدير Excel
                 </Button>
               </Grid2>
-              <Grid2 size={{ xs: 12, md: 2 }}>
+              <Grid2 size={{ xs: 6, md: 3 }}>
                 <Button
                   variant="contained"
                   color="secondary"
                   startIcon={<PictureAsPdfIcon />}
                   onClick={handleExportToPdf}
                   fullWidth
+                  sx={{ minHeight: 40 }}
                 >
-                  تصدير PDF A4
+                  تصدير PDF
                 </Button>
               </Grid2>
             </Grid2>
           </Card>
         </Grid2>
 
-        {/* Enhanced Table */}
+        {/* Cash flow list */}
         <Grid2 size={12}>
-          <Card elevation={3}>
-            <TableContainer component={Paper}>
-              <Table stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "time"}
-                        direction={orderBy === "time" ? order : "asc"}
-                        onClick={() => handleSort("time")}
-                      >
-                        الوقت
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "amount"}
-                        direction={orderBy === "amount" ? order : "asc"}
-                        onClick={() => handleSort("amount")}
-                      >
-                        المبلغ
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "type"}
-                        direction={orderBy === "type" ? order : "asc"}
-                        onClick={() => handleSort("type")}
-                      >
-                        نوع الحركة
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "description"}
-                        direction={orderBy === "description" ? order : "asc"}
-                        onClick={() => handleSort("description")}
-                      >
-                        الوصف
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "total"}
-                        direction={orderBy === "total" ? order : "asc"}
-                        onClick={() => handleSort("total")}
-                      >
-                        المجموع
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={orderBy === "party_name"}
-                        direction={orderBy === "party_name" ? order : "asc"}
-                        onClick={() => handleSort("party_name")}
-                      >
-                        الطرف الثاني
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>الحساب</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredAndSortedCashFlow
-                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                    .map((row, index) => (
-                      <TableRow key={index} hover>
-                        <TableCell>
-                          {new Date(row.time).toLocaleString("ar-EG", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                          })}
+          {isMobile ? (
+            <Box sx={{ position: "relative", minHeight: 120 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 1,
+                  mb: 1.5,
+                }}
+              >
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  الحركات ({statistics.totalTransactions})
+                </Typography>
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <InputLabel>ترتيب</InputLabel>
+                  <Select
+                    label="ترتيب"
+                    value={`${orderBy}:${order}`}
+                    onChange={(e) => {
+                      const [k, o] = String(e.target.value).split(":");
+                      setOrderBy(k as keyof CashFlow);
+                      setOrder(o as "asc" | "desc");
+                    }}
+                  >
+                    <MenuItem value="time:desc">الأحدث أولًا</MenuItem>
+                    <MenuItem value="time:asc">الأقدم أولًا</MenuItem>
+                    <MenuItem value="amount:desc">الأكبر مبلغًا</MenuItem>
+                    <MenuItem value="amount:asc">الأصغر مبلغًا</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              {!loading && filteredAndSortedCashFlow.length === 0 && (
+                <Typography
+                  align="center"
+                  color="text.secondary"
+                  sx={{ py: 4 }}
+                >
+                  {emptyText}
+                </Typography>
+              )}
+              {/* Window scrolling: no nested scroll box on phones. */}
+              <Virtuoso
+                useWindowScroll
+                increaseViewportBy={{ top: 600, bottom: 1600 }}
+                data={filteredAndSortedCashFlow}
+                itemContent={(_, row) => <CashFlowCard row={row} />}
+              />
+            </Box>
+          ) : (
+            <Card elevation={3}>
+              <TableContainer component={Paper}>
+                <Table stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      {sortHeader("time", "الوقت")}
+                      {sortHeader("amount", "المبلغ")}
+                      {sortHeader("type", "نوع الحركة")}
+                      {sortHeader("description", "الوصف")}
+                      {sortHeader("total", "الرصيد")}
+                      {sortHeader("party_name", "الطرف الثاني")}
+                      <TableCell>الحساب</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {!loading && pageRows.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={7}
+                          align="center"
+                          sx={{ py: 4, color: "text.secondary" }}
+                        >
+                          {emptyText}
                         </TableCell>
-                        <TableCell>
-                          <FormatedNumber>{row.amount}</FormatedNumber>
+                      </TableRow>
+                    )}
+                    {pageRows.map((row, index) => (
+                      <TableRow key={index} hover>
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          {formatTime(row.time)}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontWeight: 600,
+                            color:
+                              row.type === "in" ? "success.main" : "error.main",
+                          }}
+                        >
+                          {fmt(row.amount)}
                         </TableCell>
                         <TableCell>
                           <Chip
@@ -900,27 +1084,23 @@ const Cash = () => {
                           />
                         </TableCell>
                         <TableCell>{row.description}</TableCell>
-                        <TableCell>
-                          <FormatedNumber>{row.total}</FormatedNumber>
-                        </TableCell>
-                        <TableCell>
-                          {row.party_name ? row.party_name : "بدون طرف ثاني"}
-                        </TableCell>
+                        <TableCell>{fmt(row.total)}</TableCell>
+                        <TableCell>{row.party_name || NO_PARTY}</TableCell>
                         <TableCell>
                           {row.accounts && row.accounts.length > 0 ? (
                             <Box
-                              sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}
+                              sx={{
+                                display: "flex",
+                                gap: 0.5,
+                                flexWrap: "wrap",
+                              }}
                             >
                               {row.accounts.map((acc, i) => (
                                 <Chip
                                   key={i}
                                   size="small"
                                   variant="outlined"
-                                  label={
-                                    row.accounts!.length > 1
-                                      ? `${acc.name}: ${Math.abs(acc.amount)}`
-                                      : acc.name
-                                  }
+                                  label={accountLabel(row.accounts!, acc)}
                                 />
                               ))}
                             </Box>
@@ -930,23 +1110,24 @@ const Cash = () => {
                         </TableCell>
                       </TableRow>
                     ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <TablePagination
-              rowsPerPageOptions={[10, 25, 50, 100]}
-              component="div"
-              count={filteredAndSortedCashFlow.length}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-              labelRowsPerPage="عدد الصفوف لكل صفحة:"
-              labelDisplayedRows={({ from, to, count }) =>
-                `${from}-${to} من ${count}`
-              }
-            />
-          </Card>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                rowsPerPageOptions={[10, 25, 50, 100]}
+                component="div"
+                count={filteredAndSortedCashFlow.length}
+                rowsPerPage={rowsPerPage}
+                page={page}
+                onPageChange={handleChangePage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                labelRowsPerPage="عدد الصفوف لكل صفحة:"
+                labelDisplayedRows={({ from, to, count }) =>
+                  `${from}-${to} من ${count}`
+                }
+              />
+            </Card>
+          )}
         </Grid2>
       </Grid2>
     </>

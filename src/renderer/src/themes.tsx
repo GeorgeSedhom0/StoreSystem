@@ -1,5 +1,8 @@
 export interface Theme {
+  /** Stable id stored in settings (never rename an existing one). */
   name: string;
+  /** Arabic display name. */
+  label?: string;
   mode: "light" | "dark";
   primary: string;
   secondary: string;
@@ -28,9 +31,15 @@ export interface Theme {
   success: string;
 }
 
+/** Stored theme name meaning "follow the device's light/dark setting". */
+export const AUTO_THEME = "Auto";
+/** Window event the picker fires to apply a theme without reloading. */
+export const THEME_EVENT = "openstore-theme-change";
+
 export const themes: Theme[] = [
   {
     name: "Light Blue",
+    label: "أزرق فاتح",
     mode: "light",
     primary: "#1976d2",
     secondary: "#7c4dff",
@@ -61,6 +70,7 @@ export const themes: Theme[] = [
   },
   {
     name: "Dark Blue",
+    label: "أزرق داكن",
     mode: "dark",
     primary: "#90caf9",
     secondary: "#ce93d8",
@@ -91,6 +101,7 @@ export const themes: Theme[] = [
   },
   {
     name: "Light Orange",
+    label: "برتقالي فاتح",
     mode: "light",
     primary: "#f57c00",
     secondary: "#ff6090",
@@ -121,6 +132,7 @@ export const themes: Theme[] = [
   },
   {
     name: "Dark Orange",
+    label: "برتقالي داكن",
     mode: "dark",
     primary: "#ffb74d",
     secondary: "#ff9cad",
@@ -151,6 +163,7 @@ export const themes: Theme[] = [
   },
   {
     name: "Light Green",
+    label: "أخضر فاتح",
     mode: "light",
     primary: "#2e7d32",
     secondary: "#00796b",
@@ -181,6 +194,7 @@ export const themes: Theme[] = [
   },
   {
     name: "Dark Green",
+    label: "أخضر داكن",
     mode: "dark",
     primary: "#81c784",
     secondary: "#4db6ac",
@@ -211,6 +225,7 @@ export const themes: Theme[] = [
   },
   {
     name: "Light Red",
+    label: "أحمر فاتح",
     mode: "light",
     primary: "#d32f2f",
     secondary: "#c2185b",
@@ -241,6 +256,7 @@ export const themes: Theme[] = [
   },
   {
     name: "Dark Red",
+    label: "أحمر داكن",
     mode: "dark",
     primary: "#ff8a80",
     secondary: "#ff80ab",
@@ -268,5 +284,126 @@ export const themes: Theme[] = [
     warning: "#ff9800",
     info: "#40c4ff",
     success: "#69f0ae",
+  },
+  {
+    name: "Midnight Indigo",
+    label: "ليل نيلي",
+    mode: "dark",
+    primary: "#8c9eff",
+    secondary: "#64ffda",
+    background: "#0f1222",
+    paper: "#161a2e",
+    divider: "rgba(255, 255, 255, 0.10)",
+    backgroundImage:
+      "radial-gradient(1200px 600px at 100% 0%, #1f2550 0%, rgba(15,18,34,0) 60%), linear-gradient(160deg, #0f1222 0%, #121630 100%)",
+    text: {
+      primary: "#eef0ff",
+      secondary: "rgba(238, 240, 255, 0.68)",
+      disabled: "rgba(238, 240, 255, 0.4)",
+    },
+    action: {
+      active: "#eef0ff",
+      hover: "rgba(140, 158, 255, 0.08)",
+      selected: "rgba(140, 158, 255, 0.18)",
+      disabled: "rgba(238, 240, 255, 0.3)",
+    },
+    surface: {
+      main: "#161a2e",
+      border: "rgba(255, 255, 255, 0.10)",
+    },
+    error: "#ff6e7a",
+    warning: "#ffb74d",
+    info: "#4fc3f7",
+    success: "#4cd9a0",
+  },
+  {
+    name: "Sand Clay",
+    label: "رملي دافئ",
+    mode: "light",
+    primary: "#b5552f",
+    secondary: "#2f6f6b",
+    background: "#f7f2ea",
+    paper: "#fffdf9",
+    divider: "rgba(80, 52, 30, 0.14)",
+    backgroundImage: "linear-gradient(160deg, #fbf7f0 0%, #f3ebdd 100%)",
+    text: {
+      primary: "#2d241d",
+      secondary: "rgba(45, 36, 29, 0.66)",
+      disabled: "rgba(45, 36, 29, 0.38)",
+    },
+    action: {
+      active: "rgba(45, 36, 29, 0.6)",
+      hover: "rgba(181, 85, 47, 0.06)",
+      selected: "rgba(181, 85, 47, 0.12)",
+      disabled: "rgba(45, 36, 29, 0.26)",
+    },
+    surface: {
+      main: "#fffdf9",
+      border: "rgba(80, 52, 30, 0.14)",
+    },
+    error: "#b3261e",
+    warning: "#b26a00",
+    info: "#1f6aa5",
+    success: "#2e7d4f",
+  },
+  {
+    name: "Teal Breeze",
+    label: "فيروزي",
+    mode: "light",
+    primary: "#00796b",
+    secondary: "#5e35b1",
+    background: "#f2f8f7",
+    paper: "#ffffff",
+    divider: "rgba(0, 60, 55, 0.12)",
+    backgroundImage: "linear-gradient(160deg, #f5fbfa 0%, #e2f1ee 100%)",
+    text: {
+      primary: "#10241f",
+      secondary: "rgba(16, 36, 31, 0.64)",
+      disabled: "rgba(16, 36, 31, 0.38)",
+    },
+    action: {
+      active: "rgba(16, 36, 31, 0.56)",
+      hover: "rgba(0, 121, 107, 0.06)",
+      selected: "rgba(0, 121, 107, 0.12)",
+      disabled: "rgba(16, 36, 31, 0.26)",
+    },
+    surface: {
+      main: "#ffffff",
+      border: "rgba(0, 60, 55, 0.12)",
+    },
+    error: "#c62828",
+    warning: "#ef6c00",
+    info: "#0277bd",
+    success: "#2e7d32",
+  },
+  {
+    name: "Graphite Amber",
+    label: "جرافيت كهرماني",
+    mode: "dark",
+    primary: "#ffc857",
+    secondary: "#7fd1ff",
+    background: "#151515",
+    paper: "#1e1e1e",
+    divider: "rgba(255, 255, 255, 0.09)",
+    backgroundImage: "linear-gradient(160deg, #151515 0%, #1b1b1b 100%)",
+    text: {
+      primary: "#f4f1ea",
+      secondary: "rgba(244, 241, 234, 0.66)",
+      disabled: "rgba(244, 241, 234, 0.4)",
+    },
+    action: {
+      active: "#f4f1ea",
+      hover: "rgba(255, 200, 87, 0.08)",
+      selected: "rgba(255, 200, 87, 0.16)",
+      disabled: "rgba(244, 241, 234, 0.3)",
+    },
+    surface: {
+      main: "#1e1e1e",
+      border: "rgba(255, 255, 255, 0.09)",
+    },
+    error: "#ff6b6b",
+    warning: "#ffb347",
+    info: "#7fd1ff",
+    success: "#5fd38d",
   },
 ];

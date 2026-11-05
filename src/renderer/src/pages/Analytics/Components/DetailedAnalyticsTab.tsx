@@ -9,7 +9,6 @@ import {
   TableBody,
   TableRow,
   TableCell,
-  IconButton,
   ToggleButton,
   ToggleButtonGroup,
   TableContainer,
@@ -25,8 +24,6 @@ import {
   exportPdfDocument,
 } from "../../utils/a4Reports";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
-import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
 import { useState, useContext, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -48,8 +45,17 @@ import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import RedeemIcon from "@mui/icons-material/Redeem";
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom";
-import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
+import { normalizeArabic } from "../../Shared/ProductAutocomplete";
+import {
+  ChartHeader,
+  DateRangeFilter,
+  ExportExcelButton,
+  chartGrid,
+  chartToolbox,
+  useChartHeight,
+  useIsPhone,
+} from "./ChartTools";
 
 type Series2 = [string, number][];
 type Series3 = [string, number, number][];
@@ -156,6 +162,9 @@ const DetailedAnalyticsTab = () => {
   const {
     palette: { mode },
   } = useTheme();
+  const isPhone = useIsPhone();
+  const chartHeight = useChartHeight(400, 300);
+  const pieHeight = isPhone ? 300 : 360;
 
   const { data, isFetching } = useQuery({
     queryKey: [
@@ -215,32 +224,11 @@ const DetailedAnalyticsTab = () => {
   // Overview: cash in vs profit series
   const overviewOptions: echarts.EChartsOption = useMemo(() => {
     return {
-      tooltip: { trigger: "axis" },
-      legend: { data: ["النقد الوارد", "الربح FIFO"] },
-      toolbox: {
-        feature: {
-          magicType: { type: ["line", "bar"] },
-          saveAsImage: {},
-          myTool: {
-            show: true,
-            title: "تصدير إلى إكسل",
-            icon: `image://${tableIcon}`,
-            onclick: () => {
-              const exportData = [
-                ["التاريخ", "النقد الوارد", "الربح FIFO"],
-                ...data.overview.cash_in_series.map(([d, cashIn], i) => [
-                  d,
-                  cashIn,
-                  data.overview.profit_series[i]?.[1] ?? 0,
-                ]),
-              ];
-              exportToExcel(exportData);
-            },
-          },
-        },
-        show: true,
-      },
-      xAxis: { type: "time" },
+      tooltip: { trigger: "axis", confine: true },
+      legend: { data: ["النقد الوارد", "الربح FIFO"], top: isPhone ? 28 : 0 },
+      toolbox: chartToolbox(),
+      grid: chartGrid(isPhone, { top: isPhone ? 64 : 56 }),
+      xAxis: { type: "time", axisLabel: { hideOverlap: true } },
       yAxis: { type: "value" },
       series: [
         {
@@ -256,39 +244,24 @@ const DetailedAnalyticsTab = () => {
         },
       ],
     };
-  }, [data.overview.cash_in_series, data.overview.profit_series]);
+  }, [data.overview.cash_in_series, data.overview.profit_series, isPhone]);
 
   // Cash flow daily: in vs out and net (computed)
   const cashflowOptions: echarts.EChartsOption = useMemo(() => {
     const net = data.cash_flow_daily.map(([d, cin, cout]) => [d, cin - cout]);
     return {
-      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-      legend: { data: ["النقد الوارد", "النقد الصادر", "صافي"] },
-      toolbox: {
-        feature: {
-          magicType: { type: ["line", "bar", "stack"] },
-          saveAsImage: {},
-          myTool: {
-            show: true,
-            title: "تصدير إلى إكسل",
-            icon: `image://${tableIcon}`,
-            onclick: () => {
-              const exportData = [
-                ["التاريخ", "النقد الوارد", "النقد الصادر", "صافي"],
-                ...data.cash_flow_daily.map(([d, cin, cout]) => [
-                  d,
-                  cin,
-                  cout,
-                  cin - cout,
-                ]),
-              ];
-              exportToExcel(exportData);
-            },
-          },
-        },
-        show: true,
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        confine: true,
       },
-      xAxis: { type: "time" },
+      legend: {
+        data: ["النقد الوارد", "النقد الصادر", "صافي"],
+        top: isPhone ? 28 : 0,
+      },
+      toolbox: chartToolbox(["line", "bar", "stack"]),
+      grid: chartGrid(isPhone, { top: isPhone ? 64 : 56 }),
+      xAxis: { type: "time", axisLabel: { hideOverlap: true } },
       yAxis: { type: "value" },
       series: [
         {
@@ -304,7 +277,7 @@ const DetailedAnalyticsTab = () => {
         { name: "صافي", type: "line", smooth: true, data: net },
       ],
     };
-  }, [data.cash_flow_daily]);
+  }, [data.cash_flow_daily, isPhone]);
 
   // Inventory net value trend
   const inventoryValueOptions: echarts.EChartsOption = useMemo(() => {
@@ -316,6 +289,7 @@ const DetailedAnalyticsTab = () => {
     return {
       tooltip: {
         trigger: "axis",
+        confine: true,
         formatter: (params: unknown) => {
           const p = Array.isArray(params) ? params[0] : params;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,8 +326,9 @@ const DetailedAnalyticsTab = () => {
           }
         },
       },
-      toolbox: { feature: { saveAsImage: {} }, show: true },
-      xAxis: { type: "time" },
+      toolbox: chartToolbox(false),
+      grid: chartGrid(isPhone),
+      xAxis: { type: "time", axisLabel: { hideOverlap: true } },
       yAxis: { type: "value" },
       series: [
         {
@@ -365,7 +340,12 @@ const DetailedAnalyticsTab = () => {
         },
       ],
     };
-  }, [data.inventory_net_value_3m, data.inventory_net_value_by_shift, viewMode]);
+  }, [
+    data.inventory_net_value_3m,
+    data.inventory_net_value_by_shift,
+    viewMode,
+    isPhone,
+  ]);
 
   // Cumulative profit (bonus insight)
   const cumulativeProfitOptions: echarts.EChartsOption = useMemo(() => {
@@ -375,29 +355,34 @@ const DetailedAnalyticsTab = () => {
       return [d, cum] as [string, number];
     });
     return {
-      tooltip: { trigger: "axis" },
-      toolbox: { feature: { saveAsImage: {} }, show: true },
-      xAxis: { type: "time" },
+      tooltip: { trigger: "axis", confine: true },
+      toolbox: chartToolbox(false),
+      grid: chartGrid(isPhone),
+      xAxis: { type: "time", axisLabel: { hideOverlap: true } },
       yAxis: { type: "value" },
       series: [
         { name: "الأرباح التراكمية", type: "line", smooth: true, data: series },
       ],
     };
-  }, [data.overview.profit_series]);
+  }, [data.overview.profit_series, isPhone]);
 
   const clientSalesPie: echarts.EChartsOption = useMemo(
     () => ({
-      tooltip: { trigger: "item" },
-      legend: {},
-      toolbox: { feature: { saveAsImage: {} }, show: true },
+      tooltip: { trigger: "item", confine: true },
+      legend: { type: "scroll" as const, bottom: 0 },
+      toolbox: chartToolbox(false),
       series: [
         {
           name: "مبيعات حسب الفئة",
           type: "pie",
           radius: ["40%", "70%"],
           avoidLabelOverlap: true,
+          label: { show: !isPhone },
           data: [
-            { value: data.clients.categories.new.total_sales, name: "عملاء جدد" },
+            {
+              value: data.clients.categories.new.total_sales,
+              name: "عملاء جدد",
+            },
             {
               value: data.clients.categories.returning_lt5.total_sales,
               name: "عملاء عائدون (<5)",
@@ -410,27 +395,31 @@ const DetailedAnalyticsTab = () => {
         },
       ],
     }),
-    [data.clients.categories],
+    [data.clients.categories, isPhone],
   );
 
   const paymentMethodPie: echarts.EChartsOption = useMemo(
     () => ({
-      tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
-      legend: {},
-      toolbox: { feature: { saveAsImage: {} }, show: true },
+      tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)", confine: true },
+      legend: { type: "scroll" as const, bottom: 0 },
+      toolbox: chartToolbox(false),
       series: [
         {
           name: "المبيعات حسب طريقة الدفع",
           type: "pie",
           radius: ["40%", "70%"],
           avoidLabelOverlap: true,
+          label: { show: !isPhone },
           data: (data.payment_method_breakdown || [])
             .filter((m) => m.total > 0)
-            .map((m) => ({ value: Number(m.total.toFixed(2)), name: m.method })),
+            .map((m) => ({
+              value: Number(m.total.toFixed(2)),
+              name: m.method,
+            })),
         },
       ],
     }),
-    [data.payment_method_breakdown],
+    [data.payment_method_breakdown, isPhone],
   );
 
   const paymentMethodAvgTicket: echarts.EChartsOption = useMemo(() => {
@@ -442,9 +431,10 @@ const DetailedAnalyticsTab = () => {
         trigger: "axis",
         axisPointer: { type: "shadow" },
         valueFormatter: (v) => formatCurrency(Number(v)),
+        confine: true,
       },
-      toolbox: { feature: { saveAsImage: {} }, show: true },
-      grid: { left: 90 },
+      toolbox: chartToolbox(false),
+      grid: chartGrid(isPhone, { right: isPhone ? 80 : 110 }),
       xAxis: { type: "value" },
       yAxis: { type: "category", data: rows.map((m) => m.method) },
       series: [
@@ -462,12 +452,13 @@ const DetailedAnalyticsTab = () => {
         },
       ],
     };
-  }, [data.payment_method_breakdown]);
+  }, [data.payment_method_breakdown, isPhone]);
 
   const clientCountsBar: echarts.EChartsOption = useMemo(
     () => ({
-      tooltip: { trigger: "axis" },
-      toolbox: { feature: { saveAsImage: {} }, show: true },
+      tooltip: { trigger: "axis", confine: true },
+      toolbox: chartToolbox(false),
+      grid: chartGrid(isPhone),
       xAxis: { type: "category", data: ["جدد", "عائدون (<5)", "أوفياء (≥5)"] },
       yAxis: { type: "value" },
       series: [
@@ -482,7 +473,7 @@ const DetailedAnalyticsTab = () => {
         },
       ],
     }),
-    [data.clients.categories],
+    [data.clients.categories, isPhone],
   );
 
   const handleExportToPdf = async () => {
@@ -512,21 +503,38 @@ const DetailedAnalyticsTab = () => {
   };
 
   return (
-    <Grid2 container spacing={2}>
+    <Grid2
+      container
+      spacing={{ xs: 1.5, sm: 2 }}
+      sx={{
+        // Phones: two stat cards per row — drop the big icon and let the
+        // amount wrap instead of being clipped.
+        "& .MuiCard-root .MuiSvgIcon-fontSizeLarge": {
+          display: { xs: "none", sm: "inline-block" },
+        },
+        "& .MuiCard-root .MuiTypography-h6": {
+          fontSize: { xs: "1.05rem", sm: "1.25rem" },
+          overflowWrap: "anywhere",
+        },
+      }}
+    >
       <AlertMessage message={msg} setMessage={setMsg} />
       <Grid2 size={12}>
-        <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
+        <Paper elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
           <Box
             sx={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              gap: 2,
-              mb: 1,
+              gap: 1.5,
+              mb: 2,
               flexWrap: "wrap",
             }}
           >
-            <Typography variant="h6">
+            <Typography
+              variant="h6"
+              sx={{ fontSize: { xs: "1.1rem", sm: "1.25rem" } }}
+            >
               التحليلات التفصيلية للمدة المحددة
             </Typography>
             <Button
@@ -534,36 +542,19 @@ const DetailedAnalyticsTab = () => {
               startIcon={<PictureAsPdfIcon />}
               onClick={handleExportToPdf}
               disabled={isFetching}
+              sx={{ minHeight: 40 }}
             >
               تصدير PDF
             </Button>
           </Box>
-          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-            <LocalizationProvider
-              dateAdapter={AdapterDayjs}
-              adapterLocale="ar-sa"
-            >
-              <DatePicker
-                label="من"
-                value={startDate}
-                onChange={(val) => val && setStartDate(val)}
-                slotProps={{ textField: { fullWidth: true } }}
-                disableFuture
-                disabled={isFetching}
-              />
-            </LocalizationProvider>
-            <LocalizationProvider
-              dateAdapter={AdapterDayjs}
-              adapterLocale="ar-sa"
-            >
-              <DatePicker
-                label="إلى"
-                value={endDate}
-                onChange={(val) => val && setEndDate(val)}
-                slotProps={{ textField: { fullWidth: true } }}
-                disabled={isFetching}
-              />
-            </LocalizationProvider>
+          <Box sx={{ mb: 2 }}>
+            <DateRangeFilter
+              startDate={startDate}
+              endDate={endDate}
+              setStartDate={setStartDate}
+              setEndDate={setEndDate}
+              disabled={isFetching}
+            />
           </Box>
           <Box sx={{ mb: 2 }}>
             <Autocomplete
@@ -576,19 +567,19 @@ const DetailedAnalyticsTab = () => {
                 option.name + " - " + option.phone + " - " + option.type
               }
               isOptionEqualToValue={(option, value) => option.id === value.id}
-              filterOptions={(options, params) =>
-                options.filter(
+              filterOptions={(options, params) => {
+                const q = normalizeArabic(params.inputValue);
+                if (!q) return options;
+                return options.filter(
                   (option) =>
-                    option.name
-                      .toLowerCase()
-                      .includes(params.inputValue.toLowerCase()) ||
-                    option.phone.includes(params.inputValue),
-                )
-              }
+                    normalizeArabic(option.name).includes(q) ||
+                    (option.phone || "").includes(params.inputValue.trim()),
+                );
+              }}
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  label="تصفية حسب طرف معيّن (كل الأطراف افتراضياً)"
+                  label="تصفية حسب عميل أو مورد (الكل افتراضياً)"
                   variant="outlined"
                 />
               )}
@@ -613,6 +604,7 @@ const DetailedAnalyticsTab = () => {
               onChange={(_e, value) => value && setViewMode(value)}
               size="small"
               disabled={isFetching}
+              sx={{ "& .MuiToggleButton-root": { minHeight: 40, px: 2 } }}
             >
               <ToggleButton value="daily">يومي</ToggleButton>
               <ToggleButton value="shift">حسب الشيفتات</ToggleButton>
@@ -628,7 +620,7 @@ const DetailedAnalyticsTab = () => {
         </Typography>
       </Grid2>
       <Grid2 container size={12} spacing={2}>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="إجمالي المبيعات"
             value={formatCurrency(data.cards.total_sales)}
@@ -638,7 +630,7 @@ const DetailedAnalyticsTab = () => {
             info="صافي مبيعات الفواتير المدفوعة خلال الفترة: فواتير البيع ناقص المرتجعات. لا يشمل البيع الآجل أو التقسيط أو التحويلات بين الفروع. (البيع الآجل يُحتسب هنا تلقائياً بمجرد تحصيله لأنه يتحول إلى فاتورة بيع.)"
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="ربح FIFO"
             value={formatCurrency(data.cards.total_profit_fifo)}
@@ -648,7 +640,7 @@ const DetailedAnalyticsTab = () => {
             info="ربح البضاعة المباعة (سعر البيع ناقص تكلفة الشراء الفعلية بطريقة الوارد أولاً صادر أولاً). فواتير البيع فقط. أرباح الآجل والتقسيط لا تدخل هنا حتى تتحقق."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="المشتريات"
             value={formatCurrency(data.cards.purchases)}
@@ -658,7 +650,7 @@ const DetailedAnalyticsTab = () => {
             info="صافي مشتريات البضاعة من المورّدين خلال الفترة (شراء ناقص مرتجع شراء). لا يشمل التحويلات بين الفروع. لا تُطرح من صافي الربح لأنها مدرجة أصلاً ضمن تكلفة البضاعة."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="مصروفات تشغيلية"
             value={formatCurrency(data.cards.operating_expenses)}
@@ -668,7 +660,7 @@ const DetailedAnalyticsTab = () => {
             info="المصروفات النقدية خلال الفترة (رواتب ومصاريف يدوية). لا تشمل شراء البضاعة ولا التحويلات بين الفروع ولا مسحوبات المالك."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="نقد فائض"
             value={formatCurrency(data.cards.free_cash)}
@@ -678,7 +670,7 @@ const DetailedAnalyticsTab = () => {
             info="نقد وارد يدوياً غير مرتبط بأي فاتورة، وليس من فرع آخر ولا من المالك (مثل مبلغ زائد يُوجد في الدرج). يُعتبر ربحاً صافياً ويُضاف إلى صافي الربح."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="صافي الربح"
             value={formatCurrency(data.cards.net_profit)}
@@ -697,7 +689,7 @@ const DetailedAnalyticsTab = () => {
         </Typography>
       </Grid2>
       <Grid2 container size={12} spacing={2}>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="آجل: مستحق التحصيل"
             value={formatCurrency(data.cards.bnpl_outstanding)}
@@ -707,7 +699,7 @@ const DetailedAnalyticsTab = () => {
             info="قيمة فواتير البيع الآجل التي تمت في الفترة ولم تُحصَّل بعد (المال الذي سيدخل عند السداد). بمجرد التحصيل تتحول الفاتورة إلى بيع وتنتقل تلقائياً إلى إجمالي المبيعات وربح FIFO."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="آجل: ربح متوقع"
             value={formatCurrency(data.cards.bnpl_expected_profit)}
@@ -726,7 +718,7 @@ const DetailedAnalyticsTab = () => {
         </Typography>
       </Grid2>
       <Grid2 container size={12} spacing={2}>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="تقسيط: قيمة المبيعات"
             value={formatCurrency(data.cards.installment_principal)}
@@ -736,7 +728,7 @@ const DetailedAnalyticsTab = () => {
             info="إجمالي قيمة البضاعة المباعة بالتقسيط في الفترة (المقدَّم + المتبقّي). محسوبة من أسعار المنتجات."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="تقسيط: محصّل"
             value={formatCurrency(data.cards.installment_collected)}
@@ -746,7 +738,7 @@ const DetailedAnalyticsTab = () => {
             info="ما تم تحصيله حتى الآن من أقساط الفترة (المقدَّم + الأقساط المسددة)، حتى لو سُددت بعد انتهاء الفترة."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="تقسيط: متبقٍّ للتحصيل"
             value={formatCurrency(data.cards.installment_remaining)}
@@ -756,7 +748,7 @@ const DetailedAnalyticsTab = () => {
             info="المال الذي سيدخل لاحقاً من أقساط الفترة = قيمة المبيعات ناقص المحصّل."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="تقسيط: ربح متوقع"
             value={formatCurrency(data.cards.installment_expected_profit)}
@@ -775,7 +767,7 @@ const DetailedAnalyticsTab = () => {
         </Typography>
       </Grid2>
       <Grid2 container size={12} spacing={2}>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="تحويلات بين الفروع (صافي)"
             value={formatCurrency(data.cards.interstore_net)}
@@ -794,7 +786,7 @@ const DetailedAnalyticsTab = () => {
         </Typography>
       </Grid2>
       <Grid2 container size={12} spacing={2}>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="إيداعات المالك"
             value={formatCurrency(data.cards.owner_in)}
@@ -804,7 +796,7 @@ const DetailedAnalyticsTab = () => {
             info="إجمالي ما أودعه المالك في المحل خلال الفترة. مستقل عن الربح."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="مسحوبات المالك"
             value={formatCurrency(data.cards.owner_out)}
@@ -814,13 +806,15 @@ const DetailedAnalyticsTab = () => {
             info="إجمالي ما سحبه المالك من المحل خلال الفترة. مستقل عن الربح."
           />
         </Grid2>
-        <Grid2 size={3}>
+        <Grid2 size={{ xs: 6, md: 3 }}>
           <AnalyticsCard
             title="صافي حركة المالك"
             value={formatCurrency(data.cards.owner_net)}
             color="text.secondary"
             loading={isFetching}
-            icon={<AccountBalanceWalletIcon fontSize="large" color="disabled" />}
+            icon={
+              <AccountBalanceWalletIcon fontSize="large" color="disabled" />
+            }
             info="الإيداعات ناقص المسحوبات. القيمة السالبة تعني أن المالك سحب أكثر مما أودع خلال الفترة."
           />
         </Grid2>
@@ -828,13 +822,31 @@ const DetailedAnalyticsTab = () => {
 
       {/* Overview */}
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            نظرة عامة: النقد الوارد مقابل ربح FIFO
-          </Typography>
+        <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
+          <ChartHeader
+            title="نظرة عامة: النقد الوارد مقابل ربح FIFO"
+            actions={
+              <ExportExcelButton
+                disabled={data.overview.cash_in_series.length === 0}
+                onClick={() =>
+                  exportToExcel(
+                    [
+                      ["التاريخ", "النقد الوارد", "الربح FIFO"],
+                      ...data.overview.cash_in_series.map(([d, cashIn], i) => [
+                        d,
+                        cashIn,
+                        data.overview.profit_series[i]?.[1] ?? 0,
+                      ]),
+                    ],
+                    "النقد الوارد والربح",
+                  )
+                }
+              />
+            }
+          />
           <EChartsReact
             option={overviewOptions}
-            style={{ height: 400 }}
+            style={{ height: chartHeight }}
             theme={mode}
             notMerge
           />
@@ -843,114 +855,122 @@ const DetailedAnalyticsTab = () => {
 
       {/* Top Products table */}
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <Typography variant="h6" gutterBottom>
-              أفضل 5 منتجات
-            </Typography>
-            <IconButton
-              onClick={() => {
-                const exportData = [
-                  [
-                    "المنتج",
-                    "الكمية المباعة",
-                    "إجمالي المبيعات",
-                    "إجمالي ربح FIFO",
-                    "الهامش المحقق %",
-                    "الهامش بسعر اليوم %",
-                    "سعر حالي",
-                    "متوسط التكلفة",
-                  ],
-                  ...data.top_products.map((p) => [
-                    p.name,
-                    p.total_units_sold,
-                    p.total_sales_value,
-                    p.total_profit_fifo,
-                    p.realized_margin_pct,
-                    p.current_price_margin_pct,
-                    p.current_price,
-                    p.avg_cost_per_unit,
-                  ]),
-                ];
-                exportToExcel(exportData);
-              }}
-            >
-              <img src={tableIcon} width={24} height={24} />
-            </IconButton>
+        <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
+          <Box sx={{ mb: 1 }}>
+            <ChartHeader
+              title="أفضل 5 منتجات"
+              actions={
+                <ExportExcelButton
+                  disabled={data.top_products.length === 0}
+                  onClick={() => {
+                    const exportData = [
+                      [
+                        "المنتج",
+                        "الكمية المباعة",
+                        "إجمالي المبيعات",
+                        "إجمالي ربح FIFO",
+                        "الهامش المحقق %",
+                        "الهامش بسعر اليوم %",
+                        "سعر حالي",
+                        "متوسط التكلفة",
+                      ],
+                      ...data.top_products.map((p) => [
+                        p.name,
+                        p.total_units_sold,
+                        p.total_sales_value,
+                        p.total_profit_fifo,
+                        p.realized_margin_pct,
+                        p.current_price_margin_pct,
+                        p.current_price,
+                        p.avg_cost_per_unit,
+                      ]),
+                    ];
+                    exportToExcel(exportData, "أفضل المنتجات");
+                  }}
+                />
+              }
+            />
           </Box>
 
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>المنتج</TableCell>
-                <TableCell align="right">الكمية المباعة</TableCell>
-                <TableCell align="right">إجمالي المبيعات</TableCell>
-                <TableCell align="right">إجمالي ربح FIFO</TableCell>
-                <TableCell align="right">الهامش المحقق %</TableCell>
-                <TableCell align="right">الهامش بسعر اليوم %</TableCell>
-                <TableCell align="right">سعر حالي</TableCell>
-                <TableCell align="right">متوسط التكلفة</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.top_products.map((p) => (
-                <TableRow key={p.product_id}>
-                  <TableCell>{p.name}</TableCell>
-                  <TableCell align="right">{p.total_units_sold}</TableCell>
-                  <TableCell align="right">
-                    {formatCurrency(p.total_sales_value)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatCurrency(p.total_profit_fifo)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {p.realized_margin_pct.toFixed(1)}%
-                  </TableCell>
-                  <TableCell align="right">
-                    {p.current_price_margin_pct.toFixed(1)}%
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatCurrency(p.current_price)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatCurrency(p.avg_cost_per_unit)}
-                  </TableCell>
+          <TableContainer
+            component={Paper}
+            variant="outlined"
+            sx={{ overflowX: "auto" }}
+          >
+            <Table size="small" sx={{ minWidth: 760 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>المنتج</TableCell>
+                  <TableCell align="right">الكمية المباعة</TableCell>
+                  <TableCell align="right">إجمالي المبيعات</TableCell>
+                  <TableCell align="right">إجمالي ربح FIFO</TableCell>
+                  <TableCell align="right">الهامش المحقق %</TableCell>
+                  <TableCell align="right">الهامش بسعر اليوم %</TableCell>
+                  <TableCell align="right">سعر حالي</TableCell>
+                  <TableCell align="right">متوسط التكلفة</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {data.top_products.map((p) => (
+                  <TableRow key={p.product_id}>
+                    <TableCell>{p.name}</TableCell>
+                    <TableCell align="right">{p.total_units_sold}</TableCell>
+                    <TableCell align="right">
+                      {formatCurrency(p.total_sales_value)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {formatCurrency(p.total_profit_fifo)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {p.realized_margin_pct.toFixed(1)}%
+                    </TableCell>
+                    <TableCell align="right">
+                      {p.current_price_margin_pct.toFixed(1)}%
+                    </TableCell>
+                    <TableCell align="right">
+                      {formatCurrency(p.current_price)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {formatCurrency(p.avg_cost_per_unit)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {data.top_products.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} align="center">
+                      لا توجد مبيعات في هذه الفترة
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </Card>
       </Grid2>
 
       {/* Clients analytics */}
       <Grid2 container size={12} spacing={2}>
-        <Grid2 size={6}>
-          <Card elevation={3} sx={{ p: 2, height: 420 }}>
+        <Grid2 size={{ xs: 12, md: 6 }}>
+          <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, height: "100%" }}>
             <Typography variant="h6" gutterBottom>
               مبيعات حسب فئات العملاء
             </Typography>
             <EChartsReact
               option={clientSalesPie}
-              style={{ height: 360 }}
+              style={{ height: pieHeight }}
               theme={mode}
               notMerge
             />
           </Card>
         </Grid2>
-        <Grid2 size={6}>
-          <Card elevation={3} sx={{ p: 2, height: 420 }}>
+        <Grid2 size={{ xs: 12, md: 6 }}>
+          <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, height: "100%" }}>
             <Typography variant="h6" gutterBottom>
               عدد العملاء حسب الفئة
             </Typography>
             <EChartsReact
               option={clientCountsBar}
-              style={{ height: 360 }}
+              style={{ height: pieHeight }}
               theme={mode}
               notMerge
             />
@@ -960,12 +980,50 @@ const DetailedAnalyticsTab = () => {
 
       {/* Top Clients Table */}
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            ترتيب العملاء حسب المشتريات
-          </Typography>
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
+        <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
+          <Box sx={{ mb: 1 }}>
+            <ChartHeader
+              title="ترتيب العملاء حسب المشتريات"
+              actions={
+                <ExportExcelButton
+                  disabled={data.clients.all_clients.length === 0}
+                  onClick={() =>
+                    exportToExcel(
+                      [
+                        [
+                          "#",
+                          "اسم العميل",
+                          "رقم الهاتف",
+                          "إجمالي المشتريات",
+                          "عدد الفواتير",
+                          "الفئة",
+                        ],
+                        ...data.clients.all_clients.map((c, i) => [
+                          i + 1,
+                          c.name,
+                          c.phone || "",
+                          c.total,
+                          c.bills_count,
+                          c.category === "new"
+                            ? "جديد"
+                            : c.category === "returning_lt5"
+                              ? "عائد"
+                              : "وفي",
+                        ]),
+                      ],
+                      "ترتيب العملاء",
+                    )
+                  }
+                />
+              }
+            />
+          </Box>
+          <TableContainer
+            component={Paper}
+            variant="outlined"
+            sx={{ overflowX: "auto" }}
+          >
+            <Table size="small" sx={{ minWidth: 560 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>#</TableCell>
@@ -1036,6 +1094,12 @@ const DetailedAnalyticsTab = () => {
               setClientsPage(0);
             }}
             labelRowsPerPage="عدد الصفوف:"
+            sx={{
+              "& .MuiTablePagination-toolbar": {
+                flexWrap: "wrap",
+                px: { xs: 0, md: 2 },
+              },
+            }}
             labelDisplayedRows={({ from, to, count }) =>
               `${from}-${to} من ${count !== -1 ? count : `أكثر من ${to}`}`
             }
@@ -1060,27 +1124,33 @@ const DetailedAnalyticsTab = () => {
               </Grid2>
 
               <Grid2 container size={12} spacing={2}>
-                <Grid2 size={5}>
-                  <Card elevation={3} sx={{ p: 2, height: 420 }}>
+                <Grid2 size={{ xs: 12, md: 5 }}>
+                  <Card
+                    elevation={3}
+                    sx={{ p: { xs: 1.5, sm: 2 }, height: "100%" }}
+                  >
                     <Typography variant="h6" gutterBottom>
                       المبيعات حسب طريقة الدفع
                     </Typography>
                     <EChartsReact
                       option={paymentMethodPie}
-                      style={{ height: 360 }}
+                      style={{ height: pieHeight }}
                       theme={mode}
                       notMerge
                     />
                   </Card>
                 </Grid2>
-                <Grid2 size={7}>
-                  <Card elevation={3} sx={{ p: 2, height: 420 }}>
+                <Grid2 size={{ xs: 12, md: 7 }}>
+                  <Card
+                    elevation={3}
+                    sx={{ p: { xs: 1.5, sm: 2 }, height: "100%" }}
+                  >
                     <Typography variant="h6" gutterBottom>
                       متوسط قيمة الفاتورة حسب طريقة الدفع
                     </Typography>
                     <EChartsReact
                       option={paymentMethodAvgTicket}
-                      style={{ height: 360 }}
+                      style={{ height: pieHeight }}
                       theme={mode}
                       notMerge
                     />
@@ -1089,12 +1159,16 @@ const DetailedAnalyticsTab = () => {
               </Grid2>
 
               <Grid2 size={12}>
-                <Card elevation={3} sx={{ p: 2, mb: 3 }}>
+                <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
                   <Typography variant="h6" gutterBottom>
                     تفاصيل طرق الدفع
                   </Typography>
-                  <TableContainer component={Paper} variant="outlined">
-                    <Table size="small">
+                  <TableContainer
+                    component={Paper}
+                    variant="outlined"
+                    sx={{ overflowX: "auto" }}
+                  >
+                    <Table size="small" sx={{ minWidth: 480 }}>
                       <TableHead>
                         <TableRow>
                           <TableCell>طريقة الدفع</TableCell>
@@ -1135,13 +1209,32 @@ const DetailedAnalyticsTab = () => {
 
       {/* Cash flow daily */}
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            التدفق النقدي اليومي
-          </Typography>
+        <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
+          <ChartHeader
+            title="التدفق النقدي اليومي"
+            actions={
+              <ExportExcelButton
+                disabled={data.cash_flow_daily.length === 0}
+                onClick={() =>
+                  exportToExcel(
+                    [
+                      ["التاريخ", "النقد الوارد", "النقد الصادر", "صافي"],
+                      ...data.cash_flow_daily.map(([d, cin, cout]) => [
+                        d,
+                        cin,
+                        cout,
+                        cin - cout,
+                      ]),
+                    ],
+                    "التدفق النقدي اليومي",
+                  )
+                }
+              />
+            }
+          />
           <EChartsReact
             option={cashflowOptions}
-            style={{ height: 400 }}
+            style={{ height: chartHeight }}
             theme={mode}
             notMerge
           />
@@ -1150,7 +1243,7 @@ const DetailedAnalyticsTab = () => {
 
       {/* Inventory net value trend */}
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2, mb: 3 }}>
+        <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 }, mb: 1 }}>
           <Typography variant="h6">قيمة المخزون الصافية</Typography>
           <Typography variant="caption" color="text.secondary" gutterBottom>
             قيمة على مستوى المتجر بالكامل ولا تتأثر بتصفية الطرف.
@@ -1158,7 +1251,7 @@ const DetailedAnalyticsTab = () => {
           <EChartsReact
             key={`inventory-${viewMode}`}
             option={inventoryValueOptions}
-            style={{ height: 400 }}
+            style={{ height: chartHeight }}
             theme={mode}
             notMerge
           />
@@ -1167,13 +1260,13 @@ const DetailedAnalyticsTab = () => {
 
       {/* Bonus: cumulative profit */}
       <Grid2 size={12}>
-        <Card elevation={3} sx={{ p: 2 }}>
+        <Card elevation={3} sx={{ p: { xs: 1.5, sm: 2 } }}>
           <Typography variant="h6" gutterBottom>
             الأرباح التراكمية
           </Typography>
           <EChartsReact
             option={cumulativeProfitOptions}
-            style={{ height: 400 }}
+            style={{ height: chartHeight }}
             theme={mode}
             notMerge
           />

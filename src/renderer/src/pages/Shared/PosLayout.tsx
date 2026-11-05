@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { PackagesPolicy } from "./packages";
 
 // ─── POS layout (UI density / arrangement) modes ───────────────────────────
 // Applies to the four cart pages (Sell, AdminSell, Buy, MoveProducts). The
@@ -20,7 +21,12 @@ export const POS_MODE_OPTIONS: { value: PosMode; label: string }[] = [
   { value: "split-compact", label: "تقسيم مدمج" },
 ];
 
-export const POS_PAGES: PosPage[] = ["Sell", "AdminSell", "Buy", "MoveProducts"];
+export const POS_PAGES: PosPage[] = [
+  "Sell",
+  "AdminSell",
+  "Buy",
+  "MoveProducts",
+];
 
 export const POS_PAGE_LABELS: Record<PosPage, string> = {
   Sell: "المبيعات",
@@ -29,10 +35,29 @@ export const POS_PAGE_LABELS: Record<PosPage, string> = {
   MoveProducts: "نقل المنتجات",
 };
 
-export const VISIBILITY_OPTIONS: { value: VisibilityPolicy; label: string }[] = [
-  { value: "ask", label: "اختيار في الصفحة" },
-  { value: "always", label: "إظهار دائماً" },
-  { value: "never", label: "إخفاء دائماً" },
+export const VISIBILITY_OPTIONS: { value: VisibilityPolicy; label: string }[] =
+  [
+    { value: "ask", label: "اختيار في الصفحة" },
+    { value: "always", label: "إظهار دائماً" },
+    { value: "never", label: "إخفاء دائماً" },
+  ];
+
+export const PACKAGES_POLICY_OPTIONS: {
+  value: PackagesPolicy;
+  label: string;
+  help: string;
+}[] = [
+  {
+    value: "suggest",
+    label: "اقتراح",
+    help: "عند وصول الكمية لحجم عبوة يظهر زر لتحويلها بضغطة",
+  },
+  {
+    value: "auto",
+    label: "تلقائي",
+    help: "تتحول الوحدات إلى عبوات تلقائياً عندما يكون ذلك أرخص للعميل",
+  },
+  { value: "off", label: "إيقاف", help: "لا اقتراحات ولا تحويل" },
 ];
 
 export interface PosDensity {
@@ -100,6 +125,7 @@ export const getPosDensity = (mode: PosMode): PosDensity => {
 const MODES_KEY = "posUiModes";
 const PARTIES_POLICY_KEY = "partiesPolicy";
 const PAYMENTS_POLICY_KEY = "paymentsPolicy";
+const PACKAGES_POLICY_KEY = "packagesPolicy";
 // Synchronous mirror of the above so the FIRST render already has the saved
 // values. Without it the page renders once in "normal" and then snaps to the
 // saved mode when the async ipc read resolves — a visible flicker.
@@ -111,6 +137,7 @@ interface PosUiCache {
   modes?: Record<string, PosMode>;
   partiesPolicy?: VisibilityPolicy;
   paymentsPolicy?: VisibilityPolicy;
+  packagesPolicy?: PackagesPolicy;
 }
 
 const readCache = (): PosUiCache => {
@@ -148,9 +175,7 @@ export const savePolicy = async (
   value: VisibilityPolicy,
 ) => {
   writeCache(
-    which === "parties"
-      ? { partiesPolicy: value }
-      : { paymentsPolicy: value },
+    which === "parties" ? { partiesPolicy: value } : { paymentsPolicy: value },
   );
   try {
     await ipc()?.invoke(
@@ -163,33 +188,47 @@ export const savePolicy = async (
   }
 };
 
+/** Persist the cart packages policy to the durable store AND the sync cache. */
+export const savePackagesPolicy = async (value: PackagesPolicy) => {
+  writeCache({ packagesPolicy: value });
+  try {
+    await ipc()?.invoke("set", PACKAGES_POLICY_KEY, value);
+  } catch {
+    /* ignore */
+  }
+};
+
 /** Read everything from the durable store, refreshing the sync cache. */
 export const loadPosUi = async (): Promise<{
   modes: Record<string, PosMode>;
   partiesPolicy: VisibilityPolicy;
   paymentsPolicy: VisibilityPolicy;
+  packagesPolicy: PackagesPolicy;
 }> => {
   const cache = readCache();
   let modes = cache.modes || {};
   let partiesPolicy = cache.partiesPolicy || "ask";
   let paymentsPolicy = cache.paymentsPolicy || "ask";
+  let packagesPolicy: PackagesPolicy = cache.packagesPolicy || "suggest";
   try {
     const bridge = ipc();
     if (bridge) {
-      const [m, pp, payp] = await Promise.all([
+      const [m, pp, payp, pkp] = await Promise.all([
         bridge.invoke("get", MODES_KEY),
         bridge.invoke("get", PARTIES_POLICY_KEY),
         bridge.invoke("get", PAYMENTS_POLICY_KEY),
+        bridge.invoke("get", PACKAGES_POLICY_KEY),
       ]);
       if (m && typeof m === "object") modes = m;
       if (pp) partiesPolicy = pp;
       if (payp) paymentsPolicy = payp;
-      writeCache({ modes, partiesPolicy, paymentsPolicy });
+      if (pkp) packagesPolicy = pkp;
+      writeCache({ modes, partiesPolicy, paymentsPolicy, packagesPolicy });
     }
   } catch {
     /* ignore */
   }
-  return { modes, partiesPolicy, paymentsPolicy };
+  return { modes, partiesPolicy, paymentsPolicy, packagesPolicy };
 };
 
 /** Read the per-page mode map + the two visibility policies. Initial state
@@ -204,16 +243,24 @@ export const usePosUi = (page: PosPage) => {
   const [paymentsPolicy, setPaymentsPolicy] = useState<VisibilityPolicy>(
     () => readCache().paymentsPolicy || "ask",
   );
+  const [packagesPolicy, setPackagesPolicy] = useState<PackagesPolicy>(
+    () => readCache().packagesPolicy || "suggest",
+  );
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { modes, partiesPolicy: pp, paymentsPolicy: payp } =
-        await loadPosUi();
+      const {
+        modes,
+        partiesPolicy: pp,
+        paymentsPolicy: payp,
+        packagesPolicy: pkp,
+      } = await loadPosUi();
       if (!active) return;
       setModeState(modes[page] || "normal");
       setPartiesPolicy(pp);
       setPaymentsPolicy(payp);
+      setPackagesPolicy(pkp);
     })();
     return () => {
       active = false;
@@ -234,6 +281,7 @@ export const usePosUi = (page: PosPage) => {
     density: getPosDensity(mode),
     partiesPolicy,
     paymentsPolicy,
+    packagesPolicy,
   };
 };
 
@@ -282,7 +330,11 @@ export const posCartCardSx = (d: PosDensity) =>
  * remaining height; otherwise it uses the per-mode cart height. */
 export const posCartScrollSx = (d: PosDensity) =>
   d.isSplit
-    ? { flex: { md: 1 }, minHeight: { md: 0 }, height: { xs: d.cartHeight, md: "auto" } }
+    ? {
+        flex: { md: 1 },
+        minHeight: { md: 0 },
+        height: { xs: d.cartHeight, md: "auto" },
+      }
     : { height: d.cartHeight };
 
 /** Grid2 `size` value: a column count or a per-breakpoint map. */

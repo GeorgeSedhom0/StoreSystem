@@ -13,7 +13,7 @@ const Users = () => {
       <Paper
         elevation={2}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
           background:
@@ -26,7 +26,11 @@ const Users = () => {
           <PersonAddIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
           <Typography
             variant="h4"
-            sx={{ fontWeight: 600, color: "primary.main" }}
+            sx={{
+              fontWeight: 600,
+              color: "primary.main",
+              fontSize: { xs: "1.4rem", sm: "2.125rem" },
+            }}
           >
             إدارة المستخدمين
           </Typography>
@@ -36,13 +40,13 @@ const Users = () => {
         </Typography>
       </Paper>
 
-      <Grid2 container spacing={4}>
+      <Grid2 container spacing={{ xs: 2, sm: 4 }}>
         {/* Add New User Section */}
         <Grid2 size={{ xs: 12, lg: 6 }}>
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
@@ -64,7 +68,7 @@ const Users = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",

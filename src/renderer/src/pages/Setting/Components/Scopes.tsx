@@ -13,10 +13,13 @@ import {
   Chip,
   Divider,
 } from "@mui/material";
+import { PAGE_LABELS } from "@renderer/pageLabels";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
 import AlertMessage, { AlertMsg } from "../../Shared/AlertMessage";
+import useConfirm from "../../Shared/useConfirm";
+import { apiError } from "../../utils/errors";
 import { Scope } from "../../utils/types";
 import { LoadingButton } from "@mui/lab";
 import {
@@ -60,6 +63,23 @@ const updateScope = async ({
   }
 };
 
+const getUsers = async () => {
+  const { data } =
+    await axios.get<{ id: number; username: string; scope_id: number }[]>(
+      "/users",
+    );
+  return data;
+};
+
+/** Server errors here are raw DB messages; translate the common ones. */
+const scopeError = (e: unknown, fallback: string) => {
+  const raw = String((e as any)?.response?.data?.detail ?? "");
+  if (raw.includes("scopes_name_key")) return "يوجد صلاحية بنفس الاسم بالفعل";
+  if (raw.includes("foreign key") || raw.includes("violates"))
+    return "لا يمكن حذف صلاحية مستخدمة من قبل مستخدمين. غيّر صلاحية هؤلاء المستخدمين أولاً";
+  return apiError(e, fallback);
+};
+
 const deleteScope = async (id: number) => {
   await axios.delete("/scope", {
     params: { id },
@@ -73,6 +93,7 @@ const Scopes = () => {
     pages: [],
   });
   const [msg, setMsg] = useState<AlertMsg>({ type: "", text: "" });
+  const [confirm, confirmDialog] = useConfirm();
 
   const {
     data: scopes,
@@ -90,15 +111,26 @@ const Scopes = () => {
     initialData: [],
   });
 
+  const { data: users } = useQuery({
+    queryKey: ["users"],
+    queryFn: getUsers,
+    initialData: [],
+  });
+
   const { mutate: addScope, isPending: isAddingScope } = useMutation({
     mutationFn: updateScope,
-    onSuccess: () => {
-      setMsg({ type: "success", text: "تم اضافة الصلاحية بنجاح" });
+    onSuccess: (_data, vars) => {
+      setMsg({
+        type: "success",
+        text: vars.newScope
+          ? "تمت إضافة الصلاحية بنجاح"
+          : "تم حفظ تعديلات الصلاحية بنجاح",
+      });
       refetchScopes();
       setSelectedScope({ id: -1, name: "", pages: [] });
     },
-    onError: () => {
-      setMsg({ type: "error", text: "حدث خطأ ما" });
+    onError: (e) => {
+      setMsg({ type: "error", text: scopeError(e, "تعذر حفظ الصلاحية") });
     },
   });
 
@@ -109,19 +141,54 @@ const Scopes = () => {
       refetchScopes();
       setSelectedScope({ id: -1, name: "", pages: [] });
     },
-    onError: () => {
-      setMsg({ type: "error", text: "حدث خطأ ما" });
+    onError: (e) => {
+      setMsg({ type: "error", text: scopeError(e, "تعذر حذف الصلاحية") });
     },
   });
+
+  const handleDelete = async () => {
+    const usersWithScope = users.filter((u) => u.scope_id === selectedScope.id);
+    const ok = await confirm({
+      title: `حذف الصلاحية «${selectedScope.name}»؟`,
+      message:
+        usersWithScope.length > 0
+          ? `هذه الصلاحية مستخدمة من ${usersWithScope.length} مستخدم (${usersWithScope
+              .map((u) => u.username)
+              .join("، ")}). غيّر صلاحيتهم أولاً، وإلا سيفشل الحذف.`
+          : "لن يمكن التراجع عن الحذف.",
+      confirmText: "حذف",
+      danger: true,
+    });
+    if (ok) removeScope(selectedScope.id);
+  };
+
+  const handleSave = () => {
+    const name = selectedScope.name.trim();
+    if (!name) {
+      setMsg({ type: "error", text: "اكتب اسم الصلاحية" });
+      return;
+    }
+    if (selectedScope.pages.length === 0) {
+      setMsg({ type: "error", text: "اختر صفحة واحدة على الأقل" });
+      return;
+    }
+    addScope({
+      name,
+      pages: selectedScope.pages.map((page) => page.toString()),
+      id: selectedScope.id !== -1 ? selectedScope.id : undefined,
+      newScope: selectedScope.id === -1,
+    });
+  };
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       <AlertMessage message={msg} setMessage={setMsg} />
+      {confirmDialog}
 
       {/* Header */}
       <Paper
         elevation={2}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
           background:
@@ -134,7 +201,11 @@ const Scopes = () => {
           <SecurityIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
           <Typography
             variant="h4"
-            sx={{ fontWeight: 600, color: "primary.main" }}
+            sx={{
+              fontWeight: 600,
+              color: "primary.main",
+              fontSize: { xs: "1.4rem", sm: "2.125rem" },
+            }}
           >
             إدارة الصلاحيات
           </Typography>
@@ -164,7 +235,7 @@ const Scopes = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
@@ -176,7 +247,7 @@ const Scopes = () => {
             <FormControl fullWidth>
               <InputLabel>الصلاحية</InputLabel>
               <Select
-                value={selectedScope?.id || null}
+                value={selectedScope?.id ?? -1}
                 label="الصلاحية"
                 onChange={(e) => {
                   if (!e.target.value) return;
@@ -225,7 +296,7 @@ const Scopes = () => {
             <Paper
               elevation={1}
               sx={{
-                p: 3,
+                p: { xs: 2, sm: 3 },
                 borderRadius: 3,
                 border: "1px solid",
                 borderColor: "divider",
@@ -236,6 +307,17 @@ const Scopes = () => {
                   ? "إضافة صلاحية جديدة"
                   : "تعديل الصلاحية"}
               </Typography>
+              {selectedScope.id !== -1 && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mt: -2, mb: 2 }}
+                >
+                  مستخدمة من{" "}
+                  {users.filter((u) => u.scope_id === selectedScope.id).length}{" "}
+                  مستخدم
+                </Typography>
+              )}
 
               <Box sx={{ mb: 3 }}>
                 <TextField
@@ -268,13 +350,16 @@ const Scopes = () => {
                 }}
               >
                 <PageIcon sx={{ color: "primary.main" }} />
-                الصفحات المتاحة
+                الصفحات المتاحة ({selectedScope.pages.length}/{pages.length})
               </Typography>
 
               <Box
                 sx={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    sm: "repeat(auto-fill, minmax(250px, 1fr))",
+                  },
                   gap: 2,
                   mb: 3,
                 }}
@@ -321,7 +406,7 @@ const Scopes = () => {
                               variant="subtitle2"
                               sx={{ fontWeight: 600 }}
                             >
-                              {page.name}
+                              {PAGE_LABELS[page.path] ?? page.name}
                             </Typography>
                             <Typography
                               variant="caption"
@@ -339,21 +424,20 @@ const Scopes = () => {
 
               <Divider sx={{ my: 3 }} />
 
-              <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 2,
+                  justifyContent: "flex-end",
+                  flexDirection: { xs: "column-reverse", sm: "row" },
+                }}
+              >
                 <LoadingButton
                   variant="contained"
                   startIcon={
                     selectedScope.id === -1 ? <AddIcon /> : <EditIcon />
                   }
-                  onClick={() => {
-                    addScope({
-                      name: selectedScope.name,
-                      pages: selectedScope.pages.map((page) => page.toString()),
-                      id:
-                        selectedScope.id !== -1 ? selectedScope.id : undefined,
-                      newScope: selectedScope.id === -1,
-                    });
-                  }}
+                  onClick={handleSave}
                   loading={isAddingScope || isScopesLoading}
                   size="large"
                   sx={{
@@ -372,7 +456,7 @@ const Scopes = () => {
                     variant="outlined"
                     color="error"
                     startIcon={<DeleteIcon />}
-                    onClick={() => removeScope(selectedScope.id)}
+                    onClick={handleDelete}
                     loading={isRemovingScope || isScopesLoading}
                     size="large"
                     sx={{

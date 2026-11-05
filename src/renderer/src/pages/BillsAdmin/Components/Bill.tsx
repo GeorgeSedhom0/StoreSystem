@@ -14,6 +14,9 @@ import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import ProductsView from "../../utils/ProductsView";
 import FormatedNumber from "../../Shared/FormatedNumber";
+import BillCard from "../../Shared/BillCard";
+import useConfirm from "../../Shared/useConfirm";
+import { apiError } from "../../utils/errors";
 import { StoreContext } from "@renderer/StoreDataProvider";
 
 const endReservation = async ({
@@ -44,42 +47,118 @@ const billTypes = {
   sell: "بيع",
   buy: "شراء",
   return: "مرتجع",
-  BNPL: "بيع اجل",
+  BNPL: "بيع آجل",
   reserve: "حجز",
   installment: "قسط",
   "buy-return": "مرتجع شراء",
 };
 
 const Bill = ({ context, item: bill, ...props }: any) => {
-  const { setMsg, getBills } = context;
+  const { setMsg, getBills, isMobile, expandAll } = context;
   const [billPreviewOpen, setBillPreviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const billRef = useRef<HTMLDivElement>(null);
   const { storeId } = useContext(StoreContext);
+  const [confirm, confirmDialog] = useConfirm();
 
-  const { mutate: endReservationMutation } = useMutation({
+  const { mutate: endReservationMutation, isPending: isEnding } = useMutation({
     mutationKey: ["endReservation"],
     mutationFn: endReservation,
     onSuccess: () => {
       setMsg({ type: "success", text: "تم تسليم الحجز" });
       getBills();
     },
-    onError: () => {
-      setMsg({ type: "error", text: "حدث خطأ أثناء تسليم الحجز" });
+    onError: (e) => {
+      setMsg({ type: "error", text: apiError(e, "حدث خطأ أثناء تسليم الحجز") });
     },
   });
 
-  const { mutate: completeBnplMutation } = useMutation({
-    mutationKey: ["completeBnplPayment"],
-    mutationFn: completeBnplPayment,
-    onSuccess: () => {
-      setMsg({ type: "success", text: "تم استلام الدفع بنجاح" });
-      getBills();
+  const { mutate: completeBnplMutation, isPending: isCollecting } = useMutation(
+    {
+      mutationKey: ["completeBnplPayment"],
+      mutationFn: completeBnplPayment,
+      onSuccess: () => {
+        setMsg({ type: "success", text: "تم استلام الدفع بنجاح" });
+        getBills();
+      },
+      onError: (e) => {
+        setMsg({
+          type: "error",
+          text: apiError(e, "حدث خطأ أثناء استلام الدفع"),
+        });
+      },
     },
-    onError: () => {
-      setMsg({ type: "error", text: "حدث خطأ أثناء استلام الدفع" });
-    },
+  );
+
+  const fmtTotal = Math.abs(bill.total).toLocaleString("en-US", {
+    maximumFractionDigits: 2,
   });
+  const deliverReservation = async () => {
+    const ok = await confirm({
+      title: `تسليم الحجز رقم ${bill.id}؟`,
+      message: `ستتحول الفاتورة إلى فاتورة بيع ويُخصم المحجوز من المخزون${bill.party_name ? ` — العميل: ${bill.party_name}` : ""}.`,
+      confirmText: "تسليم",
+    });
+    if (ok) endReservationMutation({ id: bill.id, storeId });
+  };
+  const collectBnpl = async () => {
+    const ok = await confirm({
+      title: `تحصيل الفاتورة الآجلة رقم ${bill.id}؟`,
+      message: `سيتم تسجيل استلام كامل المبلغ (${fmtTotal})${bill.party_name ? ` من ${bill.party_name}` : ""}.`,
+      confirmText: "تحصيل",
+    });
+    if (ok) completeBnplMutation({ id: bill.id, storeId });
+  };
+  if (isMobile) {
+    // Phones: one card per bill (the "detailed" rows are folded into it).
+    if (bill.isExpanded) return null;
+    return (
+      <>
+        <BillView
+          bill={bill}
+          open={billPreviewOpen}
+          setOpen={setBillPreviewOpen}
+          ref={billRef}
+        />
+        {confirmDialog}
+        {editing ? (
+          <EditableBill
+            bill={bill}
+            setEditing={setEditing}
+            getBills={getBills}
+          />
+        ) : null}
+        <BillCard
+          bill={bill}
+          typeLabel={
+            billTypes[bill.type as keyof typeof billTypes] || bill.type
+          }
+          defaultExpanded={!!expandAll}
+          actions={
+            <>
+              <Button onClick={() => setBillPreviewOpen(true)}>معاينة</Button>
+              <Button
+                onClick={() => printBill(billRef, setMsg, setBillPreviewOpen)}
+              >
+                طباعة
+              </Button>
+              <Button onClick={() => setEditing(true)}>تعديل</Button>
+              {bill.type === "reserve" && (
+                <Button onClick={deliverReservation} disabled={isEnding}>
+                  تسليم
+                </Button>
+              )}
+              {bill.type === "BNPL" && (
+                <Button onClick={collectBnpl} disabled={isCollecting}>
+                  تحصيل
+                </Button>
+              )}
+            </>
+          }
+        />
+      </>
+    );
+  }
 
   return (
     <>
@@ -89,6 +168,7 @@ const Bill = ({ context, item: bill, ...props }: any) => {
         setOpen={setBillPreviewOpen}
         ref={billRef}
       />
+      {confirmDialog}
       {editing ? (
         <EditableBill bill={bill} setEditing={setEditing} getBills={getBills} />
       ) : null}
@@ -144,18 +224,12 @@ const Bill = ({ context, item: bill, ...props }: any) => {
                 طباعة
               </Button>
               {bill.type === "reserve" && (
-                <Button
-                  onClick={() =>
-                    endReservationMutation({ id: bill.id, storeId })
-                  }
-                >
+                <Button onClick={deliverReservation} disabled={isEnding}>
                   تسليم
                 </Button>
               )}
               {bill.type === "BNPL" && (
-                <Button
-                  onClick={() => completeBnplMutation({ id: bill.id, storeId })}
-                >
+                <Button onClick={collectBnpl} disabled={isCollecting}>
                   تحصيل
                 </Button>
               )}

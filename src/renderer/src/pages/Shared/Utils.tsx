@@ -1,26 +1,21 @@
 import { Fab, styled } from "@mui/material";
 
 export const ViewContainer = styled("div")(({ theme }) => ({
-  // A DEFINITE viewport-based width (not auto) is essential: it anchors the
-  // layout so inner horizontal-scroll containers (e.g. wide tables in
-  // TableContainer) actually scroll instead of stretching the whole page and
-  // causing horizontal overflow on phones. width:100vw + box-sizing + LEFT/RIGHT
-  // padding keeps the total width exactly 100vw (body overflow:hidden clips the
-  // desktop scrollbar gutter). The horizontal inset uses padding; the vertical
-  // spacing uses margin (margins don't affect width) — these vertical margins
-  // are also counted in Layout's `100vh - …140px` height calc, so removing them
-  // would leave vertical slack that the body's centering shows as a top gap.
-  width: "100vw",
+  // A definite width anchors the layout so inner horizontal-scroll containers
+  // (wide tables in a TableContainer) scroll instead of widening the page.
+  width: "100%",
+  maxWidth: "100vw",
   boxSizing: "border-box",
-  marginTop: "30px",
-  marginBottom: "30px",
+  flex: 1,
+  paddingTop: "30px",
+  paddingBottom: "30px",
   paddingLeft: "30px",
   paddingRight: "30px",
-  [theme.breakpoints.down("sm")]: {
-    marginTop: "16px",
-    marginBottom: "16px",
-    paddingLeft: "16px",
-    paddingRight: "16px",
+  [theme.breakpoints.down("md")]: {
+    paddingTop: "16px",
+    paddingBottom: "calc(24px + env(safe-area-inset-bottom))",
+    paddingLeft: "max(12px, env(safe-area-inset-left))",
+    paddingRight: "max(12px, env(safe-area-inset-right))",
   },
 }));
 

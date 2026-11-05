@@ -10,6 +10,9 @@ import {
   Button,
   Autocomplete,
   TextField,
+  Box,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -21,13 +24,14 @@ import axios from "axios";
 import LoadingScreen from "../Shared/LoadingScreen";
 import { CollectionBill, DBProducts, Product } from "../utils/types";
 import { localTimestamp } from "../utils/functions";
-import { TableVirtuoso } from "react-virtuoso";
+import { TableVirtuoso, Virtuoso } from "react-virtuoso";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
 import {
   fixedHeaderContent,
   VirtuosoTableComponents,
 } from "./Components/VirtualTableHelpers";
 import { useQuery } from "@tanstack/react-query";
+import { CollectionBillCard, fmt } from "./Components/CollectionBill";
 import { useParams } from "react-router-dom";
 import useParties from "../Shared/hooks/useParties";
 import { StoreContext } from "@renderer/StoreDataProvider";
@@ -77,6 +81,8 @@ const PartiesBills = () => {
   const [selectedPartyId, setSelectedPartyId] = useState<number | null>(null);
 
   const { storeId } = useContext(StoreContext);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const { data: products } = useQuery({
     queryKey: ["products", storeId],
@@ -173,30 +179,33 @@ const PartiesBills = () => {
     return acc + parseFloat(collection.total.toFixed(2));
   }, 0);
 
+  const listContext = { setMsg: setMsg, getBills: refetchBills };
+
   const loading = isShiftLoading || isBillsLoading;
 
   return (
     <>
       <AlertMessage message={msg} setMessage={setMsg} />
-      <Grid2 container spacing={3}>
+      <Grid2 container spacing={{ xs: 2, md: 3 }}>
         <Grid2 size={12}>
           <Card elevation={3} sx={{ p: 2 }}>
-            <Grid2 container spacing={3}>
+            <Grid2 container spacing={{ xs: 2, md: 3 }}>
               <Grid2 size={12}>
-                <Grid2 container size={12} justifyContent="space-between">
-                  <Grid2>
-                    <Typography variant="h4">الفواتير</Typography>
-                  </Grid2>
-                </Grid2>
-                <Typography variant="body1">
-                  قم بتحديد الفترة لعرض الفواتير
+                <Typography
+                  variant="h4"
+                  sx={{ fontSize: { xs: "1.5rem", md: "2.125rem" } }}
+                >
+                  فواتير العملاء والموردين
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  حدد الفترة والطرف الثاني لعرض مجموعات الفواتير
                 </Typography>
               </Grid2>
-              <Grid2 container gap={3} size={12}>
-                <LocalizationProvider
-                  dateAdapter={AdapterDayjs}
-                  adapterLocale="ar-sa"
-                >
+              <LocalizationProvider
+                dateAdapter={AdapterDayjs}
+                adapterLocale="ar-sa"
+              >
+                <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
                   <DateTimePicker
                     label="من"
                     value={startDate}
@@ -205,25 +214,24 @@ const PartiesBills = () => {
                       setStartDate(newValue);
                     }}
                     disableFuture
+                    slotProps={{ textField: { fullWidth: true } }}
                   />
-                </LocalizationProvider>
-
-                <LocalizationProvider
-                  dateAdapter={AdapterDayjs}
-                  adapterLocale="ar-sa"
-                >
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
                   <DateTimePicker
-                    label="الى"
+                    label="إلى"
                     value={endDate}
                     onChange={(newValue) => {
                       if (!newValue) return;
                       setEndDate(newValue);
                     }}
+                    slotProps={{ textField: { fullWidth: true } }}
                   />
-                </LocalizationProvider>
-
-                <FormControl>
-                  <InputLabel>نوع الفانورة</InputLabel>
+                </Grid2>
+              </LocalizationProvider>
+              <Grid2 size={{ xs: 12, sm: 6, md: 2 }}>
+                <FormControl fullWidth>
+                  <InputLabel>نوع الفاتورة</InputLabel>
                   <Select
                     value={filters}
                     onChange={(e) =>
@@ -235,9 +243,6 @@ const PartiesBills = () => {
                     }
                     label="نوع الفاتورة"
                     multiple
-                    sx={{
-                      width: 200,
-                    }}
                   >
                     <MenuItem value="sell">نقدي</MenuItem>
                     <MenuItem value="BNPL">آجل</MenuItem>
@@ -246,14 +251,14 @@ const PartiesBills = () => {
                     <MenuItem value="installment">تقسيط</MenuItem>
                   </Select>
                 </FormControl>
-
+              </Grid2>
+              <Grid2 size={{ xs: 12, sm: 6, md: 4 }}>
                 <Autocomplete
                   multiple
                   options={products}
                   id="selectProductDropdown"
                   getOptionLabel={(option) => option.name}
                   value={selectedProduct}
-                  sx={{ minWidth: 300 }}
                   onChange={(_, newValue) => {
                     setSelectedProduct(newValue);
                   }}
@@ -263,10 +268,19 @@ const PartiesBills = () => {
                 />
               </Grid2>
               <Grid2 size={12}>
-                <ButtonGroup>
-                  <Button onClick={() => setRange("shift")}>اخر شيفت</Button>
+                <ButtonGroup
+                  fullWidth={isMobile}
+                  sx={{
+                    "& .MuiButton-root": {
+                      minHeight: 40,
+                      whiteSpace: "nowrap",
+                      px: { xs: 0.5, sm: 2 },
+                    },
+                  }}
+                >
+                  <Button onClick={() => setRange("shift")}>آخر شيفت</Button>
                   <Button onClick={() => setRange("day")}>اليوم</Button>
-                  <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
+                  <Button onClick={() => setRange("week")}>هذا الأسبوع</Button>
                   <Button onClick={() => setRange("month")}>هذا الشهر</Button>
                 </ButtonGroup>
               </Grid2>
@@ -289,7 +303,7 @@ const PartiesBills = () => {
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label="الطرف الثانى"
+                      label="الطرف الثاني"
                       variant="outlined"
                     />
                   )}
@@ -305,32 +319,67 @@ const PartiesBills = () => {
               </Grid2>
 
               <Grid2 size={12}>
-                <Typography variant="body2">
-                  المجموع: {total.toFixed(2)}
+                <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                  الإجمالي: {fmt(total)} — عدد المجموعات:{" "}
+                  {filteredCollections.length}
                 </Typography>
               </Grid2>
             </Grid2>
           </Card>
         </Grid2>
         <Grid2 size={12}>
-          <Card
-            elevation={3}
-            sx={{
-              position: "relative",
-              height: 600,
-            }}
-          >
-            <LoadingScreen loading={loading} />
-            <TableVirtuoso
-              fixedHeaderContent={fixedHeaderContent}
-              components={VirtuosoTableComponents}
-              data={filteredCollections}
-              context={{
-                setMsg: setMsg,
-                getBills: refetchBills,
+          {isMobile ? (
+            <Box sx={{ position: "relative", minHeight: 120 }}>
+              <LoadingScreen loading={loading} />
+              {!loading && filteredCollections.length === 0 && (
+                <Typography
+                  align="center"
+                  color="text.secondary"
+                  sx={{ py: 4 }}
+                >
+                  لا توجد فواتير في هذه الفترة
+                </Typography>
+              )}
+              {/* Window scrolling: no nested scroll box on phones. */}
+              <Virtuoso
+                useWindowScroll
+                increaseViewportBy={{ top: 600, bottom: 1600 }}
+                data={filteredCollections}
+                itemContent={(_, collection) => (
+                  <CollectionBillCard
+                    collection={collection}
+                    context={listContext}
+                  />
+                )}
+              />
+            </Box>
+          ) : (
+            <Card
+              elevation={3}
+              sx={{
+                position: "relative",
+                height: 600,
               }}
-            />
-          </Card>
+            >
+              <LoadingScreen loading={loading} />
+              {!loading && filteredCollections.length === 0 ? (
+                <Typography
+                  align="center"
+                  color="text.secondary"
+                  sx={{ py: 6 }}
+                >
+                  لا توجد فواتير في هذه الفترة
+                </Typography>
+              ) : (
+                <TableVirtuoso
+                  fixedHeaderContent={fixedHeaderContent}
+                  components={VirtuosoTableComponents}
+                  data={filteredCollections}
+                  context={listContext}
+                />
+              )}
+            </Card>
+          )}
         </Grid2>
       </Grid2>
     </>

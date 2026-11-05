@@ -2,6 +2,7 @@ import axios from "axios";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dispatch, SetStateAction } from "react";
 import { AlertMsg } from "../../Shared/AlertMessage";
+import { apiError } from "../../utils/errors";
 
 // Types
 export interface TelegramStatus {
@@ -30,6 +31,37 @@ export interface TelegramUpdate {
   last_name: string;
   type: string;
   title: string | null;
+}
+
+export interface TelegramWorkerHealth {
+  running: boolean;
+  state:
+    | "polling"
+    | "no_token"
+    | "conflict"
+    | "invalid_token"
+    | "rate_limited"
+    | "error"
+    | "stopped";
+  last_poll_at: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+  commands_registered: boolean;
+  bot_username: string | null;
+}
+
+export interface TelegramBotCommand {
+  key: string;
+  slash: string;
+  title: string;
+  aliases: string[];
+  example: string;
+}
+
+export interface TelegramCommandsResponse {
+  success: boolean;
+  commands: TelegramBotCommand[];
+  command_worker: TelegramWorkerHealth;
 }
 
 export interface TelegramApiResponse {
@@ -80,10 +112,22 @@ const getTelegramUpdates = async (): Promise<TelegramApiResponse> => {
   return data;
 };
 
+const getBotCommands = async (): Promise<TelegramCommandsResponse> => {
+  const { data } = await axios.get("/telegram/commands");
+  return data;
+};
+
 const useTelegram = (
   setMsg: Dispatch<SetStateAction<AlertMsg>>,
   store_id?: number,
 ) => {
+  // What the bot understands + the command worker's state
+  const { data: commandsData, refetch: refetchCommands } = useQuery({
+    queryKey: ["telegram", "commands"],
+    queryFn: getBotCommands,
+    refetchInterval: 30000,
+  });
+
   // Status query
   const {
     data: statusData,
@@ -121,7 +165,7 @@ const useTelegram = (
       if (data.success) {
         setMsg({
           type: "success",
-          text: `تم تكوين البوت بنجاح: @${data.bot_info?.username}`,
+          text: `تم إعداد البوت بنجاح: @${data.bot_info?.username}`,
         });
       } else {
         setMsg({
@@ -130,9 +174,11 @@ const useTelegram = (
         });
       }
       refetchStatus();
+      // The worker picks the new bot up on its next poll.
+      setTimeout(() => refetchCommands(), 3000);
     },
-    onError: () => {
-      setMsg({ type: "error", text: "حدث خطأ أثناء تكوين البوت" });
+    onError: (e) => {
+      setMsg({ type: "error", text: apiError(e, "حدث خطأ أثناء إعداد البوت") });
     },
   });
 
@@ -150,10 +196,10 @@ const useTelegram = (
           });
         }
       },
-      onError: () => {
+      onError: (e) => {
         setMsg({
           type: "error",
-          text: "حدث خطأ أثناء إرسال الرسالة التجريبية",
+          text: apiError(e, "حدث خطأ أثناء إرسال الرسالة التجريبية"),
         });
       },
     });
@@ -168,13 +214,16 @@ const useTelegram = (
         } else {
           setMsg({
             type: "error",
-            text: "فشل في حفظ معرف المحادثة",
+            text: data.message || "فشل في حفظ معرف المحادثة",
           });
         }
         refetchStoreChatId();
       },
-      onError: () => {
-        setMsg({ type: "error", text: "حدث خطأ أثناء حفظ معرف المحادثة" });
+      onError: (e) => {
+        setMsg({
+          type: "error",
+          text: apiError(e, "حدث خطأ أثناء حفظ معرف المحادثة"),
+        });
       },
     });
 
@@ -203,8 +252,11 @@ const useTelegram = (
         });
       }
     },
-    onError: () => {
-      setMsg({ type: "error", text: "حدث خطأ أثناء جلب المحادثات" });
+    onError: (e) => {
+      setMsg({
+        type: "error",
+        text: apiError(e, "حدث خطأ أثناء جلب المحادثات"),
+      });
     },
   });
 
@@ -223,6 +275,9 @@ const useTelegram = (
     updates: updatesData?.updates || [],
     refetchStatus,
     refetchStoreChatId,
+    commands: commandsData?.commands || [],
+    worker: commandsData?.command_worker || null,
+    refetchCommands,
   };
 };
 

@@ -53,6 +53,8 @@ import {
   ImageOutlined as ImageOutlinedIcon,
 } from "@mui/icons-material";
 import BarcodePreview from "./BarcodePreview";
+import NumberField from "@renderer/pages/Shared/NumberField";
+import useConfirm from "@renderer/pages/Shared/useConfirm";
 import {
   DEFAULT_BARCODE_SETTINGS,
   type BarcodeSettings,
@@ -73,7 +75,13 @@ interface PrinterSettingsState {
   billFooterMessages?: StoredBillFooterMessages;
 }
 
+// In the browser build printing goes through the browser's print dialog and
+// there is no local file access, so printer selection and the bill logo
+// (stored on disk by the desktop app) don't apply.
+const IS_WEB = Boolean((window as any).__IS_WEB__);
+
 const PrinterSettings = () => {
+  const [confirm, confirmDialog] = useConfirm();
   const { storeId, store } = useContext(StoreContext);
   const [printers, setPrinters] = useState<
     {
@@ -257,6 +265,14 @@ const PrinterSettings = () => {
   };
 
   const handleLogoRemove = async () => {
+    const ok = await confirm({
+      title: "حذف شعار الفاتورة؟",
+      message:
+        "سيتم حذف الشعار من الفواتير المطبوعة لهذا المخزن على هذا الجهاز.",
+      confirmText: "حذف",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       setRemovingLogo(true);
       await window.electron.ipcRenderer.invoke("removeBillLogo", storeId);
@@ -332,15 +348,22 @@ const PrinterSettings = () => {
     }));
   };
 
+  const missingRequired =
+    (!IS_WEB && (!settings.billPrinter || !settings.barcodePrinter)) ||
+    !settings.billPrinterWidth ||
+    !settings.barcodePrinterWidth ||
+    !settings.barcodePrinterHeight;
+
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       <AlertMessage message={msg} setMessage={setMsg} />
+      {confirmDialog}
 
       {/* Header */}
       <Paper
         elevation={2}
         sx={{
-          p: 3,
+          p: { xs: 2, sm: 3 },
           mb: 3,
           borderRadius: 3,
           background:
@@ -353,14 +376,25 @@ const PrinterSettings = () => {
           <PrintIcon sx={{ fontSize: "2rem", color: "primary.main" }} />
           <Typography
             variant="h4"
-            sx={{ fontWeight: 600, color: "primary.main" }}
+            sx={{
+              fontWeight: 600,
+              color: "primary.main",
+              fontSize: { xs: "1.4rem", sm: "2.125rem" },
+            }}
           >
             إعدادات الطابعة
           </Typography>
         </Box>
         <Typography variant="body1" color="text.secondary">
-          تكوين إعدادات الطابعات المختلفة المستخدمة في النظام
+          إعداد الطابعات المستخدمة في النظام (تُحفظ على هذا الجهاز فقط)
         </Typography>
+        {IS_WEB && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            في نسخة المتصفح تتم الطباعة من نافذة الطباعة الخاصة بالمتصفح، لذلك
+            لا يلزم اختيار طابعة. رفع شعار الفاتورة متاح من برنامج سطح المكتب
+            فقط.
+          </Alert>
+        )}
       </Paper>
 
       <Grid2 container spacing={3}>
@@ -369,57 +403,77 @@ const PrinterSettings = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
             }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                mb: 3,
+                flexWrap: "wrap",
+              }}
+            >
               <ReceiptIcon sx={{ fontSize: "1.5rem", color: "primary.main" }} />
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 إعدادات طابعة الفواتير
               </Typography>
-              <Chip
-                label={settings.billPrinter || "غير محدد"}
-                color={settings.billPrinter ? "success" : "default"}
-                size="small"
-              />
+              {!IS_WEB && (
+                <Chip
+                  label={settings.billPrinter || "غير محدد"}
+                  color={settings.billPrinter ? "success" : "default"}
+                  size="small"
+                />
+              )}
             </Box>
 
             <Grid2 container spacing={3}>
-              <Grid2 size={12}>
-                <FormControl fullWidth>
-                  <InputLabel>طابعة الفواتير</InputLabel>
-                  <Select
-                    value={settings.billPrinter}
-                    onChange={handleChange("billPrinter")}
-                    label="طابعة الفواتير"
-                    startAdornment={
-                      <PrintIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    }
-                  >
-                    {printers.map((printer) => (
-                      <MenuItem key={printer.name} value={printer.name}>
-                        <Box
-                          sx={{ display: "flex", alignItems: "center", gap: 1 }}
-                        >
-                          <PrintIcon sx={{ fontSize: "1.2rem" }} />
-                          {printer.name}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid2>
+              {!IS_WEB && (
+                <Grid2 size={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>طابعة الفواتير</InputLabel>
+                    <Select
+                      value={settings.billPrinter}
+                      onChange={handleChange("billPrinter")}
+                      label="طابعة الفواتير"
+                      startAdornment={
+                        <PrintIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      }
+                    >
+                      {printers.map((printer) => (
+                        <MenuItem key={printer.name} value={printer.name}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <PrintIcon sx={{ fontSize: "1.2rem" }} />
+                            {printer.name}
+                          </Box>
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid2>
+              )}
 
               <Grid2 size={6}>
-                <TextField
+                <NumberField
                   fullWidth
                   label="عرض الفاتورة (مم)"
-                  type="number"
-                  value={settings.billPrinterWidth}
-                  onChange={handleChange("billPrinterWidth")}
+                  value={Number(settings.billPrinterWidth) || 0}
+                  onValueChange={(n) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      billPrinterWidth: n > 0 ? String(n) : "",
+                    }))
+                  }
                   slotProps={{
                     input: {
                       startAdornment: (
@@ -432,12 +486,16 @@ const PrinterSettings = () => {
               </Grid2>
 
               <Grid2 size={6}>
-                <TextField
+                <NumberField
                   fullWidth
                   label="ارتفاع الفاتورة (مم)"
-                  type="number"
-                  value={settings.billPrinterHeight}
-                  onChange={handleChange("billPrinterHeight")}
+                  value={Number(settings.billPrinterHeight) || 0}
+                  onValueChange={(n) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      billPrinterHeight: n > 0 ? String(n) : "",
+                    }))
+                  }
                   slotProps={{
                     input: {
                       startAdornment: (
@@ -452,174 +510,176 @@ const PrinterSettings = () => {
                 <Divider sx={{ my: 1.5 }} />
               </Grid2>
 
-              <Grid2 size={12}>
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 2.5,
-                    borderRadius: 3,
-                    background:
-                      "linear-gradient(180deg, rgba(25, 118, 210, 0.04) 0%, rgba(25, 118, 210, 0.01) 100%)",
-                  }}
-                >
-                  <Box
+              {!IS_WEB && (
+                <Grid2 size={12}>
+                  <Paper
+                    variant="outlined"
                     sx={{
-                      display: "flex",
-                      alignItems: { xs: "flex-start", md: "center" },
-                      justifyContent: "space-between",
-                      gap: 2,
-                      flexDirection: { xs: "column", md: "row" },
-                      mb: 2,
+                      p: { xs: 2, sm: 2.5 },
+                      borderRadius: 3,
+                      background:
+                        "linear-gradient(180deg, rgba(25, 118, 210, 0.04) 0%, rgba(25, 118, 210, 0.01) 100%)",
                     }}
                   >
-                    <Box>
-                      <Typography
-                        variant="subtitle1"
-                        sx={{
-                          fontWeight: 700,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 1,
-                          mb: 0.5,
-                        }}
-                      >
-                        <ImageOutlinedIcon color="primary" />
-                        شعار أعلى الفاتورة
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        يطبّق هذا الشعار على المخزن الحالي فقط داخل هذا الجهاز
-                        فقط.
-                      </Typography>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: { xs: "flex-start", md: "center" },
+                        justifyContent: "space-between",
+                        gap: 2,
+                        flexDirection: { xs: "column", md: "row" },
+                        mb: 2,
+                      }}
+                    >
+                      <Box>
+                        <Typography
+                          variant="subtitle1"
+                          sx={{
+                            fontWeight: 700,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1,
+                            mb: 0.5,
+                          }}
+                        >
+                          <ImageOutlinedIcon color="primary" />
+                          شعار أعلى الفاتورة
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          يطبّق هذا الشعار على المخزن الحالي فقط داخل هذا الجهاز
+                          فقط.
+                        </Typography>
+                      </Box>
+
+                      <Chip
+                        color="primary"
+                        variant="outlined"
+                        label={`المخزن الحالي: ${store.name || storeId} (#${storeId})`}
+                      />
                     </Box>
 
-                    <Chip
-                      color="primary"
-                      variant="outlined"
-                      label={`المخزن الحالي: ${store.name || storeId} (#${storeId})`}
-                    />
-                  </Box>
+                    <Box
+                      sx={{
+                        minHeight: 140,
+                        borderRadius: 3,
+                        border: "1px dashed",
+                        borderColor: logo ? "success.light" : "divider",
+                        bgcolor: logo
+                          ? "rgba(76, 175, 80, 0.05)"
+                          : "background.paper",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        overflow: "hidden",
+                        p: 2,
+                      }}
+                    >
+                      {logo?.dataUrl ? (
+                        <Box sx={{ textAlign: "center", width: "100%" }}>
+                          <Box
+                            component="img"
+                            src={logo.dataUrl}
+                            alt="Bill logo preview"
+                            sx={{
+                              maxHeight: billLogoAppearance.maxHeight,
+                              maxWidth: "100%",
+                              objectFit: "contain",
+                              mb: 1,
+                            }}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            سيتم وضع الشعار بشكل مركزي أعلى الفاتورة المطبوعة
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Box sx={{ textAlign: "center" }}>
+                          <ImageOutlinedIcon
+                            sx={{
+                              fontSize: "2rem",
+                              color: "text.disabled",
+                              mb: 1,
+                            }}
+                          />
+                          <Typography variant="body2" color="text.secondary">
+                            لا يوجد شعار محفوظ لهذا المخزن على هذا الجهاز
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
 
-                  <Box
-                    sx={{
-                      minHeight: 140,
-                      borderRadius: 3,
-                      border: "1px dashed",
-                      borderColor: logo ? "success.light" : "divider",
-                      bgcolor: logo
-                        ? "rgba(76, 175, 80, 0.05)"
-                        : "background.paper",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      overflow: "hidden",
-                      p: 2,
-                    }}
-                  >
-                    {logo?.dataUrl ? (
-                      <Box sx={{ textAlign: "center", width: "100%" }}>
-                        <Box
-                          component="img"
-                          src={logo.dataUrl}
-                          alt="Bill logo preview"
-                          sx={{
-                            maxHeight: billLogoAppearance.maxHeight,
-                            maxWidth: "100%",
-                            objectFit: "contain",
-                            mb: 1,
-                          }}
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }}
+                      spacing={1.5}
+                      sx={{ mt: 2 }}
+                    >
+                      <LoadingButton
+                        variant="contained"
+                        startIcon={<UploadFileIcon />}
+                        loading={uploadingLogo}
+                        onClick={handleLogoUpload}
+                      >
+                        رفع شعار
+                      </LoadingButton>
+                      <LoadingButton
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteOutlineIcon />}
+                        loading={removingLogo}
+                        onClick={handleLogoRemove}
+                        disabled={!logo}
+                      >
+                        حذف الشعار
+                      </LoadingButton>
+                    </Stack>
+
+                    <Grid2 container spacing={2} sx={{ mt: 0.5 }}>
+                      <Grid2 size={{ xs: 12, md: 6 }}>
+                        <Typography gutterBottom sx={{ fontWeight: 600 }}>
+                          ارتفاع الشعار
+                        </Typography>
+                        <Slider
+                          value={billLogoAppearance.maxHeight}
+                          min={40}
+                          max={180}
+                          step={5}
+                          valueLabelDisplay="auto"
+                          onChange={(_, value) =>
+                            handleBillLogoAppearanceChange(
+                              "maxHeight",
+                              value as number,
+                            )
+                          }
                         />
                         <Typography variant="caption" color="text.secondary">
-                          سيتم وضع الشعار بشكل مركزي أعلى الفاتورة المطبوعة
+                          يتحكم في الحجم الأقصى للشعار أعلى الفاتورة
                         </Typography>
-                      </Box>
-                    ) : (
-                      <Box sx={{ textAlign: "center" }}>
-                        <ImageOutlinedIcon
-                          sx={{
-                            fontSize: "2rem",
-                            color: "text.disabled",
-                            mb: 1,
-                          }}
+                      </Grid2>
+
+                      <Grid2 size={{ xs: 12, md: 6 }}>
+                        <Typography gutterBottom sx={{ fontWeight: 600 }}>
+                          المسافة أسفل الشعار
+                        </Typography>
+                        <Slider
+                          value={billLogoAppearance.spacingBottom}
+                          min={0}
+                          max={24}
+                          step={1}
+                          valueLabelDisplay="auto"
+                          onChange={(_, value) =>
+                            handleBillLogoAppearanceChange(
+                              "spacingBottom",
+                              value as number,
+                            )
+                          }
                         />
-                        <Typography variant="body2" color="text.secondary">
-                          لا يوجد شعار محفوظ لهذا المخزن على هذا الجهاز
+                        <Typography variant="caption" color="text.secondary">
+                          تتحكم في الفراغ بين الشعار واسم المتجر
                         </Typography>
-                      </Box>
-                    )}
-                  </Box>
-
-                  <Stack
-                    direction={{ xs: "column", sm: "row" }}
-                    spacing={1.5}
-                    sx={{ mt: 2 }}
-                  >
-                    <LoadingButton
-                      variant="contained"
-                      startIcon={<UploadFileIcon />}
-                      loading={uploadingLogo}
-                      onClick={handleLogoUpload}
-                    >
-                      رفع شعار
-                    </LoadingButton>
-                    <LoadingButton
-                      variant="outlined"
-                      color="error"
-                      startIcon={<DeleteOutlineIcon />}
-                      loading={removingLogo}
-                      onClick={handleLogoRemove}
-                      disabled={!logo}
-                    >
-                      حذف الشعار
-                    </LoadingButton>
-                  </Stack>
-
-                  <Grid2 container spacing={2} sx={{ mt: 0.5 }}>
-                    <Grid2 size={{ xs: 12, md: 6 }}>
-                      <Typography gutterBottom sx={{ fontWeight: 600 }}>
-                        ارتفاع الشعار
-                      </Typography>
-                      <Slider
-                        value={billLogoAppearance.maxHeight}
-                        min={40}
-                        max={180}
-                        step={5}
-                        valueLabelDisplay="auto"
-                        onChange={(_, value) =>
-                          handleBillLogoAppearanceChange(
-                            "maxHeight",
-                            value as number,
-                          )
-                        }
-                      />
-                      <Typography variant="caption" color="text.secondary">
-                        يتحكم في الحجم الأقصى للشعار أعلى الفاتورة
-                      </Typography>
+                      </Grid2>
                     </Grid2>
-
-                    <Grid2 size={{ xs: 12, md: 6 }}>
-                      <Typography gutterBottom sx={{ fontWeight: 600 }}>
-                        المسافة أسفل الشعار
-                      </Typography>
-                      <Slider
-                        value={billLogoAppearance.spacingBottom}
-                        min={0}
-                        max={24}
-                        step={1}
-                        valueLabelDisplay="auto"
-                        onChange={(_, value) =>
-                          handleBillLogoAppearanceChange(
-                            "spacingBottom",
-                            value as number,
-                          )
-                        }
-                      />
-                      <Typography variant="caption" color="text.secondary">
-                        تتحكم في الفراغ بين الشعار واسم المتجر
-                      </Typography>
-                    </Grid2>
-                  </Grid2>
-                </Paper>
-              </Grid2>
+                  </Paper>
+                </Grid2>
+              )}
 
               <Grid2 size={12}>
                 <Paper
@@ -702,59 +762,79 @@ const PrinterSettings = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
             }}
           >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                mb: 3,
+                flexWrap: "wrap",
+              }}
+            >
               <BarcodeIcon sx={{ fontSize: "1.5rem", color: "primary.main" }} />
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 إعدادات طابعة الباركود
               </Typography>
-              <Chip
-                label={settings.barcodePrinter || "غير محدد"}
-                color={settings.barcodePrinter ? "success" : "default"}
-                size="small"
-              />
+              {!IS_WEB && (
+                <Chip
+                  label={settings.barcodePrinter || "غير محدد"}
+                  color={settings.barcodePrinter ? "success" : "default"}
+                  size="small"
+                />
+              )}
             </Box>
 
             <Grid2 container spacing={3}>
               {/* Printer Selection */}
-              <Grid2 size={12}>
-                <FormControl fullWidth>
-                  <InputLabel>طابعة الباركود</InputLabel>
-                  <Select
-                    value={settings.barcodePrinter}
-                    onChange={handleChange("barcodePrinter")}
-                    label="طابعة الباركود"
-                    startAdornment={
-                      <BarcodeIcon sx={{ mr: 1, color: "text.secondary" }} />
-                    }
-                  >
-                    {printers.map((printer) => (
-                      <MenuItem key={printer.name} value={printer.name}>
-                        <Box
-                          sx={{ display: "flex", alignItems: "center", gap: 1 }}
-                        >
-                          <BarcodeIcon sx={{ fontSize: "1.2rem" }} />
-                          {printer.name}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid2>
+              {!IS_WEB && (
+                <Grid2 size={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>طابعة الباركود</InputLabel>
+                    <Select
+                      value={settings.barcodePrinter}
+                      onChange={handleChange("barcodePrinter")}
+                      label="طابعة الباركود"
+                      startAdornment={
+                        <BarcodeIcon sx={{ mr: 1, color: "text.secondary" }} />
+                      }
+                    >
+                      {printers.map((printer) => (
+                        <MenuItem key={printer.name} value={printer.name}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <BarcodeIcon sx={{ fontSize: "1.2rem" }} />
+                            {printer.name}
+                          </Box>
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid2>
+              )}
 
               {/* Label Size */}
               <Grid2 size={6}>
-                <TextField
+                <NumberField
                   fullWidth
                   label="عرض الملصق (مم)"
-                  type="number"
-                  value={settings.barcodePrinterWidth}
-                  onChange={handleChange("barcodePrinterWidth")}
+                  value={Number(settings.barcodePrinterWidth) || 0}
+                  onValueChange={(n) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      barcodePrinterWidth: n > 0 ? String(n) : "",
+                    }))
+                  }
                   slotProps={{
                     input: {
                       startAdornment: (
@@ -767,12 +847,16 @@ const PrinterSettings = () => {
               </Grid2>
 
               <Grid2 size={6}>
-                <TextField
+                <NumberField
                   fullWidth
                   label="ارتفاع الملصق (مم)"
-                  type="number"
-                  value={settings.barcodePrinterHeight}
-                  onChange={handleChange("barcodePrinterHeight")}
+                  value={Number(settings.barcodePrinterHeight) || 0}
+                  onValueChange={(n) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      barcodePrinterHeight: n > 0 ? String(n) : "",
+                    }))
+                  }
                   slotProps={{
                     input: {
                       startAdornment: (
@@ -807,68 +891,64 @@ const PrinterSettings = () => {
                           الهوامش (مم)
                         </Typography>
                       </Grid2>
-                      <Grid2 size={3}>
-                        <TextField
+                      <Grid2 size={{ xs: 6, sm: 3 }}>
+                        <NumberField
                           fullWidth
                           label="أعلى"
-                          type="number"
                           size="small"
-                          value={settings.barcodeSettings.marginTop}
-                          onChange={(e) =>
-                            handleBarcodeSettingChange(
-                              "marginTop",
-                              Number(e.target.value),
-                            )
+                          value={
+                            Number(settings.barcodeSettings.marginTop) || 0
                           }
-                          inputProps={{ min: 0, max: 10, step: 0.5 }}
+                          onValueChange={(n) =>
+                            handleBarcodeSettingChange("marginTop", n)
+                          }
+                          min={0}
+                          max={10}
                         />
                       </Grid2>
-                      <Grid2 size={3}>
-                        <TextField
+                      <Grid2 size={{ xs: 6, sm: 3 }}>
+                        <NumberField
                           fullWidth
                           label="أسفل"
-                          type="number"
                           size="small"
-                          value={settings.barcodeSettings.marginBottom}
-                          onChange={(e) =>
-                            handleBarcodeSettingChange(
-                              "marginBottom",
-                              Number(e.target.value),
-                            )
+                          value={
+                            Number(settings.barcodeSettings.marginBottom) || 0
                           }
-                          inputProps={{ min: 0, max: 10, step: 0.5 }}
+                          onValueChange={(n) =>
+                            handleBarcodeSettingChange("marginBottom", n)
+                          }
+                          min={0}
+                          max={10}
                         />
                       </Grid2>
-                      <Grid2 size={3}>
-                        <TextField
+                      <Grid2 size={{ xs: 6, sm: 3 }}>
+                        <NumberField
                           fullWidth
                           label="يسار"
-                          type="number"
                           size="small"
-                          value={settings.barcodeSettings.marginLeft}
-                          onChange={(e) =>
-                            handleBarcodeSettingChange(
-                              "marginLeft",
-                              Number(e.target.value),
-                            )
+                          value={
+                            Number(settings.barcodeSettings.marginLeft) || 0
                           }
-                          inputProps={{ min: 0, max: 10, step: 0.5 }}
+                          onValueChange={(n) =>
+                            handleBarcodeSettingChange("marginLeft", n)
+                          }
+                          min={0}
+                          max={10}
                         />
                       </Grid2>
-                      <Grid2 size={3}>
-                        <TextField
+                      <Grid2 size={{ xs: 6, sm: 3 }}>
+                        <NumberField
                           fullWidth
                           label="يمين"
-                          type="number"
                           size="small"
-                          value={settings.barcodeSettings.marginRight}
-                          onChange={(e) =>
-                            handleBarcodeSettingChange(
-                              "marginRight",
-                              Number(e.target.value),
-                            )
+                          value={
+                            Number(settings.barcodeSettings.marginRight) || 0
                           }
-                          inputProps={{ min: 0, max: 10, step: 0.5 }}
+                          onValueChange={(n) =>
+                            handleBarcodeSettingChange("marginRight", n)
+                          }
+                          min={0}
+                          max={10}
                         />
                       </Grid2>
 
@@ -884,7 +964,7 @@ const PrinterSettings = () => {
                           حجم الباركود
                         </Typography>
                       </Grid2>
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <Typography variant="body2" gutterBottom>
                           عرض الباركود:{" "}
                           {settings.barcodeSettings.barcodeWidthPercent}%
@@ -902,7 +982,7 @@ const PrinterSettings = () => {
                           valueLabelDisplay="auto"
                         />
                       </Grid2>
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <Typography variant="body2" gutterBottom>
                           ارتفاع الباركود:{" "}
                           {settings.barcodeSettings.barcodeHeightPercent}%
@@ -920,7 +1000,7 @@ const PrinterSettings = () => {
                           valueLabelDisplay="auto"
                         />
                       </Grid2>
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <Typography variant="body2" gutterBottom>
                           سُمك الخطوط: {settings.barcodeSettings.barWidth}
                         </Typography>
@@ -940,7 +1020,7 @@ const PrinterSettings = () => {
                         />
                       </Grid2>
 
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <Typography variant="body2" gutterBottom>
                           التباعد بين العناصر:{" "}
                           {settings.barcodeSettings.elementSpacing}
@@ -962,7 +1042,7 @@ const PrinterSettings = () => {
                         />
                       </Grid2>
 
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <FormControl fullWidth size="small">
                           <InputLabel>النص الطويل</InputLabel>
                           <Select
@@ -999,7 +1079,7 @@ const PrinterSettings = () => {
                           العناصر المعروضة
                         </Typography>
                       </Grid2>
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <FormControlLabel
                           control={
                             <Switch
@@ -1015,7 +1095,7 @@ const PrinterSettings = () => {
                           label="شكل الباركود"
                         />
                       </Grid2>
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <FormControlLabel
                           control={
                             <Switch
@@ -1031,7 +1111,7 @@ const PrinterSettings = () => {
                           label="اسم المنتج"
                         />
                       </Grid2>
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <FormControlLabel
                           control={
                             <Switch
@@ -1047,7 +1127,7 @@ const PrinterSettings = () => {
                           label="السعر"
                         />
                       </Grid2>
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <FormControlLabel
                           control={
                             <Switch
@@ -1065,7 +1145,7 @@ const PrinterSettings = () => {
                           label="رقم الباركود"
                         />
                       </Grid2>
-                      <Grid2 size={6}>
+                      <Grid2 size={{ xs: 12, sm: 6 }}>
                         <FormControlLabel
                           control={
                             <Switch
@@ -1113,71 +1193,76 @@ const PrinterSettings = () => {
                           أحجام الخطوط (بكسل)
                         </Typography>
                       </Grid2>
-                      <Grid2 size={4}>
-                        <TextField
+                      <Grid2 size={{ xs: 6, sm: 3 }}>
+                        <NumberField
                           fullWidth
                           label="اسم المنتج"
-                          type="number"
                           size="small"
-                          value={settings.barcodeSettings.productNameFontSize}
-                          onChange={(e) =>
-                            handleBarcodeSettingChange(
-                              "productNameFontSize",
-                              Number(e.target.value),
-                            )
+                          value={
+                            Number(
+                              settings.barcodeSettings.productNameFontSize,
+                            ) || 0
                           }
-                          inputProps={{ min: 8, max: 24 }}
+                          onValueChange={(n) =>
+                            handleBarcodeSettingChange("productNameFontSize", n)
+                          }
+                          min={8}
+                          max={24}
                           disabled={!settings.barcodeSettings.showProductName}
                         />
                       </Grid2>
-                      <Grid2 size={4}>
-                        <TextField
+                      <Grid2 size={{ xs: 6, sm: 3 }}>
+                        <NumberField
                           fullWidth
                           label="السعر"
-                          type="number"
                           size="small"
-                          value={settings.barcodeSettings.priceFontSize}
-                          onChange={(e) =>
-                            handleBarcodeSettingChange(
-                              "priceFontSize",
-                              Number(e.target.value),
-                            )
+                          value={
+                            Number(settings.barcodeSettings.priceFontSize) || 0
                           }
-                          inputProps={{ min: 8, max: 24 }}
+                          onValueChange={(n) =>
+                            handleBarcodeSettingChange("priceFontSize", n)
+                          }
+                          min={8}
+                          max={24}
                           disabled={!settings.barcodeSettings.showPrice}
                         />
                       </Grid2>
-                      <Grid2 size={4}>
-                        <TextField
+                      <Grid2 size={{ xs: 6, sm: 3 }}>
+                        <NumberField
                           fullWidth
                           label="اسم المتجر"
-                          type="number"
                           size="small"
-                          value={settings.barcodeSettings.storeNameFontSize}
-                          onChange={(e) =>
-                            handleBarcodeSettingChange(
-                              "storeNameFontSize",
-                              Number(e.target.value),
-                            )
+                          value={
+                            Number(
+                              settings.barcodeSettings.storeNameFontSize,
+                            ) || 0
                           }
-                          inputProps={{ min: 8, max: 20 }}
+                          onValueChange={(n) =>
+                            handleBarcodeSettingChange("storeNameFontSize", n)
+                          }
+                          min={8}
+                          max={20}
                           disabled={!settings.barcodeSettings.showStoreName}
                         />
                       </Grid2>
-                      <Grid2 size={4}>
-                        <TextField
+                      <Grid2 size={{ xs: 6, sm: 3 }}>
+                        <NumberField
                           fullWidth
                           label="رقم الباركود"
-                          type="number"
                           size="small"
-                          value={settings.barcodeSettings.barcodeNumberFontSize}
-                          onChange={(e) =>
+                          value={
+                            Number(
+                              settings.barcodeSettings.barcodeNumberFontSize,
+                            ) || 0
+                          }
+                          onValueChange={(n) =>
                             handleBarcodeSettingChange(
                               "barcodeNumberFontSize",
-                              Number(e.target.value),
+                              n,
                             )
                           }
-                          inputProps={{ min: 8, max: 24 }}
+                          min={8}
+                          max={24}
                           disabled={!settings.barcodeSettings.showBarcodeNumber}
                         />
                       </Grid2>
@@ -1202,19 +1287,24 @@ const PrinterSettings = () => {
           <Paper
             elevation={1}
             sx={{
-              p: 3,
+              p: { xs: 2, sm: 3 },
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
             }}
           >
-            {(!settings.billPrinter ||
-              !settings.barcodePrinter ||
-              !settings.billPrinterWidth ||
-              !settings.barcodePrinterWidth ||
-              !settings.barcodePrinterHeight) && (
+            {missingRequired && (
               <Alert severity="warning" sx={{ mb: 3 }}>
-                يرجى ملء جميع الحقول المطلوبة قبل الحفظ
+                يرجى ملء الحقول المطلوبة قبل الحفظ:{" "}
+                {[
+                  !IS_WEB && !settings.billPrinter && "طابعة الفواتير",
+                  !settings.billPrinterWidth && "عرض الفاتورة",
+                  !IS_WEB && !settings.barcodePrinter && "طابعة الباركود",
+                  !settings.barcodePrinterWidth && "عرض الملصق",
+                  !settings.barcodePrinterHeight && "ارتفاع الملصق",
+                ]
+                  .filter(Boolean)
+                  .join("، ")}
               </Alert>
             )}
 
@@ -1227,14 +1317,7 @@ const PrinterSettings = () => {
               startIcon={<SaveIcon />}
               onClick={saveSettings}
               loading={loading}
-              disabled={
-                loading ||
-                !settings.billPrinter ||
-                !settings.barcodePrinter ||
-                !settings.billPrinterWidth ||
-                !settings.barcodePrinterWidth ||
-                !settings.barcodePrinterHeight
-              }
+              disabled={loading || missingRequired}
               sx={{
                 py: 1.5,
                 borderRadius: 2,

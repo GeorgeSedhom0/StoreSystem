@@ -13,6 +13,9 @@ import { CalendarMonth, Warning } from "@mui/icons-material";
 import { Product } from "../../utils/types";
 import { useMemo, useState } from "react";
 import PrintBarCode from "@renderer/pages/Shared/PrintBarCode";
+import { PackageChips } from "@renderer/pages/Shared/PackagesDialog";
+import ProductMobileCard from "@renderer/pages/Shared/ProductMobileCard";
+import useConfirm from "@renderer/pages/Shared/useConfirm";
 
 interface ProductCardProps {
   product: Product;
@@ -25,6 +28,8 @@ interface ProductCardProps {
   onOpenBatchModal: (product: Product) => void;
   earliestExpiration?: string | null;
   hasExpiringBatches?: boolean;
+  onOpenPackages?: (product: Product) => void;
+  isMobile?: boolean;
 }
 
 const ProductCard = ({
@@ -38,8 +43,21 @@ const ProductCard = ({
   onOpenBatchModal,
   earliestExpiration,
   hasExpiringBatches,
+  onOpenPackages,
+  isMobile,
 }: ProductCardProps) => {
   const [isPrintingCode, setIsPrintingCode] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
+  const askDelete = async () => {
+    const ok = await confirm({
+      title: `إزالة «${product.name}»؟`,
+      message:
+        "سيختفي المنتج من البيع والبحث في هذا المتجر. يمكن استعادته لاحقاً من «عرض المنتجات المحذوفة».",
+      confirmText: "إزالة",
+      danger: true,
+    });
+    if (ok) deleteProduct(product.id!);
+  };
 
   const productInCart = useMemo(
     () => editedProducts.find((p) => p.id === product.id),
@@ -50,6 +68,77 @@ const ProductCard = ({
     () => (productInCart ? productInCart : product),
     [productInCart, product],
   );
+
+  if (isMobile) {
+    const setField = (field: string, value: string) =>
+      setEditedProducts((prev) => {
+        const v = field === "stock" ? parseInt(value) || 0 : value;
+        const i = prev.findIndex((p) => p.id === product.id);
+        if (i === -1) return [...prev, { ...product, [field]: v }];
+        const next = [...prev];
+        next[i] = { ...next[i], [field]: v };
+        return next;
+      });
+    return (
+      <>
+        {confirmDialog}
+        {confirmDialog}
+        {isPrintingCode && (
+          <PrintBarCode
+            code={product.bar_code}
+            name={product.name}
+            price={product.price}
+            setOpen={setIsPrintingCode}
+          />
+        )}
+        <ProductMobileCard
+          name={productToMap.name}
+          barCode={productToMap.bar_code}
+          category={productToMap.category}
+          price={productToMap.price}
+          wholesalePrice={productToMap.wholesale_price}
+          stock={productToMap.stock}
+          editStock
+          reserved={reserved}
+          packages={product.packages}
+          changed={!!productInCart}
+          onChange={setField}
+          onOpenPackages={
+            onOpenPackages ? () => onOpenPackages(product) : undefined
+          }
+          actions={
+            <>
+              <Tooltip title="الصلاحية">
+                <IconButton
+                  size="small"
+                  color={hasExpiringBatches ? "warning" : "default"}
+                  onClick={() => onOpenBatchModal(product)}
+                >
+                  <CalendarMonth />
+                </IconButton>
+              </Tooltip>
+              <Button size="small" onClick={() => setIsPrintingCode(true)}>
+                باركود
+              </Button>
+              {isShowingDeleted ? (
+                <Button
+                  size="small"
+                  color="success"
+                  onClick={() => restoreProduct(product.id!)}
+                >
+                  استعادة
+                </Button>
+              ) : (
+                <Button size="small" color="error" onClick={askDelete}>
+                  إزالة
+                </Button>
+              )}
+            </>
+          }
+        />
+      </>
+    );
+  }
 
   return (
     <TableRow key={`${product.id}-${product.bar_code}-${product.name}`}>
@@ -194,6 +283,14 @@ const ProductCard = ({
         <TextField disabled={true} value={reserved} variant="standard" />
       </TableCell>
 
+      <TableCell sx={{ minWidth: 120 }}>
+        <PackageChips
+          packages={product.packages}
+          onClick={onOpenPackages ? () => onOpenPackages(product) : undefined}
+          emptyLabel="إضافة"
+        />
+      </TableCell>
+
       <TableCell>
         <TextField
           disabled={false}
@@ -259,11 +356,7 @@ const ProductCard = ({
             استعادة المنتج
           </Button>
         ) : (
-          <Button
-            variant="contained"
-            color="error"
-            onClick={() => deleteProduct(product.id!)}
-          >
+          <Button variant="contained" color="error" onClick={askDelete}>
             ازالة المنتج
           </Button>
         )}

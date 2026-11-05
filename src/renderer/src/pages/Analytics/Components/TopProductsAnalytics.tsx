@@ -1,22 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
-import { useCallback, useMemo, useState, useContext } from "react";
-import {
-  Button,
-  ButtonGroup,
-  Card,
-  Grid2,
-  Typography,
-  useTheme,
-} from "@mui/material";
-import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { useMemo, useState, useContext } from "react";
+import { Card, Grid2, Typography, useTheme } from "@mui/material";
 import EChartsReact from "echarts-for-react";
-import tableIcon from "./table.png";
 import { exportToExcel } from "../utils";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { localTimestamp } from "../../utils/functions";
+import {
+  ChartHeader,
+  DateRangeFilter,
+  ExportExcelButton,
+  chartGrid,
+  chartToolbox,
+  useChartHeight,
+  useIsPhone,
+} from "./ChartTools";
 
 export interface ProductsAnalyticsType {
   [key: string]: [string, number, boolean?][];
@@ -46,12 +45,14 @@ const TopProductsAnalytics = () => {
   );
   const [endDate, setEndDate] = useState<Dayjs>(dayjs());
   const { storeId } = useContext(StoreContext);
+  const isPhone = useIsPhone();
+  const chartHeight = useChartHeight(500, 340);
 
   const {
     palette: { mode },
   } = useTheme();
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isError } = useQuery({
     queryKey: ["analytics", "top-products", startDate, endDate, storeId],
     queryFn: () =>
       getAnalytics(
@@ -62,61 +63,36 @@ const TopProductsAnalytics = () => {
     initialData: {} as ProductsAnalyticsType,
   });
 
-  const setRange = useCallback((range: "day" | "week" | "month") => {
-    switch (range) {
-      case "day":
-        setStartDate(dayjs().startOf("day"));
-        setEndDate(dayjs().endOf("day"));
-        break;
-      case "week":
-        setStartDate(dayjs().startOf("week"));
-        setEndDate(dayjs().endOf("week"));
-        break;
-      case "month":
-        setStartDate(dayjs().startOf("month"));
-        setEndDate(dayjs().endOf("month"));
-        break;
-      default:
-        break;
-    }
-  }, []);
+  const isEmpty = Object.keys(data).length === 0;
+
+  const handleExport = () =>
+    exportToExcel(
+      [
+        ["التاريخ", "المنتج", "الكمية المباعة", "نوع البيانات"],
+        ...Object.entries(data).flatMap(([name, values]) =>
+          values.map(([date, value, is_prediction]) => [
+            date,
+            name,
+            value,
+            is_prediction ? "توقع" : "فعلي",
+          ]),
+        ),
+      ],
+      "المنتجات الأكثر مبيعا",
+    );
 
   const options: echarts.EChartsOption = useMemo(
     () => ({
       tooltip: {
         trigger: "axis",
+        confine: true,
       },
-      legend: {},
-      toolbox: {
-        feature: {
-          magicType: {
-            type: ["line", "bar"],
-          },
-          saveAsImage: {},
-          myTool: {
-            show: true,
-            title: "Export to Excel",
-            icon: `image://${tableIcon}`,
-            onclick: () => {
-              const exportData = [
-                ["التاريخ", "المنتج", "الكمية المباعة", "نوع البيانات"],
-                ...Object.entries(data).flatMap(([name, values]) =>
-                  values.map(([date, value, is_prediction]) => [
-                    date,
-                    name,
-                    value,
-                    is_prediction ? "توقع" : "فعلي",
-                  ]),
-                ),
-              ];
-              exportToExcel(exportData);
-            },
-          },
-        },
-        show: true,
-      },
+      legend: { type: "scroll" as const, top: isPhone ? 28 : 0 },
+      toolbox: chartToolbox(),
+      grid: chartGrid(isPhone, { top: isPhone ? 72 : 56 }),
       xAxis: {
         type: "time",
+        axisLabel: { hideOverlap: true },
       },
       yAxis: {
         type: "value",
@@ -141,80 +117,77 @@ const TopProductsAnalytics = () => {
         },
       })),
     }),
-    [data],
+    [data, isPhone],
   );
 
   return (
     <Grid2 size={12}>
-      <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
+      <Card
+        elevation={3}
+        sx={{ px: { xs: 1.5, sm: 3 }, py: 2, position: "relative" }}
+      >
         <Grid2 container spacing={2}>
           <Grid2 size={12}>
-            <Typography variant="h4">المنتجات الاكثر مبيعا</Typography>
-            <Typography variant="body1">
-              قم بتحديد الفترة لعرض الاحصائيات
-            </Typography>
-            {Object.values(data).some((arr) =>
-              arr.some(([, , is_prediction]) => is_prediction),
-            ) && (
-              <Typography variant="body2" sx={{ color: "orange", mt: 1 }}>
-                🔮 يتضمن التقرير توقعات للتواريخ المستقبلية
-              </Typography>
-            )}
-          </Grid2>
-
-          <Grid2 container gap={3} size={12}>
-            <LocalizationProvider
-              dateAdapter={AdapterDayjs}
-              adapterLocale="ar-sa"
-            >
-              <DatePicker
-                label="من"
-                value={startDate}
-                onChange={(newValue) => {
-                  if (!newValue) return;
-                  setStartDate(newValue);
-                }}
-                disableFuture
-                disabled={isFetching}
-              />
-            </LocalizationProvider>
-
-            <LocalizationProvider
-              dateAdapter={AdapterDayjs}
-              adapterLocale="ar-sa"
-            >
-              <DatePicker
-                label="الى"
-                value={endDate}
-                onChange={(newValue) => {
-                  if (!newValue) return;
-                  setEndDate(newValue);
-                }}
-                disabled={isFetching}
-              />
-            </LocalizationProvider>
-          </Grid2>
-          <Grid2 size={12}>
-            <ButtonGroup>
-              <Button onClick={() => setRange("day")}>اليوم</Button>
-              <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
-              <Button onClick={() => setRange("month")}>هذا الشهر</Button>
-            </ButtonGroup>
-          </Grid2>
-          <Grid2 size={12}>
-            <EChartsReact
-              option={options}
-              style={{ height: 500 }}
-              theme={mode}
-              notMerge={true}
-              loadingOption={{
-                text: "جار التحميل...",
-                color: "#1890ff",
-                textColor: "#fff",
-                maskColor: "rgba(0, 0, 0, 0.45)",
-              }}
-              showLoading={isFetching}
+            <ChartHeader
+              title="المنتجات الأكثر مبيعا"
+              subtitle={
+                <>
+                  حدد الفترة لعرض الإحصائيات
+                  {Object.values(data).some((arr) =>
+                    arr.some(([, , is_prediction]) => is_prediction),
+                  ) && (
+                    <Typography
+                      component="span"
+                      variant="body2"
+                      sx={{ color: "orange", display: "block", mt: 0.5 }}
+                    >
+                      🔮 يتضمن التقرير توقعات للتواريخ المستقبلية
+                    </Typography>
+                  )}
+                </>
+              }
+              actions={
+                <ExportExcelButton onClick={handleExport} disabled={isEmpty} />
+              }
             />
+          </Grid2>
+
+          <Grid2 size={12}>
+            <DateRangeFilter
+              startDate={startDate}
+              endDate={endDate}
+              setStartDate={setStartDate}
+              setEndDate={setEndDate}
+              disabled={isFetching}
+            />
+          </Grid2>
+          <Grid2 size={12}>
+            {isError ? (
+              <Typography color="error" sx={{ py: 4, textAlign: "center" }}>
+                تعذر تحميل البيانات
+              </Typography>
+            ) : !isFetching && isEmpty ? (
+              <Typography
+                color="text.secondary"
+                sx={{ py: 4, textAlign: "center" }}
+              >
+                لا توجد مبيعات في هذه الفترة
+              </Typography>
+            ) : (
+              <EChartsReact
+                option={options}
+                style={{ height: chartHeight }}
+                theme={mode}
+                notMerge={true}
+                loadingOption={{
+                  text: "جار التحميل...",
+                  color: "#1890ff",
+                  textColor: "#fff",
+                  maskColor: "rgba(0, 0, 0, 0.45)",
+                }}
+                showLoading={isFetching}
+              />
+            )}
           </Grid2>
         </Grid2>
       </Card>

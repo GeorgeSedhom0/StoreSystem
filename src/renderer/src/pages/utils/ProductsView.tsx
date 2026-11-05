@@ -1,4 +1,5 @@
 import {
+  Chip,
   Paper,
   Table,
   TableBody,
@@ -8,6 +9,7 @@ import {
   TableRow,
 } from "@mui/material";
 import { Bill as BillType } from "./types";
+import { lineView } from "../Shared/packages";
 
 const ProductsView = ({ bill }: { bill: BillType }) => {
   return (
@@ -23,32 +25,37 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
                   ? "سعر الشراء"
                   : "سعر البيع"}
               </TableCell>
-              <TableCell>الاجمالى</TableCell>
+              <TableCell>الإجمالي</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {bill.products.map((product, index: number) => (
-              <TableRow key={index}>
-                <TableCell sx={{ borderBottom: "none" }}>
-                  {product.name}
-                </TableCell>
-                <TableCell sx={{ borderBottom: "none" }}>
-                  {Math.abs(product.amount)}
-                </TableCell>
-                <TableCell sx={{ borderBottom: "none" }}>
-                  {bill.type === "buy" || bill.type === "buy-return"
-                    ? product.wholesale_price.toFixed(2)
-                    : product.price.toFixed(2)}
-                </TableCell>
-                <TableCell sx={{ borderBottom: "none" }}>
-                  {bill.type === "buy" || bill.type === "buy-return"
-                    ? Math.abs(
-                        product.wholesale_price * product.amount,
-                      ).toFixed(2)
-                    : Math.abs(product.price * product.amount).toFixed(2)}
-                </TableCell>
-              </TableRow>
-            ))}
+            {bill.products.map((product, index: number) => {
+              const v = lineView(product);
+              const isBuy = bill.type === "buy" || bill.type === "buy-return";
+              return (
+                <TableRow key={index}>
+                  <TableCell sx={{ borderBottom: "none" }}>
+                    {v.name}
+                    {v.unitLabel && (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color="secondary"
+                        label={v.unitLabel}
+                        sx={{ mx: 1 }}
+                      />
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ borderBottom: "none" }}>{v.qty}</TableCell>
+                  <TableCell sx={{ borderBottom: "none" }}>
+                    {(isBuy ? v.wholesale : v.price).toFixed(2)}
+                  </TableCell>
+                  <TableCell sx={{ borderBottom: "none" }}>
+                    {(isBuy ? v.wholesaleTotal : v.total).toFixed(2)}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {bill.discount > 0 && (
               <TableRow>
                 <TableCell sx={{ borderBottom: "none" }}>خصم</TableCell>
@@ -60,7 +67,7 @@ const ProductsView = ({ bill }: { bill: BillType }) => {
               </TableRow>
             )}
             <TableRow>
-              <TableCell sx={{ borderBottom: "none" }}>الاجمالى</TableCell>
+              <TableCell sx={{ borderBottom: "none" }}>الإجمالي</TableCell>
               <TableCell sx={{ borderBottom: "none" }}></TableCell>
               <TableCell sx={{ borderBottom: "none" }}></TableCell>
               <TableCell sx={{ borderBottom: "none" }}>

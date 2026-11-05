@@ -1,10 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs, { Dayjs } from "dayjs";
-import { useCallback, useMemo, useState, useContext } from "react";
+import { useMemo, useState, useContext } from "react";
 import {
-  Button,
-  ButtonGroup,
   Card,
   FormControl,
   Grid2,
@@ -14,13 +12,20 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import EChartsReact from "echarts-for-react";
 import { exportToExcel } from "../utils";
-import tableIcon from "./table.png";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import { localTimestamp } from "../../utils/functions";
+import {
+  ChartHeader,
+  DateRangeFilter,
+  ExportExcelButton,
+  chartGrid,
+  chartToolbox,
+  formatMoney,
+  useChartHeight,
+  useIsPhone,
+} from "./ChartTools";
 
 interface ShiftsAnalytics {
   start_date_time: string;
@@ -47,6 +52,16 @@ const getAnalytics = async (
   );
   return data;
 };
+
+const fmtDateTime = (s: string) =>
+  new Date(s).toLocaleString("ar-eg", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+  });
+
 const ShiftsAnalytics = () => {
   const [startDate, setStartDate] = useState<Dayjs>(
     dayjs().subtract(1, "month"),
@@ -57,12 +72,14 @@ const ShiftsAnalytics = () => {
     "return",
   ]);
   const { storeId } = useContext(StoreContext);
+  const isPhone = useIsPhone();
+  const chartHeight = useChartHeight(500, 320);
 
   const {
     palette: { mode },
   } = useTheme();
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isError } = useQuery({
     queryKey: ["analytics", startDate, endDate, requiredTypes, storeId],
     queryFn: () =>
       getAnalytics(
@@ -74,95 +91,39 @@ const ShiftsAnalytics = () => {
     initialData: [],
   });
 
-  const setRange = useCallback((range: "day" | "week" | "month") => {
-    switch (range) {
-      case "day":
-        setStartDate(dayjs().startOf("day"));
-        setEndDate(dayjs().endOf("day"));
-        break;
-      case "week":
-        setStartDate(dayjs().startOf("week"));
-        setEndDate(dayjs().endOf("week"));
-        break;
-      case "month":
-        setStartDate(dayjs().startOf("month"));
-        setEndDate(dayjs().endOf("month"));
-        break;
-      default:
-        break;
-    }
-  }, []);
+  const handleExport = () =>
+    exportToExcel(
+      [
+        ["بداية الشفت", "نهاية الشفت", "الإجمالي", "نوع البيانات"],
+        ...data.map(
+          ({ start_date_time, end_date_time, total, is_prediction }) => [
+            fmtDateTime(start_date_time),
+            fmtDateTime(end_date_time),
+            total,
+            is_prediction ? "توقع" : "فعلي",
+          ],
+        ),
+      ],
+      "إحصائيات الشفتات",
+    );
 
   const options: echarts.EChartsOption = useMemo(
     () => ({
       tooltip: {
         trigger: "axis",
+        confine: true,
+        valueFormatter: (v) => formatMoney(Number(v)),
       },
       legend: {},
-      toolbox: {
-        feature: {
-          magicType: {
-            type: ["line", "bar"],
-          },
-          saveAsImage: {},
-          myTool1: {
-            show: true,
-            title: "Export to Excel",
-            icon: `image://${tableIcon}`,
-            onclick: () => {
-              exportToExcel([
-                ["بداية الشفت", "نهاية الشفت", "الإجمالي", "نوع البيانات"],
-                ...data.map(
-                  ({
-                    start_date_time,
-                    end_date_time,
-                    total,
-                    is_prediction,
-                  }) => [
-                    new Date(start_date_time).toLocaleString("ar-eg", {
-                      year: "numeric",
-                      month: "numeric",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "numeric",
-                    }),
-                    new Date(end_date_time).toLocaleString("ar-eg", {
-                      year: "numeric",
-                      month: "numeric",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "numeric",
-                    }),
-                    total,
-                    is_prediction ? "توقع" : "فعلي",
-                  ],
-                ),
-              ]);
-            },
-          },
-        },
-        show: true,
-      },
+      toolbox: chartToolbox(),
+      grid: chartGrid(isPhone),
       xAxis: {
         type: "category",
+        axisLabel: { hideOverlap: true, rotate: isPhone ? 30 : 0 },
         data: data.map(({ start_date_time, end_date_time, is_prediction }) => {
-          const label =
-            new Date(start_date_time).toLocaleString("ar-eg", {
-              year: "numeric",
-              month: "numeric",
-              day: "numeric",
-              hour: "numeric",
-              minute: "numeric",
-            }) +
-            " - " +
-            new Date(end_date_time).toLocaleString("ar-eg", {
-              year: "numeric",
-              month: "numeric",
-              day: "numeric",
-              hour: "numeric",
-              minute: "numeric",
-            });
-
+          const label = isPhone
+            ? fmtDateTime(start_date_time)
+            : fmtDateTime(start_date_time) + " - " + fmtDateTime(end_date_time);
           return is_prediction ? `🔮 ${label}` : label;
         }),
       },
@@ -171,8 +132,8 @@ const ShiftsAnalytics = () => {
       },
       series: [
         {
+          name: "الإجمالي",
           type: "bar",
-          smooth: true,
           data: data.map(({ total, is_prediction }) => ({
             value: total,
             itemStyle: is_prediction
@@ -188,103 +149,97 @@ const ShiftsAnalytics = () => {
         },
       ],
     }),
-    [data],
+    [data, isPhone],
   );
 
   return (
     <Grid2 size={12}>
-      <Card elevation={3} sx={{ px: 3, py: 2, position: "relative" }}>
+      <Card
+        elevation={3}
+        sx={{ px: { xs: 1.5, sm: 3 }, py: 2, position: "relative" }}
+      >
         <Grid2 container spacing={2}>
           <Grid2 size={12}>
-            <Typography variant="h4">احصائيات الشفتات</Typography>
-            <Typography variant="body1">
-              قم بتحديد الفترة لعرض الاحصائيات
-            </Typography>
-            <Typography variant="body1">
-              الشيفت الحالى غير مضمون فى التقرير حتى اغلاقة
-            </Typography>
-          </Grid2>
-
-          <Grid2 container gap={3} size={12}>
-            <LocalizationProvider
-              dateAdapter={AdapterDayjs}
-              adapterLocale="ar-sa"
-            >
-              <DatePicker
-                label="من"
-                value={startDate}
-                onChange={(newValue) => {
-                  if (!newValue) return;
-                  setStartDate(newValue);
-                }}
-                disableFuture
-                disabled={isFetching}
-              />
-            </LocalizationProvider>
-
-            <LocalizationProvider
-              dateAdapter={AdapterDayjs}
-              adapterLocale="ar-sa"
-            >
-              <DatePicker
-                label="الى"
-                value={endDate}
-                onChange={(newValue) => {
-                  if (!newValue) return;
-                  setEndDate(newValue);
-                }}
-                disabled={isFetching}
-              />
-            </LocalizationProvider>
-
-            <FormControl>
-              <InputLabel>نوع الفانورة</InputLabel>
-              <Select
-                value={requiredTypes}
-                onChange={(e) =>
-                  setRequiredTypes(
-                    Array.isArray(e.target.value)
-                      ? e.target.value
-                      : [e.target.value],
-                  )
-                }
-                label="نوع الفاتورة"
-                multiple
-                sx={{
-                  width: 200,
-                }}
-              >
-                <MenuItem value="sell">نقدي</MenuItem>
-                <MenuItem value="BNPL">آجل</MenuItem>
-                <MenuItem value="buy">شراء</MenuItem>
-                <MenuItem value="return">مرتجع</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid2>
-          <Grid2 size={12}>
-            <ButtonGroup>
-              <Button onClick={() => setRange("day")}>اليوم</Button>
-              <Button onClick={() => setRange("week")}>هذا الاسبوع</Button>
-              <Button onClick={() => setRange("month")}>هذا الشهر</Button>
-            </ButtonGroup>
-          </Grid2>
-          <Grid2 size={12}>
-            الإجمالي: {data.reduce((acc, { total }) => acc + total, 0)}
-          </Grid2>
-          <Grid2 size={12}>
-            <EChartsReact
-              option={options}
-              style={{ height: 500 }}
-              theme={mode}
-              notMerge={true}
-              loadingOption={{
-                text: "جار التحميل...",
-                color: "#1890ff",
-                textColor: "#fff",
-                maskColor: "rgba(0, 0, 0, 0.45)",
-              }}
-              showLoading={isFetching}
+            <ChartHeader
+              title="إحصائيات الشفتات"
+              subtitle={
+                <>
+                  حدد الفترة لعرض الإحصائيات. الشفت الحالي لا يدخل في التقرير
+                  حتى إغلاقه.
+                </>
+              }
+              actions={
+                <ExportExcelButton
+                  onClick={handleExport}
+                  disabled={data.length === 0}
+                />
+              }
             />
+          </Grid2>
+
+          <Grid2 size={12}>
+            <DateRangeFilter
+              startDate={startDate}
+              endDate={endDate}
+              setStartDate={setStartDate}
+              setEndDate={setEndDate}
+              disabled={isFetching}
+            >
+              <FormControl fullWidth>
+                <InputLabel>نوع الفاتورة</InputLabel>
+                <Select
+                  value={requiredTypes}
+                  onChange={(e) =>
+                    setRequiredTypes(
+                      Array.isArray(e.target.value)
+                        ? e.target.value
+                        : [e.target.value],
+                    )
+                  }
+                  label="نوع الفاتورة"
+                  multiple
+                >
+                  <MenuItem value="sell">نقدي</MenuItem>
+                  <MenuItem value="BNPL">آجل</MenuItem>
+                  <MenuItem value="buy">شراء</MenuItem>
+                  <MenuItem value="return">مرتجع</MenuItem>
+                </Select>
+              </FormControl>
+            </DateRangeFilter>
+          </Grid2>
+          <Grid2 size={12}>
+            <Typography sx={{ fontWeight: 600 }}>
+              الإجمالي:{" "}
+              {formatMoney(data.reduce((acc, { total }) => acc + total, 0))}
+            </Typography>
+          </Grid2>
+          <Grid2 size={12}>
+            {isError ? (
+              <Typography color="error" sx={{ py: 4, textAlign: "center" }}>
+                تعذر تحميل البيانات
+              </Typography>
+            ) : !isFetching && data.length === 0 ? (
+              <Typography
+                color="text.secondary"
+                sx={{ py: 4, textAlign: "center" }}
+              >
+                لا توجد شفتات مغلقة في هذه الفترة
+              </Typography>
+            ) : (
+              <EChartsReact
+                option={options}
+                style={{ height: chartHeight }}
+                theme={mode}
+                notMerge={true}
+                loadingOption={{
+                  text: "جار التحميل...",
+                  color: "#1890ff",
+                  textColor: "#fff",
+                  maskColor: "rgba(0, 0, 0, 0.45)",
+                }}
+                showLoading={isFetching}
+              />
+            )}
           </Grid2>
         </Grid2>
       </Card>

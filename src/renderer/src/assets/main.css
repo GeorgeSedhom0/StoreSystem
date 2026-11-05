@@ -1,13 +1,55 @@
 @import "./base.css";
 
+/* Normal document flow: the app bar on top, the page under it, the page
+   scrolls in the body (no vertical centering, which used to leave a gap above
+   the app bar on short pages / phones). */
+html,
 body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-y: auto;
   background-image: url("./wavy-lines.svg");
   background-size: cover;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Text the user types or wants to copy stays selectable. */
+input,
+textarea,
+[contenteditable="true"],
+.selectable {
+  user-select: text;
+}
+
+/* Table cells (bill numbers, phones, barcodes) can be copied everywhere, and
+   on touch devices (long-press to copy) all text can — buttons stay unselectable. */
+td,
+.MuiTypography-root {
+  user-select: text;
+}
+@media (pointer: coarse) {
+  body {
+    user-select: text;
+  }
+}
+button,
+[role="button"],
+[role="tab"],
+.MuiChip-root {
+  user-select: none;
+}
+
+/* Inputs >= 16px on phones so iOS doesn't zoom into a focused field. */
+@media (max-width: 600px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 code {
@@ -27,11 +69,10 @@ code {
 }
 
 #root {
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
-  align-items: center;
-  justify-content: center;
   flex-direction: column;
-  margin-bottom: 80px;
 }
 
 .logo {

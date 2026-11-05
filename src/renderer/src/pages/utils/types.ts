@@ -1,3 +1,12 @@
+/** A named multiple of a product's base unit (e.g. a carton of 10 packs). */
+export interface ProductPackage {
+  id: number;
+  name: string;
+  units: number;
+  price: number;
+  bar_code?: string | null;
+}
+
 export interface Product {
   id?: number;
   name: string;
@@ -6,6 +15,7 @@ export interface Product {
   category: string;
   stock: number;
   bar_code: string;
+  packages?: ProductPackage[];
 }
 
 export interface DBProducts {
@@ -23,6 +33,7 @@ export interface AdminProduct {
   stock_by_store: {
     [key: string]: number;
   };
+  packages?: ProductPackage[];
 }
 
 export interface DBAdminProducts {
@@ -36,6 +47,12 @@ export interface BatchInfo {
   batch_id?: number;
 }
 
+/**
+ * A cart line. A package line (package_units set) keeps quantity in packages
+ * and price/wholesale_price per package, so every cart total (price ×
+ * quantity) is unchanged; see Shared/packages.ts for the conversion to units.
+ * In buy/transfer carts, `price` of a package line stays the UNIT sell price.
+ */
 export interface SCProduct {
   id: number;
   name: string;
@@ -46,6 +63,27 @@ export interface SCProduct {
   barCode?: string;
   batches?: BatchInfo[];
   batch_id?: number;
+  package_id?: number | null;
+  package_units?: number | null;
+  package_name?: string | null;
+  /** Packages available for this product (for the unit switcher). */
+  packages?: ProductPackage[];
+  /** The catalogue unit price/cost when the line was added. */
+  unit_price?: number;
+  unit_wholesale_price?: number;
+}
+
+/** A bill line as returned by the API (amount/prices in base units). */
+export interface BillLine {
+  id: number;
+  name: string;
+  price: number;
+  wholesale_price: number;
+  amount: number;
+  bar_code: string;
+  package_id?: number | null;
+  package_units?: number | null;
+  package_name?: string | null;
 }
 
 export interface PaymentMethod {
@@ -102,14 +140,7 @@ export interface Bill {
       time: string;
     }[];
   } | null;
-  products: {
-    id: number;
-    name: string;
-    price: number;
-    wholesale_price: number;
-    amount: number;
-    bar_code: string;
-  }[];
+  products: BillLine[];
   isExpanded?: boolean;
 }
 

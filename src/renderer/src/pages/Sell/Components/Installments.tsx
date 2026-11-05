@@ -1,4 +1,10 @@
-import { Grid2, TextField, Typography } from "@mui/material";
+import { Grid2, Typography } from "@mui/material";
+import NumberField from "../../Shared/NumberField";
+
+const fmt = (n: number) =>
+  Number.isFinite(n)
+    ? n.toLocaleString("en-US", { maximumFractionDigits: 2 })
+    : "-";
 
 const Installments = ({
   installments,
@@ -19,75 +25,60 @@ const Installments = ({
   shoppingCart: any[];
   discount: number;
 }) => {
+  const remaining =
+    shoppingCart.reduce((acc, item) => acc + item.price * item.quantity, 0) -
+    discount -
+    paid;
+
   return (
     <>
       <Grid2 container size={12} spacing={2}>
         <Grid2 size={{ xs: 6, sm: 4 }}>
-          <TextField
+          <NumberField
             fullWidth
-            label="عدد الاقساط"
-            type="number"
+            label="عدد الأقساط"
             value={installments}
-            onChange={(e) => setInstallments(parseInt(e.target.value) || 1)}
+            onValueChange={setInstallments}
+            integer
+            min={1}
             size="small"
           />
         </Grid2>
         <Grid2 size={{ xs: 6, sm: 4 }}>
-          <TextField
+          <NumberField
             fullWidth
-            label="الفترة بين الاقساط"
-            type="number"
+            label="الفترة بين الأقساط (يوم)"
             value={installmentInterval}
-            onChange={(e) =>
-              setInstallmentInterval(parseInt(e.target.value) || 30)
-            }
+            onValueChange={setInstallmentInterval}
+            integer
+            min={1}
             size="small"
           />
         </Grid2>
-        <Grid2 size={{ xs: 6, sm: 4 }}>
-          <TextField
+        <Grid2 size={{ xs: 12, sm: 4 }}>
+          <NumberField
             fullWidth
             label="المقدم"
-            type="number"
             value={paid}
-            onChange={(e) => setPaid(parseFloat(e.target.value) || 0)}
+            onValueChange={setPaid}
+            min={0}
             size="small"
-            slotProps={{
-              input: {
-                inputMode: "decimal",
-              },
-            }}
           />
         </Grid2>
       </Grid2>
       <Grid2 size={12}>
-        <Typography variant="h6">
-          المتبقي:{" "}
-          {shoppingCart.reduce(
-            (acc, item) => acc + item.price * item.quantity,
-            0,
-          ) -
-            discount -
-            paid}{" "}
-          جنيه
+        <Typography
+          variant="h6"
+          sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
+        >
+          المتبقي: {fmt(remaining)} جنيه
         </Typography>
-        <Typography variant="h6">
-          قيمة القسط:{" "}
-          {shoppingCart.reduce(
-            (acc, item) => acc + item.price * item.quantity,
-            0,
-          ) -
-            discount -
-            paid}{" "}
-          / {installments} ={" "}
-          {(shoppingCart.reduce(
-            (acc, item) => acc + item.price * item.quantity,
-            0,
-          ) -
-            discount -
-            paid) /
-            installments}{" "}
-          جنيه
+        <Typography
+          variant="h6"
+          sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}
+        >
+          قيمة القسط: {fmt(remaining)} / {installments || "-"} ={" "}
+          {installments > 0 ? fmt(remaining / installments) : "-"} جنيه
         </Typography>
       </Grid2>
     </>
