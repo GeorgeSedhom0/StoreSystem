@@ -34,7 +34,7 @@ docker run --rm \
   bash -c "
     set -e
     # npm, not corepack: corepack's bundled signing keys can reject older
-    # pnpm releases ("Cannot find matching keyid").
+    # pnpm releases (error: Cannot find matching keyid).
     npm install -g --silent pnpm@${PNPM_VERSION}
     # --ignore-scripts skips the Electron binary postinstall (not needed for a web build).
     # No --frozen-lockfile: the lockfile may be absent on a synced checkout.
