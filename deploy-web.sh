@@ -40,7 +40,7 @@ docker run --rm \
     # No --frozen-lockfile: the lockfile may be absent on a synced checkout.
     # confirmModulesPurge=false: rebuild node_modules without a prompt if it
     # was made by a different pnpm version.
-    pnpm install --ignore-scripts --config.confirmModulesPurge=false
+    pnpm install --ignore-scripts --no-frozen-lockfile --config.confirmModulesPurge=false
     pnpm run build:web
   "
 
