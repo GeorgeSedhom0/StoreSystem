@@ -16,7 +16,14 @@ import {
   useTheme,
 } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState, useContext, useRef, useEffect } from "react";
+import {
+  useCallback,
+  useState,
+  useContext,
+  useRef,
+  useEffect,
+  useMemo,
+} from "react";
 import { Party, Product, ProductPackage, SCProduct } from "../utils/types";
 import axios from "axios";
 import AlertMessage, { AlertMsg } from "../Shared/AlertMessage";
@@ -130,8 +137,13 @@ const Buy = () => {
   });
   const otherStores = storesData.filter((s) => s.id !== storeId);
   // Accounts of this store (or unowned). Off-store accounts can't pay a buy.
-  const buyMethods = paymentMethods.filter(
-    (m) => m.home_store_id == null || m.home_store_id === storeId,
+  // Memoized: PaymentSplit re-balances whenever `methods` changes identity.
+  const buyMethods = useMemo(
+    () =>
+      paymentMethods.filter(
+        (m) => m.home_store_id == null || m.home_store_id === storeId,
+      ),
+    [paymentMethods, storeId],
   );
   const [payByEnabled, setPayByEnabled] = useState(false);
   const [payByStoreId, setPayByStoreId] = useState<number | "">("");

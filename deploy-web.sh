@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
 #
-# One-shot deploy for the StoreSystem web UI, meant to run ON the TrueNAS server.
+# Builds the StoreSystem web UI (the phone client), meant to run ON the server.
 #
 #   ./deploy-web.sh
 #
-# It does everything end to end with no Node.js installed on the host:
-#   1. Builds the React frontend inside a throwaway Node container, emitting a
-#      plain SPA into server/static/.
-#   2. Builds & (re)starts the Docker stack, which serves that SPA at "/" and
-#      the API on the same origin (port 8000).
+# Builds the React frontend inside a throwaway Node container (no Node.js on
+# the host) into server/static/. It does NOT touch the Docker stack: the
+# running backend serves server/static/ from disk on every request, so the new
+# build is live as soon as this finishes - no restart needed. (Only the very
+# first build on a server needs one backend restart, because the backend
+# decides at startup whether a web build exists.)
 #
-# After it finishes, phone/desktop clients on the network (e.g. via Tailscale)
-# open  https://<server-ip>:8000/  and get the app.
+# Clients open  https://<server-ip>:8000/  and reload the page.
 #
 set -euo pipefail
 
 # Repo root = the directory this script lives in.
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="${COMPOSE_FILE:-server/docker-compose.truenas.yml}"
 NODE_IMAGE="${NODE_IMAGE:-node:20-bookworm}"
 # Pinned: pnpm@latest jumped majors and stopped honouring .npmrc / the
 # package.json "pnpm" settings, which broke the build. Bump deliberately.
@@ -25,7 +24,7 @@ PNPM_VERSION="${PNPM_VERSION:-10.4.1}"
 
 cd "$REPO_ROOT"
 
-echo "==> [1/2] Building web frontend in $NODE_IMAGE ..."
+echo "==> Building web frontend in $NODE_IMAGE ..."
 docker run --rm \
   -v "$REPO_ROOT":/repo \
   -w /repo \
@@ -46,12 +45,5 @@ docker run --rm \
     pnpm run build:web
   "
 
-echo "==> Frontend built into server/static/"
-
-echo "==> [2/2] Building & starting Docker stack ..."
-docker compose -f "$COMPOSE_FILE" up -d --build
-
-echo ""
-echo "==> Done."
-echo "    The app is now served at:  https://<this-server-ip>:8000/"
-echo "    (self-signed cert — accept the browser warning once per device)"
+echo "==> Done: web UI built into server/static/"
+echo "    Live now at https://<this-server-ip>:8000/ (reload the page on phones)."

@@ -143,7 +143,19 @@ const PaymentSplit = ({
   // Keep the default line present and the sum balanced to the total.
   useEffect(() => {
     if (!defaultMethod) return;
-    setLines((prev) => normalize(prev, total, methods));
+    // Keep the same array when nothing changed: a new one re-renders the
+    // parent, and a parent passing a fresh `methods` array each render would
+    // otherwise loop forever (it starved the Buy page's product search).
+    setLines((prev) => {
+      const next = normalize(prev, total, methods);
+      return next.length === prev.length &&
+        next.every(
+          (l, i) =>
+            l.method_id === prev[i].method_id && l.amount === prev[i].amount,
+        )
+        ? prev
+        : next;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total, methods]);
 
@@ -289,7 +301,6 @@ const PaymentSplit = ({
     );
   };
 
-
   const pct = (amount: number) =>
     total > 0 ? Math.round((amount / total) * 100) : 0;
 
@@ -315,10 +326,7 @@ const PaymentSplit = ({
         }}
       >
         <PaymentsIcon color="primary" fontSize={dense ? "small" : "medium"} />
-        <Typography
-          variant={dense ? "body2" : "subtitle1"}
-          fontWeight={600}
-        >
+        <Typography variant={dense ? "body2" : "subtitle1"} fontWeight={600}>
           طرق الدفع
         </Typography>
         {!dense && (
@@ -355,7 +363,9 @@ const PaymentSplit = ({
         </Box>
       </Box>
 
-      <Box sx={{ display: "flex", flexDirection: "column", gap: dense ? 1 : 1.5 }}>
+      <Box
+        sx={{ display: "flex", flexDirection: "column", gap: dense ? 1 : 1.5 }}
+      >
         {balancedLines.map((line) => {
           const isDefault = line.method_id === defaultId;
           const method = methods.find((m) => m.id === line.method_id);
