@@ -40,7 +40,9 @@ docker run --rm \
     # No --frozen-lockfile: the lockfile may be absent on a synced checkout.
     # confirmModulesPurge=false: rebuild node_modules without a prompt if it
     # was made by a different pnpm version.
-    pnpm install --ignore-scripts --no-frozen-lockfile --config.confirmModulesPurge=false
+    # hardlink: on ZFS (TrueNAS) pnpm's parallel copyfile fails with EAGAIN;
+    # the store and node_modules share the bind mount, so link instead of copy.
+    pnpm install --ignore-scripts --no-frozen-lockfile --config.confirmModulesPurge=false --package-import-method=hardlink
     pnpm run build:web
   "
 
