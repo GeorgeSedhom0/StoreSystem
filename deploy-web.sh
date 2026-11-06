@@ -19,6 +19,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-server/docker-compose.truenas.yml}"
 NODE_IMAGE="${NODE_IMAGE:-node:20-bookworm}"
+# Pinned: pnpm@latest jumped majors and stopped honouring .npmrc / the
+# package.json "pnpm" settings, which broke the build. Bump deliberately.
+PNPM_VERSION="${PNPM_VERSION:-10.4.1}"
 
 cd "$REPO_ROOT"
 
@@ -31,10 +34,12 @@ docker run --rm \
   bash -c "
     set -e
     corepack enable
-    corepack prepare pnpm@latest --activate
+    corepack prepare pnpm@${PNPM_VERSION} --activate
     # --ignore-scripts skips the Electron binary postinstall (not needed for a web build).
     # No --frozen-lockfile: the lockfile may be absent on a synced checkout.
-    pnpm install --ignore-scripts
+    # confirmModulesPurge=false: rebuild node_modules without a prompt if it
+    # was made by a different pnpm version.
+    pnpm install --ignore-scripts --config.confirmModulesPurge=false
     pnpm run build:web
   "
 
