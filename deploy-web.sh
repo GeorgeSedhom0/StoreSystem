@@ -33,8 +33,9 @@ docker run --rm \
   "$NODE_IMAGE" \
   bash -c "
     set -e
-    corepack enable
-    corepack prepare pnpm@${PNPM_VERSION} --activate
+    # npm, not corepack: corepack's bundled signing keys can reject older
+    # pnpm releases ("Cannot find matching keyid").
+    npm install -g --silent pnpm@${PNPM_VERSION}
     # --ignore-scripts skips the Electron binary postinstall (not needed for a web build).
     # No --frozen-lockfile: the lockfile may be absent on a synced checkout.
     # confirmModulesPurge=false: rebuild node_modules without a prompt if it
