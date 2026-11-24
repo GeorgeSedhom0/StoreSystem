@@ -38,6 +38,7 @@ import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import BuildIcon from "@mui/icons-material/Build";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import AssignmentReturnedIcon from "@mui/icons-material/AssignmentReturned";
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import { ViewContainer } from "./pages/Shared/Utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -56,6 +57,7 @@ import SetBaseUrl from "./SetBaseUrl";
 import { StoreData } from "./pages/utils/types";
 import NotificationBell from "./pages/Shared/NotificationBell";
 import { PAGE_LABELS } from "./pageLabels";
+import PurgeBanner from "./pages/Shared/PurgeBanner";
 
 const IS_WEB = Boolean((window as any).__IS_WEB__);
 
@@ -78,6 +80,7 @@ const PAGE_ICONS: Record<string, ReactNode> = {
   "/accounts": <AccountBalanceWalletIcon />,
   "/bill-corrections": <BuildIcon />,
   "/restock-requests": <AssignmentReturnedIcon />,
+  "/data-purge": <DeleteSweepIcon />,
 };
 
 const logoutWihtoutEndingShift = async () => {
@@ -443,7 +446,10 @@ const Shell = ({ children }: { children: ReactNode }) => {
         </Box>
       </Drawer>
 
-      <ViewContainer>{children}</ViewContainer>
+      <ViewContainer>
+        <PurgeBanner enabled={!!profile} />
+        {children}
+      </ViewContainer>
     </>
   );
 };

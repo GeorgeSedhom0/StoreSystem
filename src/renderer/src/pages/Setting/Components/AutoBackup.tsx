@@ -56,7 +56,7 @@ interface BackupItem {
   name: string;
   size: number;
   created_at: string;
-  kind: "daily" | "manual" | "shift";
+  kind: "daily" | "manual" | "shift" | "purge";
   managed: boolean;
   other_db: boolean;
 }
@@ -81,6 +81,7 @@ const KIND_LABEL: Record<BackupItem["kind"], string> = {
   daily: "يومية",
   manual: "يدوية",
   shift: "بعد الشيفت",
+  purge: "قبل حذف السجلات",
 };
 
 const SOURCE_LABEL: Record<BackupOverview["dir_source"], string> = {

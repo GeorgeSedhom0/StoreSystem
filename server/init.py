@@ -63,6 +63,7 @@ def drop_all_tables(cur):
     cur.execute("DROP TABLE IF EXISTS restock_fulfillments CASCADE")
     cur.execute("DROP TABLE IF EXISTS restock_request_lines CASCADE")
     cur.execute("DROP TABLE IF EXISTS restock_requests CASCADE")
+    cur.execute("DROP TABLE IF EXISTS data_purges CASCADE")
     cur.execute("SET TIME ZONE 'Africa/Cairo'")
     cur.execute(f"ALTER DATABASE {DATABASE} SET timezone TO 'Africa/Cairo';")
 
@@ -82,7 +83,7 @@ def create_all_tables(cur):
     cur.execute("""
     INSERT INTO scopes (name, pages)
     VALUES
-    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20])
+    ('admin', ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21])
     """)
     cur.execute("""
     INSERT INTO scopes (name, pages)
@@ -120,12 +121,14 @@ def create_all_tables(cur):
     ('admin', '/admin'),
     ('الحسابات', '/accounts'),
     ('تصحيح الفواتير', '/bill-corrections'),
-    ('طلبات البضاعة', '/restock-requests')
+    ('طلبات البضاعة', '/restock-requests'),
+    ('حذف السجلات', '/data-purge')
     """)
     # /bill-corrections (kept in sync with update_db_24.py) is deliberately in
     # no scope: it rewrites history, so it is granted explicitly per scope.
     # /restock-requests (id 20, kept in sync with update_db_27.py) goes to admin
     # and to every scope that has /admin/move-products (cashier here).
+    # /data-purge (id 21, kept in sync with update_db_28.py) goes to admin only.
 
     # Create the users table
     cur.execute("""
@@ -270,7 +273,7 @@ def create_all_tables(cur):
     )
     """)
     cur.execute("""
-    INSERT INTO db_meta (key, value) VALUES ('version', '27')
+    INSERT INTO db_meta (key, value) VALUES ('version', '28')
     """)
 
     # Create the payment_methods table (dynamic, user-managed payment methods)
@@ -659,6 +662,25 @@ def create_all_tables(cur):
         CREATE INDEX idx_restock_fulfillments_request ON restock_fulfillments (request_id);
     """)
 
+    # Data purge log (kept in sync with update_db_28.py).
+    cur.execute("""
+    CREATE TABLE data_purges (
+        id BIGSERIAL PRIMARY KEY,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        finished_at TIMESTAMP,
+        source VARCHAR NOT NULL,
+        slot TIMESTAMP,
+        cutoff TIMESTAMP NOT NULL,
+        with_backup BOOLEAN NOT NULL,
+        backup_file VARCHAR,
+        user_id BIGINT,
+        username VARCHAR,
+        status VARCHAR NOT NULL,
+        counts JSONB,
+        error TEXT
+    )
+    """)
+
     # Performance indexes (kept in sync with update_db_21.py).
     # Hot paths: running-total triggers on cash_flow / products_flow, the account
     # ledger window, and the bills <-> lines / cash joins used everywhere.
@@ -704,9 +726,14 @@ def create_all_triggers(cur):
     # Update the trigger to update stock after inserting a product flow
     cur.execute("""
     -- Trigger to update stock after insert in product_inventory
+    -- (purge flag kept in sync with update_db_28.py: a data purge writes
+    -- opening FIFO layers that must not change stock)
     CREATE OR REPLACE FUNCTION update_stock_after_insert()
     RETURNS TRIGGER AS $$
     BEGIN
+        IF current_setting('openstore.purge', true) = 'on' THEN
+            RETURN NEW;
+        END IF;
         INSERT INTO product_inventory (store_id, product_id, stock)
         VALUES (NEW.store_id, NEW.product_id, NEW.amount)
         ON CONFLICT (store_id, product_id)
@@ -987,12 +1014,17 @@ def create_all_triggers(cur):
 
     # Create the trigger to update total after inserting a cash_flow
     cur.execute("""
-    -- Trigger to update total after insert (kept in sync with update_db_25.py)
+    -- Trigger to update total after insert (kept in sync with update_db_25.py;
+    -- purge flag with update_db_28.py: a data purge sets totals itself)
     CREATE OR REPLACE FUNCTION update_total_after_insert()
     RETURNS TRIGGER AS $$
     DECLARE
         latest_total NUMERIC;
     BEGIN
+        IF current_setting('openstore.purge', true) = 'on' THEN
+            RETURN NEW;
+        END IF;
+
         -- One running-total writer per store at a time; concurrent sales
         -- used to read the same previous row.
         PERFORM pg_advisory_xact_lock(781234, NEW.store_id::int);
@@ -1119,10 +1151,15 @@ def create_all_triggers(cur):
 
     # Trigger to bubble fix the total after delete
     cur.execute("""
-    -- Trigger to bubble fix the total after delete (kept in sync with update_db_25.py)
+    -- Trigger to bubble fix the total after delete (kept in sync with update_db_25.py;
+    -- purge flag with update_db_28.py: a data purge sets totals itself)
     CREATE OR REPLACE FUNCTION bubble_fix_total_after_delete()
     RETURNS TRIGGER AS $$
     BEGIN
+        IF current_setting('openstore.purge', true) = 'on' THEN
+            RETURN OLD;
+        END IF;
+
         PERFORM pg_advisory_xact_lock(781234, OLD.store_id::int);
 
         IF COALESCE(OLD.amount, 0) <> 0 THEN

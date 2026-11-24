@@ -20,7 +20,9 @@ Where backups go (first match wins):
 
 Retention only ever deletes files this module created: the name must match
 openstore-<db>-<YYYYMMDD-HHMMSS>-<kind>.sql.gz AND be listed in the folder's
-manifest (.openstore-backups.json). Kept: every file from today, the newest
+manifest (.openstore-backups.json). Purge archives (kind "purge", written by
+purge.py) are listed but never added to the manifest, so they are kept forever.
+Kept: every file from today, the newest
 file of each of the last `keep_daily` days and of each of the last
 `keep_weekly` ISO weeks, and always the newest file.
 
@@ -67,9 +69,10 @@ KIND_AR = {
     "daily": "تلقائية يومية",
     "manual": "يدوية",
     "shift": "بعد إغلاق الشيفت",
+    "purge": "قبل حذف السجلات",
 }
 FILE_RE = re.compile(
-    r"^openstore-(?P<db>[A-Za-z0-9_.-]+)-(?P<ts>\d{8}-\d{6})-(?P<kind>daily|manual|shift)\.sql\.gz$"
+    r"^openstore-(?P<db>[A-Za-z0-9_.-]+)-(?P<ts>\d{8}-\d{6})-(?P<kind>daily|manual|shift|purge)\.sql\.gz$"
 )
 DUMP_TRAILER = b"PostgreSQL database dump complete"
 DUMP_TIMEOUT_SECONDS = 2 * 60 * 60
@@ -554,6 +557,74 @@ def _notify_failure(kind: str, error: str, chat_ids: List[str]) -> None:
     )
     for chat_id in chat_ids:
         tu.send_telegram_message(chat_id, text)
+
+
+# ─── Restore ────────────────────────────────────────────────────────────────
+
+
+def find_psql() -> Optional[str]:
+    pg_dump = find_pg_dump()
+    exe = "psql.exe" if os.name == "nt" else "psql"
+    if pg_dump:
+        candidate = os.path.join(os.path.dirname(pg_dump), exe)
+        if os.path.isfile(candidate):
+            return candidate
+    return shutil.which("psql")
+
+
+def restore_database(sql_path: str) -> Dict[str, Any]:
+    """
+    Replace the whole database with a plain-SQL dump, safely:
+
+    1. dump the current data first (a "manual" backup in the backup folder),
+    2. in ONE transaction with ON_ERROR_STOP: drop and recreate the public
+       schema, then load the file. Any error rolls everything back, so a bad
+       file can no longer leave an empty database.
+
+    Raises BackupError on failure (the current data is untouched).
+    """
+    psql = find_psql()
+    if not psql:
+        raise BackupError("لم يتم العثور على برنامج psql على هذا الجهاز")
+
+    safety = run_backup("manual")
+    if not safety.get("success"):
+        raise BackupError(
+            "تعذر أخذ نسخة من البيانات الحالية قبل الاستعادة، لم يتغير شيء: "
+            + str(safety.get("error") or "")
+        )
+
+    fd, wrapper = tempfile.mkstemp(prefix="openstore_restore_", suffix=".sql")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write("\\set ON_ERROR_STOP on\n")
+            fh.write("DROP SCHEMA IF EXISTS public CASCADE;\n")
+            fh.write("CREATE SCHEMA public;\n")
+            fh.write("\\i '" + sql_path.replace("\\", "/").replace("'", "''") + "'\n")
+        cmd = [psql, "-h", HOST or "localhost", "-U", USER or "", "-d", DATABASE or "",
+               "--no-password", "--single-transaction", "-v", "ON_ERROR_STOP=1",
+               "-q", "-f", wrapper]
+        port = (getenv("PGPORT") or "").strip()
+        if port:
+            cmd[1:1] = ["-p", port]
+        env = dict(os.environ)
+        env["PGPASSWORD"] = PASS or ""
+        env["PGCLIENTENCODING"] = "UTF8"
+        proc = subprocess.run(
+            cmd, capture_output=True, env=env, timeout=DUMP_TIMEOUT_SECONDS,
+            creationflags=_creationflags(),
+        )
+        if proc.returncode != 0:
+            err = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
+            raise BackupError(
+                "فشلت الاستعادة ولم يتغير شيء في البيانات الحالية: " + (err[-400:] or f"exit {proc.returncode}")
+            )
+    finally:
+        try:
+            os.remove(wrapper)
+        except OSError:
+            pass
+    return {"safety_backup": safety.get("path")}
 
 
 # ─── Running a backup ───────────────────────────────────────────────────────

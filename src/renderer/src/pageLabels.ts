@@ -20,4 +20,5 @@ export const PAGE_LABELS: Record<string, string> = {
   "/accounts": "الحسابات",
   "/bill-corrections": "تصحيح الفواتير",
   "/restock-requests": "طلبات البضاعة",
+  "/data-purge": "حذف السجلات",
 };

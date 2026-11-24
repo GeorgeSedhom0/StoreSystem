@@ -41,6 +41,7 @@ const BillCorrections = lazy(
   () => import("./pages/BillCorrections/BillCorrections"),
 );
 const Restock = lazy(() => import("./pages/Restock/Restock"));
+const DataPurge = lazy(() => import("./pages/DataPurge/DataPurge"));
 
 axios.defaults.withCredentials = true;
 
@@ -327,6 +328,7 @@ const App = () => {
                       element={<BillCorrections />}
                     />
                     <Route path="/restock-requests" element={<Restock />} />
+                    <Route path="/data-purge" element={<DataPurge />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/installments" element={<Installments />} />
                     <Route path="/employees" element={<Employee />} />

@@ -23,7 +23,6 @@ from os import getenv
 from openpyxl import Workbook
 import subprocess
 import os
-from reset_db import reset_db
 from auth import router as auth_router
 from settings import router as setting_router
 from parties import router as party_router
@@ -56,7 +55,8 @@ from expiration_scheduler import start_expiration_scheduler
 from batches import consume_batches_fefo, add_to_batch, adjust_batches_for_stock_change
 from telegram_commands import telegram_command_worker_loop
 from backup_scheduler import router as backup_router
-from backup_scheduler import backup_scheduler_loop, dump_database, BackupError
+from backup_scheduler import backup_scheduler_loop, dump_database, BackupError, restore_database
+from purge import router as purge_router, purge_scheduler_loop
 
 load_dotenv()
 
@@ -90,10 +90,12 @@ app.include_router(packages_router)
 app.include_router(attendance_router)
 app.include_router(restock_router)
 app.include_router(backup_router)
+app.include_router(purge_router)
 
 
 telegram_command_worker_task: Optional[asyncio.Task] = None
 backup_scheduler_task: Optional[asyncio.Task] = None
+purge_scheduler_task: Optional[asyncio.Task] = None
 
 
 def _install_windows_asyncio_exception_filter() -> None:
@@ -129,7 +131,7 @@ def _install_windows_asyncio_exception_filter() -> None:
 @app.on_event("startup")
 async def startup_event():
     """Initialize background tasks on startup"""
-    global telegram_command_worker_task, backup_scheduler_task
+    global telegram_command_worker_task, backup_scheduler_task, purge_scheduler_task
     _install_windows_asyncio_exception_filter()
     start_expiration_scheduler()
     if telegram_command_worker_task is None or telegram_command_worker_task.done():
@@ -138,13 +140,15 @@ async def startup_event():
         )
     if backup_scheduler_task is None or backup_scheduler_task.done():
         backup_scheduler_task = asyncio.create_task(backup_scheduler_loop())
+    if purge_scheduler_task is None or purge_scheduler_task.done():
+        purge_scheduler_task = asyncio.create_task(purge_scheduler_loop())
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Stop background tasks on shutdown"""
-    global telegram_command_worker_task, backup_scheduler_task
-    for task in (telegram_command_worker_task, backup_scheduler_task):
+    global telegram_command_worker_task, backup_scheduler_task, purge_scheduler_task
+    for task in (telegram_command_worker_task, backup_scheduler_task, purge_scheduler_task):
         if task is not None:
             task.cancel()
             try:
@@ -153,6 +157,7 @@ async def shutdown_event():
                 pass
     telegram_command_worker_task = None
     backup_scheduler_task = None
+    purge_scheduler_task = None
 
 
 origins = [
@@ -3071,7 +3076,7 @@ def store_transfer(
 
 
 # The latest DB schema version this backend expects (bump with each update_db_N).
-LATEST_DB_VERSION = 27
+LATEST_DB_VERSION = 28
 
 
 @app.get("/db-version")
@@ -3422,32 +3427,35 @@ async def restore(
     file: UploadFile = File(...), current_user: dict = Depends(get_current_user)
 ):
     """
-    Restores the database to a previous save point
+    Restores the database to a previous save point.
+
+    Takes a backup of the current data first, then loads the file in one
+    transaction (see backup_scheduler.restore_database): a bad or partial file
+    rolls back and leaves the current data as it was.
     """
     import tempfile
 
+    fd, restore_path = tempfile.mkstemp(prefix="openstore_restore_upload_", suffix=".sql")
     try:
-        reset_db()
-        fileBytes = await file.read()
-        restore_path = os.path.join(tempfile.gettempdir(), "openstore_restore.sql")
-        with open(restore_path, "wb") as f:
-            f.write(fileBytes)
-
-        assert PASS, "No password provided"
-        assert HOST, "No host provided"
-        assert USER, "No user provided"
-        assert DATABASE, "No database provided"
-
-        # Restore the database
-        os.environ["PGPASSWORD"] = PASS
-        with open(restore_path, "r") as f:
-            subprocess.run(["psql", "-h", HOST, "-U", USER, "-d", DATABASE], stdin=f)
-
-        return {"message": "Database restored successfully"}
-
+        with os.fdopen(fd, "wb") as f:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+        result = await asyncio.to_thread(restore_database, restore_path)
+        return {"message": "Database restored successfully", **result}
+    except BackupError as e:
+        logging.error(f"Restore failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
+    finally:
+        try:
+            os.remove(restore_path)
+        except OSError:
+            pass
 
 
 # Add this new endpoint after the other bill-related endpoints
