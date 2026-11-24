@@ -14,6 +14,11 @@ import { randomBytes } from "crypto";
 import https from "https";
 import { is } from "@electron-toolkit/utils";
 import net from "net";
+import {
+  parseDbVersionOutput,
+  pendingMigrations,
+  resolveStartVersion,
+} from "./db-version";
 
 // Status reported to the renderer for the splash screen
 export type ServiceStatus =
@@ -507,10 +512,63 @@ print("SSL certificates generated")
     return highest;
   }
 
+  /** The version the database records itself (db_meta), null if unknown. */
+  private readDbVersion(): number | null {
+    const query = (sql: string): string =>
+      execFileSync(
+        join(this.pgBinDir, "psql.exe"),
+        [
+          "-h",
+          "127.0.0.1",
+          "-p",
+          String(this.pgPort),
+          "-U",
+          this.envVars["USER"] || "openstore",
+          "-d",
+          this.envVars["DATABASE"] || "openstore",
+          "-At",
+          "-c",
+          sql,
+        ],
+        {
+          timeout: 15000,
+          stdio: "pipe",
+          windowsHide: true,
+          env: { ...process.env, PGPASSWORD: this.envVars["PASS"] || "openstore" },
+        },
+      ).toString("utf-8");
+    try {
+      // Two queries: a single one would fail to parse on pre-v18 databases,
+      // which have no db_meta table.
+      if (query("SELECT to_regclass('public.db_meta') IS NOT NULL").trim() !== "t") {
+        return null;
+      }
+      return parseDbVersionOutput(
+        query("SELECT value FROM db_meta WHERE key = 'version'"),
+      );
+    } catch (e) {
+      console.warn("Could not read db_meta version, using .env DB_VERSION:", e);
+      return null;
+    }
+  }
+
   /** Run any pending database migrations (update_db_*.py files) */
   private async runMigrations(): Promise<void> {
-    const currentVersion = parseInt(this.envVars["DB_VERSION"] || "0", 10);
+    const envVersion = parseInt(this.envVars["DB_VERSION"] || "0", 10);
     const highestAvailable = this.getHighestMigrationNumber();
+
+    await this.waitForPostgres(); // Ensure DB is up before reading / migrating
+
+    // The database's own version wins over .env: a restored older backup, or
+    // a version set by hand in Settings, must be migrated from where it is.
+    const dbVersion = this.readDbVersion();
+    const currentVersion = resolveStartVersion(envVersion, dbVersion);
+    if (dbVersion !== null && dbVersion !== envVersion) {
+      console.log(
+        `db_meta version ${dbVersion} differs from .env DB_VERSION ${envVersion}; using ${dbVersion}`,
+      );
+      this.setEnvVar("DB_VERSION", String(dbVersion));
+    }
 
     if (currentVersion >= highestAvailable) {
       console.log(
@@ -523,35 +581,16 @@ print("SSL certificates generated")
       `Running migrations from version ${currentVersion} to ${highestAvailable}...`,
     );
 
-    await this.waitForPostgres(); // Ensure DB is up before running migrations
-
     const pythonEnv = this.buildPythonEnv();
 
-    // Collect and sort migration files that need to run
-    const files = readdirSync(this.serverDir);
-    const pendingMigrations: { num: number; file: string }[] = [];
-
-    for (const file of files) {
-      const match = file.match(/^update_db_(\d+)\.py$/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > currentVersion) {
-          pendingMigrations.push({ num, file });
-        }
-      }
-    }
-
-    // Sort by migration number ascending
-    pendingMigrations.sort((a, b) => a.num - b.num);
-
-    for (const migration of pendingMigrations) {
+    for (const migration of pendingMigrations(readdirSync(this.serverDir), currentVersion)) {
       const migrationPath = join(this.serverDir, migration.file);
       console.log(`Running migration: ${migration.file}...`);
 
       try {
         execFileSync(this.pythonExe, [migrationPath], {
           cwd: this.serverDir,
-          timeout: 120000,
+          timeout: 30 * 60 * 1000, // an old database can take minutes per step
           stdio: "pipe",
           env: pythonEnv,
         });
@@ -581,6 +620,9 @@ print("SSL certificates generated")
       // so we pass PGPORT for tools that use it
       PGPORT: String(this.pgPort),
       PATH: `${this.pgBinDir};${process.env.PATH || ""}`,
+      // Output is piped; without this Windows Python writes cp1252 and any
+      // Arabic print() in a script raises UnicodeEncodeError.
+      PYTHONIOENCODING: "utf-8",
     };
   }
 

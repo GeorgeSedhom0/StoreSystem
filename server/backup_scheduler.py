@@ -572,16 +572,124 @@ def find_psql() -> Optional[str]:
     return shutil.which("psql")
 
 
+_DB_META_VERSION_INSERT = re.compile(
+    rb"^INSERT INTO (?:public\.)?db_meta\b.*VALUES \('version', '(\d+)'\)"
+)
+_DOLLAR_TAG = re.compile(rb"\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$")
+
+
+def _drop_statement(stmt: bytes) -> bool:
+    """Single-line statements that tie a dump to the machine it came from."""
+    return (
+        (stmt.startswith(b"ALTER ") and b" OWNER TO " in stmt)
+        or stmt.startswith((b"GRANT ", b"REVOKE ", b"ALTER DEFAULT PRIVILEGES"))
+        or stmt == b"CREATE SCHEMA public;"
+        # A newer pg_dump's settings / psql guards an older psql doesn't know.
+        or stmt.startswith((b"SET transaction_timeout", b"\\restrict", b"\\unrestrict"))
+    )
+
+
+def _scan_quotes(line: bytes, in_single: bool, tag: Optional[bytes]):
+    """Carry string state ('...' and $tag$...$tag$) across one line."""
+    i, n = 0, len(line)
+    while i < n:
+        if tag is not None:
+            j = line.find(tag, i)
+            if j < 0:
+                return in_single, tag
+            i, tag = j + len(tag), None
+            continue
+        if in_single:
+            j = line.find(b"'", i)
+            if j < 0:
+                return True, None
+            i, in_single = j + 1, False  # '' reopens on the next char
+            continue
+        c = line[i:i + 1]
+        if c == b"'":
+            in_single, i = True, i + 1
+        elif c == b"-" and line[i:i + 2] == b"--":
+            break  # rest of the line is a comment
+        elif c == b"$" and _DOLLAR_TAG.match(line, i):
+            m = _DOLLAR_TAG.match(line, i)
+            tag, i = m.group(0), m.end()
+        else:
+            i += 1
+    return in_single, tag
+
+
+def clean_dump(src_path: str, dst_path: str) -> Optional[int]:
+    """
+    Copy a plain-SQL dump, leaving out what ties it to the machine it came
+    from: ownership (ALTER ... OWNER TO <user>), privileges (GRANT / REVOKE /
+    ALTER DEFAULT PRIVILEGES), CREATE SCHEMA public, and settings / psql
+    guards a newer pg_dump writes. A backup from a server that runs as
+    "postgres" then restores into the app's own user.
+
+    Only whole statements are dropped: the copy follows COPY data blocks and
+    quoted strings (a multi-line text value in an --inserts dump can contain a
+    line that *looks* like "ALTER TABLE x OWNER TO y;").
+
+    Returns the schema version stored in the dump's db_meta (None for dumps
+    from before version tracking, v18).
+    """
+    version: Optional[int] = None
+    in_copy = in_meta = False
+    in_single, tag = False, None
+    at_start = True  # the next line begins a new statement
+    with open(src_path, "rb") as src, open(dst_path, "wb") as dst:
+        for raw in src:
+            line = raw.rstrip(b"\r\n")
+            if in_copy:
+                if line == b"\\.":
+                    in_copy = in_meta = False
+                elif in_meta:
+                    parts = line.split(b"\t")
+                    if len(parts) >= 2 and parts[0] == b"version":
+                        try:
+                            version = int(parts[1])
+                        except ValueError:
+                            pass
+                dst.write(raw)
+                continue
+            quoted = in_single or tag is not None
+            if at_start and not quoted:
+                stmt = line.strip()
+                if not stmt or stmt.startswith((b"--", b"\\")):
+                    if not _drop_statement(stmt):
+                        dst.write(raw)
+                    continue  # blank / comment / psql command: still at a start
+                if stmt.startswith(b"COPY ") and stmt.endswith(b"FROM stdin;"):
+                    in_copy = True
+                    in_meta = stmt.startswith((b"COPY public.db_meta ", b"COPY db_meta "))
+                    dst.write(raw)
+                    continue
+                if _drop_statement(stmt):
+                    continue
+                m = _DB_META_VERSION_INSERT.match(stmt)
+                if m:
+                    version = int(m.group(1))
+            in_single, tag = _scan_quotes(line, in_single, tag)
+            at_start = not in_single and tag is None and line.rstrip().endswith(b";")
+            dst.write(raw)
+    return version
+
+
 def restore_database(sql_path: str) -> Dict[str, Any]:
     """
     Replace the whole database with a plain-SQL dump, safely:
 
     1. dump the current data first (a "manual" backup in the backup folder),
     2. in ONE transaction with ON_ERROR_STOP: drop and recreate the public
-       schema, then load the file. Any error rolls everything back, so a bad
-       file can no longer leave an empty database.
+       schema, then load the file (without its ownership / privilege lines,
+       see clean_dump). Any error rolls everything back, so a bad file can no
+       longer leave an empty database.
+
+    The restored database keeps its own schema version; migrating an older
+    backup is done from Settings (db_migrations.py) or on the app's next start.
 
     Raises BackupError on failure (the current data is untouched).
+    Returns {"safety_backup", "db_version"}.
     """
     psql = find_psql()
     if not psql:
@@ -594,13 +702,18 @@ def restore_database(sql_path: str) -> Dict[str, Any]:
             + str(safety.get("error") or "")
         )
 
-    fd, wrapper = tempfile.mkstemp(prefix="openstore_restore_", suffix=".sql")
+    fd, cleaned = tempfile.mkstemp(prefix="openstore_restore_clean_", suffix=".sql")
+    os.close(fd)
+    wrapper = None
     try:
+        version = clean_dump(sql_path, cleaned)
+        fd, wrapper = tempfile.mkstemp(prefix="openstore_restore_", suffix=".sql")
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write("\\set ON_ERROR_STOP on\n")
             fh.write("DROP SCHEMA IF EXISTS public CASCADE;\n")
             fh.write("CREATE SCHEMA public;\n")
-            fh.write("\\i '" + sql_path.replace("\\", "/").replace("'", "''") + "'\n")
+            fh.write("COMMENT ON SCHEMA public IS 'standard public schema';\n")
+            fh.write("\\i '" + cleaned.replace("\\", "/").replace("'", "''") + "'\n")
         cmd = [psql, "-h", HOST or "localhost", "-U", USER or "", "-d", DATABASE or "",
                "--no-password", "--single-transaction", "-v", "ON_ERROR_STOP=1",
                "-q", "-f", wrapper]
@@ -620,11 +733,13 @@ def restore_database(sql_path: str) -> Dict[str, Any]:
                 "فشلت الاستعادة ولم يتغير شيء في البيانات الحالية: " + (err[-400:] or f"exit {proc.returncode}")
             )
     finally:
-        try:
-            os.remove(wrapper)
-        except OSError:
-            pass
-    return {"safety_backup": safety.get("path")}
+        for path in (wrapper, cleaned):
+            try:
+                if path:
+                    os.remove(path)
+            except OSError:
+                pass
+    return {"safety_backup": safety.get("path"), "db_version": version}
 
 
 # ─── Running a backup ───────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Profile } from "../../Shared/Utils";
 import { StoreContext } from "@renderer/StoreDataProvider";
 import AutoBackup from "./AutoBackup";
+import DbMigrations from "./DbMigrations";
 import {
   Backup as BackupIcon,
   Restore as RestoreIcon,
@@ -218,15 +219,33 @@ const Basics = () => {
       try {
         const formData = new FormData();
         formData.append("file", file);
-        await axios.post("/restore", formData, {
+        const { data: restored } = await axios.post<{
+          db_version: number | null;
+        }>("/restore", formData, {
           headers: {
             "Content-Type": "multipart/form-data",
           },
         });
-        setMsg({
-          type: "success",
-          text: "تمت استعادة النسخة الاحتياطية بنجاح",
-        });
+        const latest = queryClient.getQueryData<{ latest: number }>([
+          "db-version",
+        ])?.latest;
+        // An older backup keeps its own schema: point to متقدم to migrate it.
+        if (restored?.db_version == null) {
+          setMsg({
+            type: "warning",
+            text: "تمت الاستعادة. النسخة لا تحمل رقم إصدار (أقدم من 18): سجّل إصدارها من «متقدم: تحديثات قاعدة البيانات» ثم شغّل التحديثات",
+          });
+        } else if (latest && restored.db_version < latest) {
+          setMsg({
+            type: "warning",
+            text: `تمت الاستعادة (إصدار ${restored.db_version}). شغّل التحديثات الناقصة حتى ${latest} من «متقدم» أو أعد تشغيل البرنامج`,
+          });
+        } else {
+          setMsg({
+            type: "success",
+            text: "تمت استعادة النسخة الاحتياطية بنجاح",
+          });
+        }
         queryClient.invalidateQueries();
       } catch (e) {
         setMsg({
@@ -799,6 +818,7 @@ const Basics = () => {
                   ⚠️ يلزم تحديث قاعدة البيانات إلى الإصدار {dbVersion.latest}
                 </Typography>
               )}
+            <DbMigrations setMsg={setMsg} />
           </Paper>
         </Grid2>
       </Grid2>

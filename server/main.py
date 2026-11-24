@@ -57,6 +57,7 @@ from telegram_commands import telegram_command_worker_loop
 from backup_scheduler import router as backup_router
 from backup_scheduler import backup_scheduler_loop, dump_database, BackupError, restore_database
 from purge import router as purge_router, purge_scheduler_loop
+from db_migrations import router as db_migrations_router
 
 load_dotenv()
 
@@ -91,6 +92,7 @@ app.include_router(attendance_router)
 app.include_router(restock_router)
 app.include_router(backup_router)
 app.include_router(purge_router)
+app.include_router(db_migrations_router)
 
 
 telegram_command_worker_task: Optional[asyncio.Task] = None
